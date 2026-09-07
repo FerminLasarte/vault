@@ -5,7 +5,7 @@ import type {
   LoanWithNames,
   RecurringTransactionWithNames,
 } from "@/db/schema";
-import { projectCommitments, projectExpected } from "@/lib/projection";
+import { projectCommitments, projectExpected, withoutEmptyTail } from "@/lib/projection";
 
 const EMPTY = { recurring: [], installmentPlans: [], loans: [] };
 
@@ -256,5 +256,57 @@ describe("projectExpected", () => {
   it("counts nothing that projectCommitments already counts", () => {
     const [month] = projectExpected([], ["2026-09"], "ARS");
     expect(month).toEqual({ monthKey: "2026-09", income: 0, expenses: 0 });
+  });
+});
+
+describe("withoutEmptyTail", () => {
+  const month = (monthKey: string, expenses = 0, income = 0) => ({
+    monthKey,
+    income,
+    expenses,
+  });
+
+  // The case that put three empty months on the chart's axis, under a caption
+  // explaining bars that were not there.
+  it("returns nothing when no month has anything in it", () => {
+    expect(
+      withoutEmptyTail([month("2026-10"), month("2026-11"), month("2026-12")]),
+    ).toEqual([]);
+  });
+
+  it("drops the empty months after the last one with a figure", () => {
+    const months = withoutEmptyTail([
+      month("2026-10", 500),
+      month("2026-11"),
+      month("2026-12"),
+    ]);
+
+    expect(months.map((entry) => entry.monthKey)).toEqual(["2026-10"]);
+  });
+
+  // Closing the gap would sit October next to December and read as consecutive.
+  it("keeps an empty month that sits between two that are not", () => {
+    const months = withoutEmptyTail([
+      month("2026-10", 500),
+      month("2026-11"),
+      month("2026-12", 300),
+    ]);
+
+    expect(months.map((entry) => entry.monthKey)).toEqual([
+      "2026-10",
+      "2026-11",
+      "2026-12",
+    ]);
+  });
+
+  // Income alone is a commitment too: a loan being repaid to the user.
+  it("counts a month that only brings money in", () => {
+    const months = withoutEmptyTail([month("2026-10", 0, 800), month("2026-11")]);
+
+    expect(months.map((entry) => entry.monthKey)).toEqual(["2026-10"]);
+  });
+
+  it("leaves an empty projection empty", () => {
+    expect(withoutEmptyTail([])).toEqual([]);
   });
 });

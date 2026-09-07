@@ -176,3 +176,24 @@ export function projectExpected(
     return { monthKey, income, expenses };
   });
 }
+
+// The projected months worth putting on a chart.
+//
+// Both projections answer for every month they are asked about, so a user with
+// nothing committed gets a full row of zeroes rather than an empty list. Charted
+// as-is those became months on the axis with no bars in them, under a caption
+// explaining bars that were not there.
+//
+// Trimmed from the end rather than filtered throughout: a month with nothing due
+// between two months that have something is a real gap, and closing it would sit
+// the two next to each other and read as consecutive.
+export function withoutEmptyTail(months: ProjectedMonth[]): ProjectedMonth[] {
+  let end = months.length;
+  while (end > 0) {
+    const month = months[end - 1];
+    if (month.income > 0 || month.expenses > 0) break;
+    end -= 1;
+  }
+
+  return months.slice(0, end);
+}

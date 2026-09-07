@@ -59,7 +59,7 @@ import { buildAttentionItems } from "@/lib/attention";
 import type { AttentionKind } from "@/lib/attention";
 import { buildMonthOverview } from "@/lib/monthOverview";
 import { buildMonthlyClose, hasClose, lastClosedMonthKey } from "@/lib/monthlyClose";
-import { projectCommitments, projectExpected } from "@/lib/projection";
+import { projectCommitments, projectExpected, withoutEmptyTail } from "@/lib/projection";
 import { calculateSavingsProgress } from "@/lib/savings";
 import { collectPendingRecurrences } from "@/lib/pendingRecurring";
 import { collectPendingInstallments } from "@/lib/pendingInstallments";
@@ -361,7 +361,7 @@ export function StatisticsView({ request, tab }: ViewProps) {
 
     return [
       ...monthlyTrend,
-      ...projection.map((month) => ({ ...month, isProjected: true })),
+      ...withoutEmptyTail(projection).map((month) => ({ ...month, isProjected: true })),
     ];
   }, [monthlyTrend, projection, dateRange]);
 
