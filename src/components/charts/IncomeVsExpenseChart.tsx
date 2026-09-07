@@ -1,4 +1,3 @@
-import type { CSSProperties } from "react";
 import {
   Bar,
   BarChart,
@@ -11,6 +10,7 @@ import {
   YAxis,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { tooltipContentStyle } from "@/components/charts/chartTooltip";
 import { formatCompactAmount, formatCurrency, formatMonthLabel } from "@/lib/format";
 import type { MonthlyTrendEntry } from "@/lib/finance";
 
@@ -29,15 +29,6 @@ interface IncomeVsExpenseChartProps {
 
 const INCOME_COLOR = "#10b981";
 const EXPENSE_COLOR = "#ef4444";
-
-const tooltipContentStyle: CSSProperties = {
-  borderRadius: "var(--radius-md)",
-  border: "1px solid var(--border)",
-  backgroundColor: "var(--popover)",
-  color: "var(--popover-foreground)",
-  fontSize: "0.8rem",
-  padding: "0.5rem 0.75rem",
-};
 
 const axisTick = { fontSize: 12, fill: "var(--muted-foreground)" };
 
@@ -89,27 +80,31 @@ export function IncomeVsExpenseChart({
               <Legend
                 iconType="circle"
                 iconSize={8}
-                wrapperStyle={{ fontSize: "0.75rem", color: "var(--muted-foreground)" }}
+                wrapperStyle={{ fontSize: "0.75rem" }}
+                // Recharts colours each label with its series, which the wrapper
+                // cannot override from the outside. The swatch is what carries
+                // the colour here; the names beside it stay as quiet as every
+                // other caption on the screen.
+                formatter={(value: string) => (
+                  <span className="text-muted-foreground">{value}</span>
+                )}
               />
-              {/* Same colours, faded: a month that has not happened is the
+              {/* The colour belongs on the Bar, not only on its Cells: it is
+                  what recharts reads to colour the legend swatch and the
+                  tooltip figure, and a series without one falls back to a
+                  hardcoded black that vanishes on a dark background.
+
+                  Same colours, faded: a month that has not happened is the
                   same kind of thing as one that has, only not yet true. A
                   different hue would read as a different measure. */}
-              <Bar dataKey="Ingresos" radius={[4, 4, 0, 0]}>
+              <Bar dataKey="Ingresos" fill={INCOME_COLOR} radius={[4, 4, 0, 0]}>
                 {chartData.map((entry) => (
-                  <Cell
-                    key={entry.month}
-                    fill={INCOME_COLOR}
-                    fillOpacity={entry.isProjected ? 0.35 : 1}
-                  />
+                  <Cell key={entry.month} fillOpacity={entry.isProjected ? 0.35 : 1} />
                 ))}
               </Bar>
-              <Bar dataKey="Gastos" radius={[4, 4, 0, 0]}>
+              <Bar dataKey="Gastos" fill={EXPENSE_COLOR} radius={[4, 4, 0, 0]}>
                 {chartData.map((entry) => (
-                  <Cell
-                    key={entry.month}
-                    fill={EXPENSE_COLOR}
-                    fillOpacity={entry.isProjected ? 0.35 : 1}
-                  />
+                  <Cell key={entry.month} fillOpacity={entry.isProjected ? 0.35 : 1} />
                 ))}
               </Bar>
             </BarChart>

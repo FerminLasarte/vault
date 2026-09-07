@@ -1,4 +1,3 @@
-import type { CSSProperties } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import {
   Card,
@@ -8,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { tooltipContentStyle } from "@/components/charts/chartTooltip";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import type { CategoryBreakdownEntry } from "@/lib/finance";
 
@@ -16,15 +16,6 @@ interface CategoryBreakdownChartProps {
   currency: string;
   isLoading: boolean;
 }
-
-const tooltipContentStyle: CSSProperties = {
-  borderRadius: "var(--radius-md)",
-  border: "1px solid var(--border)",
-  backgroundColor: "var(--popover)",
-  color: "var(--popover-foreground)",
-  fontSize: "0.8rem",
-  padding: "0.5rem 0.75rem",
-};
 
 export function CategoryBreakdownChart({
   data,
