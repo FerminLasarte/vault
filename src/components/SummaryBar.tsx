@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { FigureBar, type Figure } from "@/components/FigureBar";
+import { Hint } from "@/components/Hint";
 import { formatCurrency } from "@/lib/format";
 import type { FinancialSummary } from "@/lib/finance";
 
@@ -75,9 +76,9 @@ export function SummaryBar({
             : "text-emerald-600 dark:text-emerald-400",
     sub:
       !isLoading && convertedValues !== null ? (
-        <span
+        <Hint
           className="text-xs text-muted-foreground tabular-nums"
-          title={
+          label={
             usesHistoricalRates
               ? "Cada movimiento valuado a la cotización de su fecha"
               : "Valuado a la cotización de hoy. Traé el histórico en Ajustes para mayor precisión"
@@ -85,7 +86,7 @@ export function SummaryBar({
         >
           ≈ {formatCurrency(convertedValues[key], convertedCurrency)}
           {!usesHistoricalRates && " *"}
-        </span>
+        </Hint>
       ) : undefined,
   }));
 

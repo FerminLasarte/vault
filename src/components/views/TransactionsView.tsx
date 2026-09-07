@@ -447,11 +447,11 @@ export function TransactionsView({ request }: ViewProps) {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
-                            <Button
+                            <ActionButton
                               type="button"
                               variant="ghost"
                               size="icon-sm"
-                              title={
+                              label={
                                 transaction.attachment_count > 0
                                   ? `${transaction.attachment_count} comprobante(s)`
                                   : "Adjuntar comprobante"
@@ -466,7 +466,7 @@ export function TransactionsView({ request }: ViewProps) {
                               <span className="sr-only">
                                 Comprobantes de {transaction.description}
                               </span>
-                            </Button>
+                            </ActionButton>
                             <ActionButton
                               type="button"
                               variant="ghost"

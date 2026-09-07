@@ -1,6 +1,7 @@
 import { Controller } from "react-hook-form";
 import { z } from "zod";
 import { FormDialog } from "@/components/FormDialog";
+import { Hint } from "@/components/Hint";
 import { useDialogForm } from "@/hooks/useDialogForm";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -131,18 +132,23 @@ export function CategoryDialog({
         />
         <div className="flex flex-wrap gap-1 pt-1">
           {EMOJI_SUGGESTIONS.map((emoji) => (
-            <button
+            <Hint
               key={emoji}
-              type="button"
-              title={`Usar ${emoji}`}
-              onClick={() => setValue("icon", emoji, { shouldValidate: true })}
-              className={cn(
-                "flex size-8 items-center justify-center rounded-md text-base transition-colors hover:bg-muted",
-                selectedIcon === emoji && "bg-muted ring-1 ring-foreground/10",
-              )}
+              label="Usar este icono"
+              anchor="element"
+              render={
+                <button
+                  type="button"
+                  onClick={() => setValue("icon", emoji, { shouldValidate: true })}
+                  className={cn(
+                    "flex size-8 items-center justify-center rounded-md text-base transition-colors hover:bg-muted",
+                    selectedIcon === emoji && "bg-muted ring-1 ring-foreground/10",
+                  )}
+                />
+              }
             >
               {emoji}
-            </button>
+            </Hint>
           ))}
         </div>
         {errors.icon && <p className="text-xs text-destructive">{errors.icon.message}</p>}

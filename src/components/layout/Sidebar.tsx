@@ -10,7 +10,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Hint } from "@/components/Hint";
 import { VaultLogo } from "@/components/VaultLogo";
 import { isMacOS } from "@/lib/platform";
 import type { PendingBadges } from "@/lib/pendingBadges";
@@ -108,56 +108,54 @@ interface NavButtonProps {
 function NavButton({ item, isCurrent, pending, onNavigate }: NavButtonProps) {
   const { view, label, description, icon: Icon } = item;
 
-  // Drawn by the app, like every other hover text in it. The native `title`
-  // this used to carry took about a second to appear, could not be styled and
-  // ignored the theme, which read as unfinished beside the buttons that already
-  // used this tooltip. Anchored to the right because the sidebar is the left
-  // edge of the window and there is nowhere else for it to go.
+  // Anchored to the right because the sidebar is the left edge of the window
+  // and there is nowhere else for the explanation to go.
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <button
-            type="button"
-            aria-current={isCurrent ? "page" : undefined}
-            onClick={() => onNavigate(view)}
-            className={cn(
-              "relative flex items-center justify-center gap-3 rounded-lg px-2 py-2 text-sm transition-colors sm:justify-start sm:px-3",
-              isCurrent
-                ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
-            )}
-          />
-        }
-      >
-        <Icon className="size-4 shrink-0" />
-        <span className="hidden sm:inline">{label}</span>
+    <Hint
+      anchor="element"
+      side="right"
+      // Collapsed, the label is the only thing naming the icon, so it leads.
+      label={
+        <>
+          <span className="sm:hidden">{label}: </span>
+          {description}
+        </>
+      }
+      render={
+        <button
+          type="button"
+          aria-current={isCurrent ? "page" : undefined}
+          onClick={() => onNavigate(view)}
+          className={cn(
+            "relative flex items-center justify-center gap-3 rounded-lg px-2 py-2 text-sm transition-colors sm:justify-start sm:px-3",
+            isCurrent
+              ? "bg-sidebar-accent text-sidebar-accent-foreground"
+              : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+          )}
+        />
+      }
+    >
+      <Icon className="size-4 shrink-0" />
+      <span className="hidden sm:inline">{label}</span>
 
-        {pending !== undefined && (
-          <>
-            {/* Collapsed, there is no room for a number, so the dot rides on the
+      {pending !== undefined && (
+        <>
+          {/* Collapsed, there is no room for a number, so the dot rides on the
               icon. Expanded, the count is worth showing: "3 cuotas vencidas" is
               a different situation from one. */}
-            <span
-              aria-hidden
-              className="absolute top-1.5 left-1/2 size-2 translate-x-2 rounded-full bg-primary sm:hidden"
-            />
-            <span className="ml-auto hidden min-w-5 rounded-full bg-primary px-1.5 py-0.5 text-center text-xs font-medium text-primary-foreground tabular-nums sm:inline">
-              {pending}
-            </span>
-            <span className="sr-only">
-              {pending} {pending === 1 ? "pendiente" : "pendientes"}
-            </span>
-          </>
-        )}
-      </TooltipTrigger>
-
-      {/* Collapsed, the label is the only thing naming the icon, so it leads. */}
-      <TooltipContent side="right">
-        <span className="sm:hidden">{label}: </span>
-        {description}
-      </TooltipContent>
-    </Tooltip>
+          <span
+            aria-hidden
+            className="absolute top-1.5 left-1/2 size-2 translate-x-2 rounded-full bg-primary sm:hidden"
+          />
+          <span className="ml-auto hidden min-w-5 rounded-full bg-primary px-1.5 py-0.5 text-center text-xs font-medium text-primary-foreground tabular-nums sm:inline">
+            {pending}
+          </span>
+          <span className="sr-only">
+            {pending} {pending === 1 ? "pendiente" : "pendientes"}
+          </span>
+        </>
+      )}
+    </Hint>
   );
 }
 

@@ -1,6 +1,6 @@
 import type { ComponentProps } from "react";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Hint } from "@/components/Hint";
 
 interface ActionButtonProps extends Omit<ComponentProps<typeof Button>, "title"> {
   // The hover text. Kept short: it names the action, while the richer
@@ -9,15 +9,12 @@ interface ActionButtonProps extends Omit<ComponentProps<typeof Button>, "title">
   label: string;
 }
 
-// A button whose hover text is drawn by the app rather than by the operating
-// system. The native `title` attribute takes about a second to appear, cannot
-// be styled, and ignores the app's theme — all of which reads as unfinished
-// next to the rest of the interface.
+// A button that says what it does on hover. Nothing but a `Hint` around a
+// `Button`, which is the common case often enough to be worth a name.
 export function ActionButton({ label, children, ...props }: ActionButtonProps) {
   return (
-    <Tooltip>
-      <TooltipTrigger render={<Button {...props} />}>{children}</TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
+    <Hint label={label} anchor="element" render={<Button {...props} />}>
+      {children}
+    </Hint>
   );
 }

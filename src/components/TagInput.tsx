@@ -1,6 +1,7 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Hint } from "@/components/Hint";
 import { Input } from "@/components/ui/input";
 import { isValidTagName, normalizeForSearch } from "@/lib/text";
 import type { Tag } from "@/db";
@@ -58,15 +59,20 @@ export function TagInput({ id, value, onChange, suggestions }: TagInputProps) {
           {value.map((tag) => (
             <Badge key={tag} variant="secondary" className="gap-1">
               {tag}
-              <button
-                type="button"
-                title={`Quitar ${tag}`}
-                onClick={() => remove(tag)}
-                className="rounded-sm opacity-60 transition-opacity hover:opacity-100"
+              <Hint
+                label="Quitar"
+                anchor="element"
+                render={
+                  <button
+                    type="button"
+                    onClick={() => remove(tag)}
+                    className="rounded-sm opacity-60 transition-opacity hover:opacity-100"
+                  />
+                }
               >
                 <X className="size-3" />
                 <span className="sr-only">Quitar {tag}</span>
-              </button>
+              </Hint>
             </Badge>
           ))}
         </div>

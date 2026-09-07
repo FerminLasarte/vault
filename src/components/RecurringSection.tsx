@@ -249,11 +249,11 @@ export function RecurringSection() {
                 <span className="text-sm tabular-nums text-muted-foreground">
                   {formatCurrency(template.amount, template.currency)}
                 </span>
-                <Button
+                <ActionButton
                   type="button"
                   variant="ghost"
                   size="icon-sm"
-                  title={template.is_active === 1 ? "Pausar" : "Reanudar"}
+                  label={template.is_active === 1 ? "Pausar" : "Reanudar"}
                   disabled={isMutating}
                   onClick={() => void togglePaused(template)}
                 >
@@ -262,7 +262,7 @@ export function RecurringSection() {
                     {template.is_active === 1 ? "Pausar" : "Reanudar"}{" "}
                     {template.description}
                   </span>
-                </Button>
+                </ActionButton>
                 <ActionButton
                   type="button"
                   variant="ghost"
