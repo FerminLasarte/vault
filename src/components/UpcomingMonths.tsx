@@ -1,11 +1,4 @@
 import { CalendarClock, CalendarDays } from "lucide-react";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-} from "@/components/ui/card";
 import { FigureBar, type Figure } from "@/components/FigureBar";
 import { formatCurrency, formatMonthLabel } from "@/lib/format";
 import type { ProjectedMonth } from "@/lib/projection";
@@ -60,34 +53,22 @@ export function UpcomingMonths({
 
   return (
     <div className="flex flex-col gap-3">
+      {/* The same row of figures the balance and the period totals use, so
+          three numbers side by side always mean the same kind of thing. */}
       {hasCommitted && (
-        <Card>
-          <CardHeader>
-            <CardDescription>Ya comprometido</CardDescription>
-            <CardAction>
-              <CalendarClock className="size-4 text-muted-foreground" />
-            </CardAction>
-          </CardHeader>
-          <CardContent className="p-0">
-            {/* The same row of figures the balance and the period totals use, so
-                three numbers side by side always mean the same kind of thing. */}
-            <FigureBar figures={expenseFigures(committed, currency)} bare />
-          </CardContent>
-        </Card>
+        <FigureBar
+          title="Ya comprometido"
+          icon={CalendarClock}
+          figures={expenseFigures(committed, currency)}
+        />
       )}
 
       {hasExpected && (
-        <Card>
-          <CardHeader>
-            <CardDescription>Previsto</CardDescription>
-            <CardAction>
-              <CalendarDays className="size-4 text-muted-foreground" />
-            </CardAction>
-          </CardHeader>
-          <CardContent className="p-0">
-            <FigureBar figures={expenseFigures(expected, currency)} bare />
-          </CardContent>
-        </Card>
+        <FigureBar
+          title="Previsto"
+          icon={CalendarDays}
+          figures={expenseFigures(expected, currency)}
+        />
       )}
 
       {/* Says where each figure comes from, because "committed" has to be
