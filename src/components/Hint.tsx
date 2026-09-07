@@ -48,8 +48,12 @@ export function Hint({
               // Reachable without a pointer: an explanation nothing else says
               // is not optional information.
               tabIndex={0}
+              // No cursor of its own: the explanation is a bonus on top of a
+              // figure that already reads on its own, and a pointer that
+              // changes shape over ordinary text promises an interaction that
+              // is not there.
               className={cn(
-                "w-fit cursor-help rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                "w-fit rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
                 className,
               )}
             />
