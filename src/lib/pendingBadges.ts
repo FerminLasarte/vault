@@ -4,6 +4,7 @@ import { collectPendingInstallments } from "@/lib/pendingInstallments";
 import { collectPendingLoanPayments } from "@/lib/pendingLoans";
 import { collectPendingRecurrences } from "@/lib/pendingRecurring";
 import { BUDGET_WARNING_RATIO } from "@/lib/notifications";
+import { parseIsoDate } from "@/lib/format";
 import type { NotificationSources } from "@/lib/notifications";
 import type { View } from "@/lib/navigation";
 
@@ -38,9 +39,16 @@ export function pendingBadges(
   // Budgets moved in with the categories they cap, so this count rides on that
   // section. It counts caps at or near the limit, which is a warning rather
   // than a queue of work — the statistics screen spells out which ones.
-  const budgets = calculateBudgetProgress(sources.budgets, sources.transactions).filter(
-    (progress) => progress.ratio >= BUDGET_WARNING_RATIO,
-  ).length;
+  //
+  // The reference date has to be the `today` given, not the system clock:
+  // it decides which period the spending is measured over, and a badge that
+  // read a different month from the notification about the same budget would
+  // be telling the user two different things.
+  const budgets = calculateBudgetProgress(
+    sources.budgets,
+    sources.transactions,
+    parseIsoDate(today),
+  ).filter((progress) => progress.ratio >= BUDGET_WARNING_RATIO).length;
   if (budgets > 0) badges.categories = budgets;
 
   return badges;
