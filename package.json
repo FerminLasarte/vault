@@ -1,7 +1,7 @@
 {
   "name": "vault",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Local-first personal finance manager built with Tauri and React",
   "author": "Fermín Lasarte <fermin.lasarte@icloud.com>",
   "license": "MIT",
