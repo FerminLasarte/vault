@@ -20,6 +20,11 @@ the release page afterwards never reach anyone who already has the app.
   explicación.** El globo aparecía igual, pero el cambio de forma prometía algo
   para clickear que no existía.
 
+- **El gráfico de ingresos vs. gastos ya no agrega meses vacíos al final.** Sin
+  cuotas, préstamos ni recurrentes cargados, el eje se estiraba igual tres meses
+  hacia adelante y aparecía la aclaración sobre los meses claros, explicando unas
+  barras que no estaban.
+
 ## Instalación
 
 Bajá el `.dmg` si estás en macOS, o el `.msi` o el `.exe` si estás en Windows.
