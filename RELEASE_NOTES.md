@@ -5,6 +5,18 @@ version: `release.yml` reads it at build time and the action copies it into
 the release page afterwards never reach anyone who already has the app.
 -->
 
+## Novedades
+
+- **Las explicaciones al pasar el cursor ahora las dibuja la app.**
+
+  Hasta acá eran las del sistema: tardaban un segundo en aparecer, salían
+  siempre en el mismo lugar sin importar dónde estuviera el cursor, se
+  desvanecían solas a los pocos segundos y no seguían el tema claro u oscuro.
+  Ahora aparecen al instante, siguen al cursor y se quedan mientras estés encima.
+
+  Alcanza al panel lateral, las etiquetas, el diálogo de categorías, la barra de
+  resumen y los botones de acción.
+
 ## Arreglos
 
 - **Las cifras de «Ya comprometido» y «Previsto» ya no quedan pegadas al borde.**
@@ -16,14 +28,15 @@ the release page afterwards never reach anyone who already has the app.
   fondo oscuro: estaban ahí, pero no se veían. Los puntos de la leyenda tenían el
   mismo problema y ahora salen en su color.
 
-- **El puntero ya no se convierte en un signo de pregunta sobre los textos con
-  explicación.** El globo aparecía igual, pero el cambio de forma prometía algo
-  para clickear que no existía.
-
 - **El gráfico de ingresos vs. gastos ya no agrega meses vacíos al final.** Sin
   cuotas, préstamos ni recurrentes cargados, el eje se estiraba igual tres meses
   hacia adelante y aparecía la aclaración sobre los meses claros, explicando unas
   barras que no estaban.
+
+- **El contador de pendientes y el aviso sobre un mismo presupuesto ya no pueden
+  discrepar.** El contador medía el presupuesto contra el reloj de la máquina en
+  lugar de la fecha con la que se calcula todo lo demás, así que al cambiar de
+  mes podía estar mirando un período distinto al del aviso.
 
 ## Instalación
 
