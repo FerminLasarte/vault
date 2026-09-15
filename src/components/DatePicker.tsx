@@ -21,7 +21,7 @@ export function DatePicker({
   value,
   onChange,
   max,
-  placeholder = "Selecciona una fecha",
+  placeholder = "Seleccioná una fecha",
   className,
 }: DatePickerProps) {
   const [open, setOpen] = useState(false);

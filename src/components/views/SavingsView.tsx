@@ -203,6 +203,7 @@ export function SavingsView() {
                     type="number"
                     step="0.01"
                     placeholder="Aportar hoy"
+                    aria-label={`Aporte para ${entry.goal.name}`}
                     className="w-36"
                     value={contributionDrafts[entry.goal.id] ?? ""}
                     onChange={(event) =>

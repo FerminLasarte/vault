@@ -81,7 +81,7 @@ export function TagInput({ id, value, onChange, suggestions }: TagInputProps) {
       <Input
         id={id}
         value={draft}
-        placeholder="Escribe y pulsa Enter"
+        placeholder="Escribí y presioná Enter"
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={onKeyDown}
         // Losing focus with text still typed would silently discard it.

@@ -28,7 +28,7 @@ const goalSchema = z
   .object({
     name: z.string().trim().min(1, "El nombre es obligatorio"),
     targetAmount: z.coerce.number().positive("El objetivo debe ser mayor que 0"),
-    currency: z.string().min(1, "Selecciona una moneda"),
+    currency: z.string().min(1, "Seleccioná una moneda"),
     trackingMode: z.enum(["account", "contributions"]),
     paymentMethodId: z.coerce.number().int().positive().nullable(),
     targetDate: z.string().nullable(),
@@ -40,7 +40,7 @@ const goalSchema = z
       ctx.addIssue({
         code: "custom",
         path: ["paymentMethodId"],
-        message: "Elige la cuenta que querés seguir",
+        message: "Elegí la cuenta que querés seguir",
       });
     }
   });
@@ -182,7 +182,7 @@ export function SavingsGoalDialog({
               onValueChange={(value) => value && field.onChange(value)}
             >
               <SelectTrigger id="goal-currency" className="w-full">
-                <SelectValue placeholder="Selecciona una moneda" />
+                <SelectValue placeholder="Seleccioná una moneda" />
               </SelectTrigger>
               <SelectContent>
                 {Object.entries(CURRENCY_LABELS).map(([code, label]) => (
@@ -212,7 +212,7 @@ export function SavingsGoalDialog({
                 disabled={availableAccounts.length === 0}
               >
                 <SelectTrigger id="goal-account" className="w-full">
-                  <SelectValue placeholder="Selecciona una cuenta" />
+                  <SelectValue placeholder="Seleccioná una cuenta" />
                 </SelectTrigger>
                 <SelectContent>
                   {availableAccounts.map((method) => (
@@ -226,7 +226,7 @@ export function SavingsGoalDialog({
           />
           {availableAccounts.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              No hay cuentas en {currency}. Crea una en la sección Cuentas.
+              No hay cuentas en {currency}. Creá una en la sección Cuentas.
             </p>
           ) : (
             errors.paymentMethodId && (

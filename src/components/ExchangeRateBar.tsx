@@ -58,8 +58,8 @@ export function ExchangeRateBar() {
         </span>
       ) : (
         <span>
-          Sin cotización de {RATE_TYPE_LABELS[rateType].toLowerCase()} todavía. Conéctate
-          a internet o cárgala a mano.
+          Sin cotización de {RATE_TYPE_LABELS[rateType].toLowerCase()} todavía. Conectate
+          a internet o cargala a mano.
         </span>
       )}
 

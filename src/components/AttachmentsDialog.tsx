@@ -12,7 +12,8 @@ import {
 } from "@/components/ui/dialog";
 import { getAttachmentContent, listAttachments } from "@/db";
 import { useAppData } from "@/hooks/useAppData";
-import { pickAttachment, saveAttachmentCopy, saveErrorMessage } from "@/lib/files";
+import { fileErrorMessage } from "@/lib/fileErrors";
+import { pickAttachment, saveAttachmentCopy } from "@/lib/files";
 import { fileNameFromPath } from "@/lib/paths";
 import { isReported } from "@/lib/reportedError";
 import { formatDate } from "@/lib/format";
@@ -76,9 +77,11 @@ export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDial
     } catch (error) {
       console.error("Failed to attach the file:", error);
       // A failed save has already said so (see ReportedError). Otherwise it
-      // came from reading the file, where Rust returns a readable message for
-      // the size limit that is worth surfacing.
-      if (!isReported(error)) toast.error(String(error));
+      // came from reading the file, and Rust's message is shown when it says
+      // why (the size limit, a missing file) — never the OS's own wording.
+      if (!isReported(error)) {
+        toast.error(fileErrorMessage(error, "No se pudo leer el archivo"));
+      }
     } finally {
       setIsBusy(false);
     }
@@ -103,7 +106,7 @@ export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDial
       if (saved) toast.success("Copia guardada");
     } catch (error) {
       console.error("Failed to save a copy of the attachment:", error);
-      toast.error(saveErrorMessage(error, "No se pudo guardar la copia"));
+      toast.error(fileErrorMessage(error, "No se pudo guardar la copia"));
     } finally {
       setIsBusy(false);
     }

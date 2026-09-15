@@ -64,12 +64,12 @@ earlier decision and are not listed.
 | I-04 | Deleting an account re-creates unassigned transactions             | improvement | low      | 3     | [x]  |
 | I-05 | Missing integrity constraints                                      | improvement | low      | 3     | [x]  |
 | I-06 | Amounts are REAL and summed without rounding                       | improvement | low      | 3     | [x]  |
-| I-07 | Copy mixes tuteo and voseo                                         | improvement | medium   | 4     | [ ]  |
-| I-08 | `es-ES` locale and a new `Intl` formatter per call                 | improvement | low      | 4     | [ ]  |
-| B-18 | Raw OS errors in English reach the user; size rounding is wrong    | bug         | low      | 4     | [ ]  |
-| B-19 | Loan badge renders "Debo·Martín" without spaces                    | bug         | low      | 4     | [ ]  |
-| I-09 | `index.html` still carries the template's lang, title and favicon  | improvement | low      | 4     | [ ]  |
-| I-10 | "Aportar hoy" input has no accessible name                         | improvement | low      | 4     | [ ]  |
+| I-07 | Copy mixes tuteo and voseo                                         | improvement | medium   | 4     | [x]  |
+| I-08 | `es-ES` locale and a new `Intl` formatter per call                 | improvement | low      | 4     | [x]  |
+| B-18 | Raw OS errors in English reach the user; size rounding is wrong    | bug         | low      | 4     | [x]  |
+| B-19 | Loan badge renders "Debo·Martín" without spaces                    | bug         | low      | 4     | [x]  |
+| I-09 | `index.html` still carries the template's lang, title and favicon  | improvement | low      | 4     | [x]  |
+| I-10 | "Aportar hoy" input has no accessible name                         | improvement | low      | 4     | [x]  |
 | B-20 | Attachments dialog briefly shows the previous transaction's files  | bug         | low      | 5     | [ ]  |
 | B-21 | Category rules card shows its empty state while loading            | bug         | low      | 5     | [ ]  |
 | I-11 | Delete confirmation copied 9 times; two deletes unconfirmed        | improvement | medium   | 5     | [ ]  |
@@ -579,7 +579,7 @@ categories, type)` into `src/lib/categoryRules.ts` and use it in all three
   placeholders, aria-labels, `RELEASE_NOTES.md`, native menu labels in
   `src-tauri/src/menu.rs`, and Rust error strings); then add the rule to the
   language policy in `CLAUDE.md`.
-- [ ] Done
+- [x] Done
 
 ### I-08 · `es-ES` locale and a new `Intl` formatter per call
 
@@ -593,7 +593,7 @@ categories, type)` into `src/lib/categoryRules.ts` and use it in all three
 - **Proposal:** switch the locale and cache formatters in a `Map` keyed by
   currency. Update `src/lib/format.test.ts` and check the printed PDFs
   (Cierres, Informe).
-- [ ] Done
+- [x] Done
 
 ### B-18 · Raw OS errors in English reach the user; size rounding is wrong
 
@@ -610,7 +610,7 @@ categories, type)` into `src/lib/categoryRules.ts` and use it in all three
   `ErrorKind`s (`NotFound`, `PermissionDenied`, …) to Spanish with a generic
   fallback; format the size with one decimal. In the frontend, show the Rust
   message only for known errors, otherwise a fixed Spanish text.
-- [ ] Done
+- [x] Done
 
 ### B-19 · Loan badge renders "Debo·Martín" without spaces
 
@@ -619,7 +619,7 @@ categories, type)` into `src/lib/categoryRules.ts` and use it in all three
   `" · "` at `:315`.
 - **What happens:** JSX trims the line break, so the dot is glued to both words.
 - **Proposal:** `{LOAN_DIRECTION_LABELS[…]} · {counterparty}`.
-- [ ] Done
+- [x] Done
 
 ### I-09 · `index.html` still carries the template's lang, title and favicon
 
@@ -629,7 +629,7 @@ categories, type)` into `src/lib/categoryRules.ts` and use it in all three
   voice), `<title>Tauri + React + Typescript</title>`, favicon `/vite.svg`.
   `public/tauri.svg` is referenced nowhere.
 - **Proposal:** `lang="es-AR"`, title "Vault", remove the template assets.
-- [ ] Done
+- [x] Done
 
 ### I-10 · "Aportar hoy" input has no accessible name
 
@@ -639,7 +639,7 @@ categories, type)` into `src/lib/categoryRules.ts` and use it in all three
 - **What happens:** only a placeholder; no `Label` or `aria-label`.
 - **Proposal:** `aria-label={`Aporte para ${entry.goal.name}`}` or an `sr-only`
   `Label`.
-- [ ] Done
+- [x] Done
 
 ---
 

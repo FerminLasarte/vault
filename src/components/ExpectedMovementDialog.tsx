@@ -30,13 +30,13 @@ const expectedSchema = z.object({
   description: z.string().trim().min(1, "La descripción es obligatoria"),
   amount: z.coerce.number().positive("El monto debe ser mayor que 0"),
   type: z.enum(["income", "expense"]),
-  currency: z.string().min(1, "Selecciona una moneda"),
+  currency: z.string().min(1, "Seleccioná una moneda"),
   categoryId: z.coerce.number().int().positive().nullable(),
   paymentMethodId: z.coerce.number().int().positive().nullable(),
   // Nothing stops a date in the past: something can be known to be coming and
   // then be entered late, and rejecting it would only teach the user to lie
   // about the date to get the form to close.
-  dueDate: z.string().min(1, "Selecciona una fecha"),
+  dueDate: z.string().min(1, "Seleccioná una fecha"),
 });
 
 type ExpectedFormInput = z.input<typeof expectedSchema>;
@@ -161,7 +161,7 @@ export function ExpectedMovementDialog({
               onValueChange={(value) => field.onChange(value)}
             >
               <SelectTrigger id="expected-type" className="w-full">
-                <SelectValue placeholder="Selecciona un tipo" />
+                <SelectValue placeholder="Seleccioná un tipo" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="expense">{CATEGORY_TYPE_LABELS.expense}</SelectItem>
@@ -199,7 +199,7 @@ export function ExpectedMovementDialog({
               onValueChange={(value) => value && field.onChange(value)}
             >
               <SelectTrigger id="expected-currency" className="w-full">
-                <SelectValue placeholder="Selecciona una moneda" />
+                <SelectValue placeholder="Seleccioná una moneda" />
               </SelectTrigger>
               <SelectContent>
                 {Object.entries(CURRENCY_LABELS).map(([code, label]) => (

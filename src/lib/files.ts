@@ -56,18 +56,6 @@ export async function openCsvFile(): Promise<string | null> {
   return invoke<string>("read_text_file", { path });
 }
 
-// Rust refuses to write over the live database, whatever is being saved (see
-// guard_destination in src-tauri/src/files.rs). Must match LIVE_DATABASE_ERROR
-// there word for word.
-const LIVE_DATABASE_ERROR = "No se puede guardar sobre la base de datos en uso";
-
-// What to tell the user when a save fails. The refusal above is shown as is,
-// since it says what to do differently; anything else is an OS error in
-// English, so it gets the caller's generic message instead.
-export function saveErrorMessage(error: unknown, fallback: string): string {
-  return String(error).includes(LIVE_DATABASE_ERROR) ? LIVE_DATABASE_ERROR : fallback;
-}
-
 // Rust takes the snapshot through SQLite itself (`VACUUM INTO`), so nothing
 // has to be checkpointed first and anything written while the dialog was open
 // is included.

@@ -34,13 +34,13 @@ const recurringSchema = z.object({
   description: z.string().trim().min(1, "La descripción es obligatoria"),
   amount: z.coerce.number().positive("El monto debe ser mayor que 0"),
   type: z.enum(["income", "expense"]),
-  currency: z.string().min(1, "Selecciona una moneda"),
+  currency: z.string().min(1, "Seleccioná una moneda"),
   categoryId: z.coerce.number().int().positive().nullable(),
   paymentMethodId: z.coerce.number().int().positive().nullable(),
   frequency: z.enum(["weekly", "monthly", "yearly"]),
   // Unlike a transaction, this one may legitimately be in the future: it is
   // when the series begins, not when something happened.
-  startDate: z.string().min(1, "Selecciona una fecha"),
+  startDate: z.string().min(1, "Seleccioná una fecha"),
 });
 
 type RecurringFormInput = z.input<typeof recurringSchema>;
@@ -175,7 +175,7 @@ export function RecurringDialog({
               onValueChange={(value) => field.onChange(value)}
             >
               <SelectTrigger id="recurring-type" className="w-full">
-                <SelectValue placeholder="Selecciona un tipo" />
+                <SelectValue placeholder="Seleccioná un tipo" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="expense">{CATEGORY_TYPE_LABELS.expense}</SelectItem>
@@ -213,7 +213,7 @@ export function RecurringDialog({
               onValueChange={(value) => value && field.onChange(value)}
             >
               <SelectTrigger id="recurring-currency" className="w-full">
-                <SelectValue placeholder="Selecciona una moneda" />
+                <SelectValue placeholder="Seleccioná una moneda" />
               </SelectTrigger>
               <SelectContent>
                 {Object.entries(CURRENCY_LABELS).map(([code, label]) => (
@@ -239,7 +239,7 @@ export function RecurringDialog({
               onValueChange={(value) => field.onChange(value)}
             >
               <SelectTrigger id="recurring-frequency" className="w-full">
-                <SelectValue placeholder="Selecciona una frecuencia" />
+                <SelectValue placeholder="Seleccioná una frecuencia" />
               </SelectTrigger>
               <SelectContent>
                 {RECURRENCE_FREQUENCIES.map((frequency) => (

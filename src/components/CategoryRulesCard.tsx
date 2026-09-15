@@ -21,8 +21,8 @@ import type { CategoryRuleWithCategory } from "@/db";
 import { toSelectValue } from "@/lib/forms";
 
 const ruleSchema = z.object({
-  pattern: z.string().trim().min(2, "Escribe al menos dos caracteres"),
-  categoryId: z.coerce.number().int().positive("Selecciona una categoría"),
+  pattern: z.string().trim().min(2, "Escribí al menos dos caracteres"),
+  categoryId: z.coerce.number().int().positive("Seleccioná una categoría"),
 });
 
 type RuleFormInput = z.input<typeof ruleSchema>;
@@ -161,7 +161,7 @@ export function CategoryRulesCard() {
                 onValueChange={(value) => field.onChange(Number(value))}
               >
                 <SelectTrigger id="rule-category" className="w-full">
-                  <SelectValue placeholder="Selecciona una categoría" />
+                  <SelectValue placeholder="Seleccioná una categoría" />
                 </SelectTrigger>
                 <SelectContent>
                   {categories.map((category) => (

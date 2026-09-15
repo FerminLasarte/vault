@@ -1,6 +1,5 @@
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use tauri::Manager;
@@ -37,33 +36,20 @@ fn write_text_file(app: tauri::AppHandle, path: String, contents: String) -> Res
 
 #[tauri::command]
 fn read_text_file(path: String) -> Result<String, String> {
-    fs::read_to_string(&path).map_err(|error| error.to_string())
+    files::read_text(Path::new(&path))
 }
-
-// Largest receipt accepted. Attachments are stored inside the database, so an
-// unbounded file would bloat every backup from then on.
-const MAX_ATTACHMENT_BYTES: usize = 5 * 1024 * 1024;
 
 #[tauri::command]
 fn read_file_base64(path: String) -> Result<String, String> {
-    let bytes = fs::read(&path).map_err(|error| error.to_string())?;
-
-    if bytes.len() > MAX_ATTACHMENT_BYTES {
-        return Err(format!(
-            "El archivo pesa {} MB y el máximo es {} MB",
-            bytes.len() / (1024 * 1024),
-            MAX_ATTACHMENT_BYTES / (1024 * 1024)
-        ));
-    }
-
-    Ok(BASE64.encode(bytes))
+    files::read_attachment(Path::new(&path)).map(|bytes| BASE64.encode(bytes))
 }
 
 #[tauri::command]
 fn write_file_base64(app: tauri::AppHandle, path: String, contents: String) -> Result<(), String> {
-    let bytes = BASE64
-        .decode(contents)
-        .map_err(|error| format!("El adjunto está dañado: {error}"))?;
+    let bytes = BASE64.decode(contents).map_err(|error| {
+        eprintln!("The attachment is not valid base64: {error}");
+        files::DAMAGED_ATTACHMENT_ERROR.to_string()
+    })?;
 
     files::write_atomically(Path::new(&path), &database_path(&app)?, &bytes)
 }

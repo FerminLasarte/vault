@@ -135,7 +135,7 @@ export function AccountsView() {
     <div className="flex flex-col gap-6 sm:gap-8">
       <PageHeader
         title="Cuentas"
-        description="Gestiona tus cuentas y métodos de pago."
+        description="Gestioná tus cuentas y métodos de pago."
         actions={
           <Button type="button" onClick={openCreateDialog}>
             <Plus />
@@ -214,7 +214,7 @@ export function AccountsView() {
         isLoading={isLoading}
         isEmpty={paymentMethods.length === 0}
         empty={{
-          message: "Todavía no tienes cuentas registradas.",
+          message: "Todavía no tenés cuentas registradas.",
           actionLabel: "Agregar la primera",
           onAction: openCreateDialog,
         }}
