@@ -81,11 +81,12 @@ function TransferAmount({ transaction }: { transaction: TransactionWithCategory 
     return <span className="text-muted-foreground">{sent}</span>;
   }
 
+  // One leg per line. On a single line the pair made this the widest column,
+  // and it pushed the row actions of every row off to the right.
   return (
-    <span className="text-muted-foreground">
-      {sent}
-      {" → "}
-      {formatCurrency(destinationAmount, destinationCurrency)}
+    <span className="flex flex-col items-end text-muted-foreground">
+      <span>{sent}</span>
+      <span>→ {formatCurrency(destinationAmount, destinationCurrency)}</span>
     </span>
   );
 }
