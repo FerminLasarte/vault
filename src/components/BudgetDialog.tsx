@@ -17,8 +17,8 @@ import { toSelectValue } from "@/lib/forms";
 import type { BudgetWithCategory, Category, NewBudget } from "@/db";
 
 const budgetSchema = z.object({
-  categoryId: z.coerce.number().int().positive("Selecciona una categoría"),
-  currency: z.string().min(1, "Selecciona una moneda"),
+  categoryId: z.coerce.number().int().positive("Seleccioná una categoría"),
+  currency: z.string().min(1, "Seleccioná una moneda"),
   amount: z.coerce.number().positive("El tope debe ser mayor que 0"),
   period: z.enum(["monthly", "annual"]),
 });
@@ -99,7 +99,7 @@ export function BudgetDialog({
               onValueChange={(value) => field.onChange(Number(value))}
             >
               <SelectTrigger id="budget-category" className="w-full">
-                <SelectValue placeholder="Selecciona una categoría" />
+                <SelectValue placeholder="Seleccioná una categoría" />
               </SelectTrigger>
               <SelectContent>
                 {categories.map((category) => (
@@ -128,7 +128,7 @@ export function BudgetDialog({
               onValueChange={(value) => field.onChange(value)}
             >
               <SelectTrigger id="budget-period" className="w-full">
-                <SelectValue placeholder="Selecciona un periodo" />
+                <SelectValue placeholder="Seleccioná un período" />
               </SelectTrigger>
               <SelectContent>
                 {BUDGET_PERIODS.map((period) => (
@@ -154,7 +154,7 @@ export function BudgetDialog({
               onValueChange={(value) => value && field.onChange(value)}
             >
               <SelectTrigger id="budget-currency" className="w-full">
-                <SelectValue placeholder="Selecciona una moneda" />
+                <SelectValue placeholder="Seleccioná una moneda" />
               </SelectTrigger>
               <SelectContent>
                 {CURRENCY_CODES.map((code) => (

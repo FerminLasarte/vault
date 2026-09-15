@@ -223,7 +223,7 @@ export function LoansSection() {
                         Cuota {entry.number} de {entry.loan.installment_count}
                       </Badge>
                       <Badge variant="outline">
-                        {LOAN_DIRECTION_LABELS[entry.loan.direction]}·
+                        {LOAN_DIRECTION_LABELS[entry.loan.direction]} ·{" "}
                         {entry.loan.counterparty}
                       </Badge>
                       <span className="text-xs text-muted-foreground">

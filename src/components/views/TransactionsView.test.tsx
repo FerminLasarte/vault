@@ -200,7 +200,7 @@ describe("TransactionsView", () => {
     const text = row.textContent!.replace(/\u00a0/g, " ");
 
     // Showing only the pesos leg would misrepresent what actually moved.
-    expect(text).toContain("145.000,00 ARS");
-    expect(text).toContain("100,00 US$");
+    expect(text).toContain("$ 145.000,00");
+    expect(text).toContain("US$ 100,00");
   });
 });

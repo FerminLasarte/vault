@@ -32,10 +32,10 @@ const planSchema = z.object({
     .int()
     .min(2, "Una compra en cuotas necesita al menos 2")
     .max(120, "Como máximo 120 cuotas"),
-  currency: z.string().min(1, "Selecciona una moneda"),
+  currency: z.string().min(1, "Seleccioná una moneda"),
   categoryId: z.coerce.number().int().positive().nullable(),
   paymentMethodId: z.coerce.number().int().positive().nullable(),
-  firstDueDate: z.string().min(1, "Selecciona una fecha"),
+  firstDueDate: z.string().min(1, "Seleccioná una fecha"),
   // Optional on purpose. Plenty of purchases really are interest-free, and an
   // empty field means "no lo sé" rather than "no hay recargo" — so it stays
   // null instead of defaulting to the total.
@@ -253,7 +253,7 @@ export function InstallmentPlanDialog({
               onValueChange={(value) => value && field.onChange(value)}
             >
               <SelectTrigger id="plan-currency" className="w-full">
-                <SelectValue placeholder="Selecciona una moneda" />
+                <SelectValue placeholder="Seleccioná una moneda" />
               </SelectTrigger>
               <SelectContent>
                 {Object.entries(CURRENCY_LABELS).map(([code, label]) => (

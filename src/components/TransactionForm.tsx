@@ -36,15 +36,15 @@ const transactionFormSchema = z
   .object({
     type: z.enum(["income", "expense", "transfer"]),
     amount: z.coerce.number().positive("El monto debe ser mayor que 0"),
-    currency: z.string().min(1, "Selecciona una moneda"),
-    paymentMethodId: z.coerce.number().int().positive("Selecciona un método de pago"),
+    currency: z.string().min(1, "Seleccioná una moneda"),
+    paymentMethodId: z.coerce.number().int().positive("Seleccioná un método de pago"),
     destinationPaymentMethodId: z.coerce.number().int().positive().nullable(),
     destinationAmount: z.coerce.number().positive().nullable(),
     categoryId: z.coerce.number().int().positive().nullable(),
     description: z.string().trim().min(1, "La descripción es obligatoria"),
     date: z
       .string()
-      .min(1, "Selecciona una fecha")
+      .min(1, "Seleccioná una fecha")
       .refine((value) => value <= todayIsoDate(), {
         message: "La fecha no puede ser posterior a hoy",
       }),
@@ -58,7 +58,7 @@ const transactionFormSchema = z
         ctx.addIssue({
           code: "custom",
           path: ["destinationPaymentMethodId"],
-          message: "Selecciona la cuenta de destino",
+          message: "Seleccioná la cuenta de destino",
         });
       } else if (values.destinationPaymentMethodId === values.paymentMethodId) {
         ctx.addIssue({
@@ -71,7 +71,7 @@ const transactionFormSchema = z
         ctx.addIssue({
           code: "custom",
           path: ["destinationAmount"],
-          message: "Indica cuánto llega a la cuenta de destino",
+          message: "Indicá cuánto llega a la cuenta de destino",
         });
       }
       return;
@@ -81,7 +81,7 @@ const transactionFormSchema = z
       ctx.addIssue({
         code: "custom",
         path: ["categoryId"],
-        message: "Selecciona una categoría",
+        message: "Seleccioná una categoría",
       });
     }
   });
@@ -378,7 +378,7 @@ export function TransactionForm({
                 onValueChange={(value) => field.onChange(value)}
               >
                 <SelectTrigger id="transaction-type" className="w-full">
-                  <SelectValue placeholder="Selecciona un tipo" />
+                  <SelectValue placeholder="Seleccioná un tipo" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="expense">
@@ -423,7 +423,7 @@ export function TransactionForm({
                 onValueChange={field.onChange}
               >
                 <SelectTrigger id="transaction-currency" className="w-full">
-                  <SelectValue placeholder="Selecciona una moneda" />
+                  <SelectValue placeholder="Seleccioná una moneda" />
                 </SelectTrigger>
                 <SelectContent>
                   {Object.entries(CURRENCY_LABELS).map(([code, label]) => (
@@ -456,7 +456,7 @@ export function TransactionForm({
                   }}
                 >
                   <SelectTrigger id="transaction-category" className="w-full">
-                    <SelectValue placeholder="Selecciona una categoría" />
+                    <SelectValue placeholder="Seleccioná una categoría" />
                   </SelectTrigger>
                   <SelectContent>
                     {filteredCategories.map((category) => (
@@ -489,7 +489,7 @@ export function TransactionForm({
                 disabled={originAccounts.length === 0}
               >
                 <SelectTrigger id="transaction-payment-method" className="w-full">
-                  <SelectValue placeholder="Selecciona un método de pago" />
+                  <SelectValue placeholder="Seleccioná un método de pago" />
                 </SelectTrigger>
                 <SelectContent>
                   {originAccounts.map((method) => (
@@ -503,7 +503,7 @@ export function TransactionForm({
           />
           {originAccounts.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              No hay cuentas en {selectedCurrency}. Crea una en la sección Cuentas.
+              No hay cuentas en {selectedCurrency}. Creá una en la sección Cuentas.
             </p>
           ) : (
             errors.paymentMethodId && (
@@ -526,7 +526,7 @@ export function TransactionForm({
                   disabled={destinationAccounts.length === 0}
                 >
                   <SelectTrigger id="transaction-destination" className="w-full">
-                    <SelectValue placeholder="Selecciona la cuenta de destino" />
+                    <SelectValue placeholder="Seleccioná la cuenta de destino" />
                   </SelectTrigger>
                   <SelectContent>
                     {destinationAccounts.map((method) => (

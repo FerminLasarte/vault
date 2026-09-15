@@ -23,10 +23,10 @@ import type { Category, LoanWithNames, NewLoan, PaymentMethod } from "@/db";
 
 const loanSchema = z.object({
   direction: z.enum(["borrowed", "lent"]),
-  counterparty: z.string().trim().min(1, "Indica con quién es el préstamo"),
+  counterparty: z.string().trim().min(1, "Indicá con quién es el préstamo"),
   description: z.string().trim().min(1, "La descripción es obligatoria"),
   principal: z.coerce.number().positive("El capital debe ser mayor que 0"),
-  currency: z.string().min(1, "Selecciona una moneda"),
+  currency: z.string().min(1, "Seleccioná una moneda"),
   // Zero is valid on purpose: a loan between two people usually has no
   // interest, and that is the same maths with a rate of nothing.
   annualRate: z.coerce
@@ -40,7 +40,7 @@ const loanSchema = z.object({
     .max(360, "Como máximo 360 cuotas"),
   categoryId: z.coerce.number().int().positive().nullable(),
   paymentMethodId: z.coerce.number().int().positive().nullable(),
-  firstDueDate: z.string().min(1, "Selecciona una fecha"),
+  firstDueDate: z.string().min(1, "Seleccioná una fecha"),
 });
 
 type LoanFormInput = z.input<typeof loanSchema>;
@@ -277,7 +277,7 @@ export function LoanDialog({
               onValueChange={(value) => value && field.onChange(value)}
             >
               <SelectTrigger id="loan-currency" className="w-full">
-                <SelectValue placeholder="Selecciona una moneda" />
+                <SelectValue placeholder="Seleccioná una moneda" />
               </SelectTrigger>
               <SelectContent>
                 {Object.entries(CURRENCY_LABELS).map(([code, label]) => (

@@ -18,9 +18,9 @@ import type { NewPaymentMethod, PaymentMethod } from "@/db";
 const paymentMethodSchema = z.object({
   name: z.string().trim().min(1, "El nombre es obligatorio"),
   type: z.enum(["bank", "cash", "wallet", "card", "other"]),
-  currency: z.string().min(1, "Selecciona una moneda"),
+  currency: z.string().min(1, "Seleccioná una moneda"),
   // Negative values are legitimate here: a credit card account starts in debt.
-  initialBalance: z.coerce.number("Introduce un saldo válido"),
+  initialBalance: z.coerce.number("Ingresá un saldo válido"),
 });
 
 type PaymentMethodFormInput = z.input<typeof paymentMethodSchema>;
@@ -106,7 +106,7 @@ export function PaymentMethodDialog({
               onValueChange={(value) => field.onChange(value)}
             >
               <SelectTrigger id="payment-method-type" className="w-full">
-                <SelectValue placeholder="Selecciona un tipo" />
+                <SelectValue placeholder="Seleccioná un tipo" />
               </SelectTrigger>
               <SelectContent>
                 {PAYMENT_METHOD_TYPES.map((type) => (
@@ -132,7 +132,7 @@ export function PaymentMethodDialog({
               onValueChange={(value) => value && field.onChange(value)}
             >
               <SelectTrigger id="payment-method-currency" className="w-full">
-                <SelectValue placeholder="Selecciona una moneda" />
+                <SelectValue placeholder="Seleccioná una moneda" />
               </SelectTrigger>
               <SelectContent>
                 {CURRENCY_CODES.map((currency) => (
@@ -159,8 +159,8 @@ export function PaymentMethodDialog({
           {...register("initialBalance")}
         />
         <p className="text-xs text-muted-foreground">
-          El saldo que tenía la cuenta antes de empezar a registrar movimientos aquí.
-          Puede ser negativo.
+          El saldo que tenía la cuenta antes de empezar a registrar movimientos acá. Puede
+          ser negativo.
         </p>
         {errors.initialBalance && (
           <p className="text-xs text-destructive">{errors.initialBalance.message}</p>

@@ -97,7 +97,7 @@ export function CategoriesView({ tab }: ViewProps) {
 
         <TabsContent value="categories" className="flex flex-col gap-6 pt-6">
           <SectionIntro
-            description="Organiza tus ingresos y gastos."
+            description="Organizá tus ingresos y gastos."
             actionLabel="Nueva categoría"
             onAction={openCreateDialog}
           />
@@ -108,7 +108,7 @@ export function CategoriesView({ tab }: ViewProps) {
             <ListCard
               isEmpty
               empty={{
-                message: "Todavía no tienes categorías.",
+                message: "Todavía no tenés categorías.",
                 actionLabel: "Agregar la primera",
                 onAction: openCreateDialog,
               }}

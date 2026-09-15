@@ -1,11 +1,79 @@
 use sqlx::SqlitePool;
 use std::fs;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-// Shown to the user as is (see src/lib/files.ts), so it is the one error here
-// written in Spanish.
+// Every error below is shown to the user as is, so it is written in Spanish;
+// the OS's own wording is English and ends in an errno ("(os error 2)").
+// src/lib/fileErrors.ts must list them word for word (its test checks).
 pub const LIVE_DATABASE_ERROR: &str = "No se puede guardar sobre la base de datos en uso";
+pub const NOT_FOUND_ERROR: &str = "No se encontró el archivo";
+pub const PERMISSION_ERROR: &str = "No hay permiso para usar esa ubicación";
+pub const DISK_FULL_ERROR: &str = "No queda espacio en el disco";
+pub const READ_ONLY_ERROR: &str = "Esa ubicación es de solo lectura";
+// Excel saves a plain "CSV" in the system's legacy encoding; its "CSV UTF-8"
+// option is the way out.
+pub const NOT_UTF8_ERROR: &str =
+    "El archivo no está en UTF-8. Guardalo como «CSV UTF-8» y probá de nuevo";
+pub const DAMAGED_ATTACHMENT_ERROR: &str = "El adjunto está dañado";
+// For everything else. Deliberately missing from fileErrors.ts, so the
+// frontend shows its own, more specific message ("No se pudo guardar la
+// copia") instead of this one.
+pub const FILE_ERROR: &str = "No se pudo usar el archivo";
+
+// Puts an I/O failure into words the user can act on. Kinds without a message
+// of their own are logged, since the generic text says nothing about them.
+pub fn user_error(error: std::io::Error) -> String {
+    let message = match error.kind() {
+        ErrorKind::NotFound => NOT_FOUND_ERROR,
+        ErrorKind::PermissionDenied => PERMISSION_ERROR,
+        ErrorKind::StorageFull => DISK_FULL_ERROR,
+        ErrorKind::ReadOnlyFilesystem => READ_ONLY_ERROR,
+        _ => {
+            eprintln!("File operation failed: {error}");
+            FILE_ERROR
+        }
+    };
+    message.to_string()
+}
+
+pub fn read_text(path: &Path) -> Result<String, String> {
+    fs::read_to_string(path).map_err(|error| match error.kind() {
+        // What `read_to_string` reports for bytes that are not UTF-8.
+        ErrorKind::InvalidData => NOT_UTF8_ERROR.to_string(),
+        _ => user_error(error),
+    })
+}
+
+// Largest receipt accepted. Attachments are stored inside the database, so an
+// unbounded file would bloat every backup from then on.
+pub const MAX_ATTACHMENT_BYTES: usize = 5 * 1024 * 1024;
+
+pub fn read_attachment(path: &Path) -> Result<Vec<u8>, String> {
+    let bytes = fs::read(path).map_err(user_error)?;
+
+    if bytes.len() > MAX_ATTACHMENT_BYTES {
+        return Err(format!(
+            "El archivo pesa {} MB y el máximo es {} MB",
+            format_megabytes(bytes.len() as u64),
+            format_megabytes(MAX_ATTACHMENT_BYTES as u64)
+        ));
+    }
+    Ok(bytes)
+}
+
+// Megabytes with one decimal, written the Spanish way ("5,9"), dropping a
+// trailing ",0". Rounded up rather than down: a file just over the limit must
+// never read as weighing exactly the limit it is refused for.
+fn format_megabytes(bytes: u64) -> String {
+    const MB: u64 = 1024 * 1024;
+    let tenths = (bytes * 10).div_ceil(MB);
+    match tenths % 10 {
+        0 => format!("{}", tenths / 10),
+        decimal => format!("{},{decimal}", tenths / 10),
+    }
+}
 
 // The files SQLite keeps for one database. Writing over any of them corrupts
 // it: the main file is the data itself, and a stray -wal or -journal would be
@@ -101,8 +169,8 @@ fn replace_with(
     guard_destination(destination, database)?;
 
     let temporary = temporary_sibling(destination)?;
-    let result = produce(&temporary)
-        .and_then(|()| fs::rename(&temporary, destination).map_err(|error| error.to_string()));
+    let result =
+        produce(&temporary).and_then(|()| fs::rename(&temporary, destination).map_err(user_error));
     if result.is_err() {
         let _ = fs::remove_file(&temporary);
     }
@@ -111,7 +179,7 @@ fn replace_with(
 
 pub fn write_atomically(destination: &Path, database: &Path, bytes: &[u8]) -> Result<(), String> {
     replace_with(destination, database, |temporary| {
-        fs::write(temporary, bytes).map_err(|error| error.to_string())
+        fs::write(temporary, bytes).map_err(user_error)
     })
 }
 
@@ -138,8 +206,13 @@ pub async fn backup_to(
         .bind(target)
         .execute(pool)
         .await
-        .map_err(|error| error.to_string())
-        .and_then(|_| fs::rename(&temporary, destination).map_err(|error| error.to_string()));
+        // SQLite opens the destination itself, so a failure there arrives as
+        // one of its own result codes rather than as an I/O error with a kind.
+        .map_err(|error| {
+            eprintln!("The backup failed: {error}");
+            FILE_ERROR.to_string()
+        })
+        .and_then(|_| fs::rename(&temporary, destination).map_err(user_error));
     if result.is_err() {
         let _ = fs::remove_file(&temporary);
     }
@@ -232,6 +305,65 @@ mod tests {
         assert_eq!(check, "ok");
         pool.close().await;
         count
+    }
+
+    #[test]
+    fn puts_common_os_failures_into_spanish() {
+        use std::io::{Error, ErrorKind};
+
+        let cases = [
+            (ErrorKind::NotFound, NOT_FOUND_ERROR),
+            (ErrorKind::PermissionDenied, PERMISSION_ERROR),
+            (ErrorKind::StorageFull, DISK_FULL_ERROR),
+            (ErrorKind::ReadOnlyFilesystem, READ_ONLY_ERROR),
+            (ErrorKind::TimedOut, FILE_ERROR),
+        ];
+        for (kind, message) in cases {
+            assert_eq!(user_error(Error::from(kind)), message, "{kind:?}");
+        }
+    }
+
+    #[test]
+    fn a_file_that_is_not_utf8_says_how_to_fix_it() {
+        let workspace = Workspace::new("read-latin1");
+        let export = workspace.path("export.csv");
+        // "Café" as Excel's plain "CSV" writes it on a Spanish Windows.
+        fs::write(&export, b"Caf\xe9\n").unwrap();
+
+        assert_eq!(read_text(&export), Err(NOT_UTF8_ERROR.to_string()));
+    }
+
+    #[test]
+    fn a_missing_file_is_reported_in_spanish() {
+        let workspace = Workspace::new("read-missing");
+        let missing = workspace.path("gone.csv");
+
+        assert_eq!(read_text(&missing), Err(NOT_FOUND_ERROR.to_string()));
+        assert_eq!(read_attachment(&missing), Err(NOT_FOUND_ERROR.to_string()));
+    }
+
+    #[test]
+    fn sizes_are_rounded_up_to_a_tenth_of_a_megabyte() {
+        const MB: u64 = 1024 * 1024;
+
+        assert_eq!(format_megabytes(5 * MB), "5");
+        assert_eq!(format_megabytes(5 * MB + 1), "5,1");
+        assert_eq!(format_megabytes(59 * MB / 10), "5,9");
+        assert_eq!(format_megabytes(6 * MB), "6");
+    }
+
+    // Truncating 5.9 MB to 5 used to tell the user their file weighed exactly
+    // the maximum it was being refused for.
+    #[test]
+    fn an_oversized_attachment_never_reads_as_the_limit() {
+        let workspace = Workspace::new("read-oversized");
+        let receipt = workspace.path("recibo.pdf");
+        fs::write(&receipt, vec![0u8; MAX_ATTACHMENT_BYTES + 1]).unwrap();
+
+        assert_eq!(
+            read_attachment(&receipt),
+            Err("El archivo pesa 5,1 MB y el máximo es 5 MB".to_string())
+        );
     }
 
     #[test]

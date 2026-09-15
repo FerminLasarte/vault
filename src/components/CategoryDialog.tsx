@@ -28,7 +28,7 @@ const categorySchema = z.object({
   icon: z
     .string()
     .trim()
-    .min(1, "Elige un emoji")
+    .min(1, "Elegí un emoji")
     .refine(isSingleEmoji, { message: "Debe ser un único emoji" }),
   color: z.string().min(1),
 });
@@ -121,7 +121,7 @@ export function CategoryDialog({
               onValueChange={(value) => field.onChange(value)}
             >
               <SelectTrigger id="category-type" className="w-full">
-                <SelectValue placeholder="Selecciona un tipo" />
+                <SelectValue placeholder="Seleccioná un tipo" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="expense">{CATEGORY_TYPE_LABELS.expense}</SelectItem>

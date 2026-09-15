@@ -24,6 +24,11 @@ All source code must be written in **English**: variable names, function names, 
 
 The **only** exception is the end-user-facing UI copy (labels, buttons, messages shown to the user), which is written in **Spanish**, since the application's target audience is Spanish-speaking.
 
+That Spanish is **Argentine**, the audience the app is built for:
+
+- Address the user with **voseo**, never tuteo: "Seleccioná", "Elegí", "Ingresá", "querés", "tenés" — not "Selecciona", "Elige", "Introduce", "quieres", "tienes". This covers every string the user can see: labels, placeholders, validation messages, toasts, `aria-label`s, native menu items and error messages returned from Rust.
+- Format amounts, percentages and dates with the **`es-AR`** locale through the helpers in `src/lib/format.ts`, never with an ad hoc `Intl` or `toLocaleString` call.
+
 ## UI/UX principles
 
 The primary design directive for this project is a **minimalist, elegant, high-end** interface, in the spirit of Notion's clean, content-first UI. When building or reviewing UI:

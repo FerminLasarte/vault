@@ -43,8 +43,8 @@ import {
   openStatementFile,
   saveCsvFile,
   saveDatabaseCopy,
-  saveErrorMessage,
 } from "@/lib/files";
+import { fileErrorMessage } from "@/lib/fileErrors";
 import { ImportMappingDialog } from "@/components/ImportMappingDialog";
 import { EMPTY_MAPPING } from "@/lib/importMapping";
 import {
@@ -158,7 +158,7 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
       if (saved) toast.success(`${transactions.length} transacciones exportadas`);
     } catch (error) {
       console.error("Failed to export the transactions:", error);
-      toast.error(saveErrorMessage(error, "No se pudo exportar el archivo"));
+      toast.error(fileErrorMessage(error, "No se pudo exportar el archivo"));
     } finally {
       setIsWorking(false);
     }
@@ -174,7 +174,7 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
       }
     } catch (error) {
       console.error("Failed to back up the database:", error);
-      toast.error(saveErrorMessage(error, "No se pudo guardar la copia"));
+      toast.error(fileErrorMessage(error, "No se pudo guardar la copia"));
     } finally {
       setIsWorking(false);
     }
@@ -204,7 +204,7 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
       setStatement(picked);
     } catch (error) {
       console.error("Failed to read the statement:", error);
-      toast.error("No se pudo leer el archivo");
+      toast.error(fileErrorMessage(error, "No se pudo leer el archivo"));
     } finally {
       setIsWorking(false);
     }
@@ -270,7 +270,9 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
       console.error("Failed to import the file:", error);
       // A failed import already said so in its own words; this message is only
       // for the file itself failing to open or parse.
-      if (!isReported(error)) toast.error("No se pudo leer el archivo");
+      if (!isReported(error)) {
+        toast.error(fileErrorMessage(error, "No se pudo leer el archivo"));
+      }
     } finally {
       setIsWorking(false);
     }
