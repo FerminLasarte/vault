@@ -1,4 +1,4 @@
-import type { CategoryRule } from "@/db/schema";
+import type { Category, CategoryRule, CategoryType } from "@/db/schema";
 import { normalizeForSearch } from "@/lib/text";
 
 // Returns the rule that best describes this text, or null when none applies.
@@ -40,4 +40,29 @@ export function matchCategoryId(
   rules: CategoryRule[],
 ): number | null {
   return matchCategoryRule(description, rules)?.category_id ?? null;
+}
+
+// Where a movement of this kind should land, or null.
+//
+// A rule names one category, and a category holds either income or expenses.
+// Only rules of the movement's own kind are considered, so "mercado pago" →
+// Compras never files an incoming transfer under Compras, where it would show
+// up in the income breakdown and in the monthly close. Among those rules the
+// usual one wins, so a shorter rule of the right kind beats a longer one of the
+// wrong kind.
+export function matchCategoryIdForType(
+  description: string,
+  rules: CategoryRule[],
+  categories: Category[],
+  type: CategoryType,
+): number | null {
+  const ofType = new Set(
+    categories
+      .filter((category) => category.type === type)
+      .map((category) => category.id),
+  );
+  return matchCategoryId(
+    description,
+    rules.filter((rule) => ofType.has(rule.category_id)),
+  );
 }

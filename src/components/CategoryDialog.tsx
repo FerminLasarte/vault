@@ -14,10 +14,13 @@ import {
 } from "@/components/ui/select";
 import { CATEGORY_TYPE_LABELS } from "@/lib/labels";
 import { DEFAULT_CATEGORY_EMOJI, EMOJI_SUGGESTIONS, isSingleEmoji } from "@/lib/emoji";
+import {
+  CATEGORY_COLORS,
+  CATEGORY_PALETTE,
+  nextCategoryColor,
+} from "@/lib/categoryColors";
 import { cn } from "@/lib/utils";
 import type { Category, NewCategory } from "@/db";
-
-const DEFAULT_COLOR = "#64748b";
 
 const categorySchema = z.object({
   name: z.string().trim().min(1, "El nombre es obligatorio"),
@@ -37,6 +40,9 @@ interface CategoryDialogProps {
   onOpenChange: (open: boolean) => void;
   // `null` puts the dialog in create mode.
   editing: Category | null;
+  // The categories that already exist, so a new one starts out in a colour
+  // none of them has.
+  categories: Category[];
   onSubmitCategory: (category: NewCategory) => Promise<void>;
 }
 
@@ -44,8 +50,11 @@ export function CategoryDialog({
   open,
   onOpenChange,
   editing,
+  categories,
   onSubmitCategory,
 }: CategoryDialogProps) {
+  const freeColor = nextCategoryColor(categories.map((category) => category.color));
+
   const {
     control,
     register,
@@ -60,24 +69,25 @@ export function CategoryDialog({
       name: "",
       type: "expense",
       icon: DEFAULT_CATEGORY_EMOJI,
-      color: DEFAULT_COLOR,
+      color: CATEGORY_PALETTE[0],
     },
     values: editing
       ? {
           name: editing.name,
           type: editing.type,
           icon: editing.icon || DEFAULT_CATEGORY_EMOJI,
-          color: editing.color || DEFAULT_COLOR,
+          color: editing.color || freeColor,
         }
       : {
           name: "",
           type: "expense",
           icon: DEFAULT_CATEGORY_EMOJI,
-          color: DEFAULT_COLOR,
+          color: freeColor,
         },
   });
 
   const selectedIcon = watch("icon");
+  const selectedColor = watch("color")?.toLowerCase();
 
   async function onSubmit(values: CategoryFormValues) {
     await onSubmitCategory({ ...values, icon: values.icon.trim() });
@@ -152,6 +162,43 @@ export function CategoryDialog({
           ))}
         </div>
         {errors.icon && <p className="text-xs text-destructive">{errors.icon.message}</p>}
+      </div>
+
+      {/* How the category shows up in the charts. A new one already starts in
+          a colour no other category has, so this is only for changing it. */}
+      <div className="flex flex-col gap-1.5">
+        <Label id="category-color">Color</Label>
+        <div
+          role="group"
+          aria-labelledby="category-color"
+          className="flex flex-wrap gap-1"
+        >
+          {CATEGORY_COLORS.map(({ color, name }) => (
+            <Hint
+              key={color}
+              label={name}
+              anchor="element"
+              render={
+                <button
+                  type="button"
+                  aria-label={name}
+                  aria-pressed={selectedColor === color}
+                  onClick={() => setValue("color", color, { shouldValidate: true })}
+                  className={cn(
+                    "flex size-8 items-center justify-center rounded-md transition-colors hover:bg-muted",
+                    selectedColor === color && "bg-muted ring-1 ring-foreground/10",
+                  )}
+                />
+              }
+            >
+              <span
+                aria-hidden
+                className="size-4 rounded-full"
+                style={{ backgroundColor: color }}
+              />
+            </Hint>
+          ))}
+        </div>
       </div>
     </FormDialog>
   );

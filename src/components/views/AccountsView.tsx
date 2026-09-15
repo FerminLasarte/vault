@@ -83,6 +83,30 @@ export function AccountsView() {
   const [editing, setEditing] = useState<PaymentMethod | null>(null);
   const [pendingDeletion, setPendingDeletion] = useState<PaymentMethod | null>(null);
 
+  // What deleting the account will do with its history, in figures: the
+  // movements and the opening balance move to "Sin asignar" rather than
+  // disappearing (see deletePaymentMethod).
+  const deletionNotice = useMemo(() => {
+    if (pendingDeletion === null) return "";
+    const movements = transactions.filter(
+      (transaction) =>
+        transaction.payment_method_id === pendingDeletion.id ||
+        transaction.destination_payment_method_id === pendingDeletion.id,
+    ).length;
+    const unassigned = `«Sin asignar (${pendingDeletion.currency})»`;
+
+    if (movements === 1) {
+      return `Su movimiento se conserva y pasa a ${unassigned}, junto con su saldo.`;
+    }
+    if (movements > 1) {
+      return `Sus ${movements} movimientos se conservan y pasan a ${unassigned}, junto con su saldo.`;
+    }
+    if (pendingDeletion.initial_balance !== 0) {
+      return `No tiene movimientos; su saldo inicial pasa a ${unassigned}.`;
+    }
+    return "No tiene movimientos registrados.";
+  }, [pendingDeletion, transactions]);
+
   function openCreateDialog() {
     setEditing(null);
     setIsFormOpen(true);
@@ -268,8 +292,7 @@ export function AccountsView() {
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar esta cuenta?</AlertDialogTitle>
             <AlertDialogDescription>
-              Se eliminará «{pendingDeletion?.name}». Las transacciones ya registradas se
-              conservan, pero quedarán sin método de pago asociado.
+              Se eliminará «{pendingDeletion?.name}». {deletionNotice}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

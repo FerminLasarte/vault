@@ -50,20 +50,20 @@ earlier decision and are not listed.
 | B-08 | Changing the dollar type fetches the rate twice                    | bug         | low      | 2     | [x]  |
 | S-02 | A late response for the previous dollar type can win               | suspicion   | low      | 2     | [x]  |
 | S-03 | Fetched rates may be keyed to tomorrow's date (UTC)                | suspicion   | low      | 2     | [x]  |
-| B-09 | Multi-statement writes are not atomic; double submit duplicates    | bug         | medium   | 3     | [ ]  |
-| B-10 | Statement importer applies rules of the wrong category type        | bug         | medium   | 3     | [ ]  |
-| B-11 | Savings goal due in under a month always shows "not on track"      | bug         | medium   | 3     | [ ]  |
-| B-12 | Every new category gets the same grey                              | bug         | medium   | 3     | [ ]  |
-| B-13 | Chart and printed report cap at 12 months while totals do not      | bug         | low      | 3     | [ ]  |
-| B-14 | Tags differing only in non-ASCII case become duplicates            | bug         | low      | 3     | [ ]  |
-| B-15 | Deleting a transaction leaves orphan tags                          | bug         | low      | 3     | [ ]  |
-| B-16 | An expected movement stays confirmed after its transaction is gone | bug         | low      | 3     | [ ]  |
-| B-17 | Windows: attachment name is the full path                          | bug         | low      | 3     | [ ]  |
-| I-02 | Import dedupe drops legitimate repeats within one file             | improvement | medium   | 3     | [ ]  |
-| I-03 | Re-importing the app's own CSV fails after Excel (es-AR)           | improvement | low      | 3     | [ ]  |
-| I-04 | Deleting an account re-creates unassigned transactions             | improvement | low      | 3     | [ ]  |
-| I-05 | Missing integrity constraints                                      | improvement | low      | 3     | [ ]  |
-| I-06 | Amounts are REAL and summed without rounding                       | improvement | low      | 3     | [ ]  |
+| B-09 | Multi-statement writes are not atomic; double submit duplicates    | bug         | medium   | 3     | [x]  |
+| B-10 | Statement importer applies rules of the wrong category type        | bug         | medium   | 3     | [x]  |
+| B-11 | Savings goal due in under a month always shows "not on track"      | bug         | medium   | 3     | [x]  |
+| B-12 | Every new category gets the same grey                              | bug         | medium   | 3     | [x]  |
+| B-13 | Chart and printed report cap at 12 months while totals do not      | bug         | low      | 3     | [x]  |
+| B-14 | Tags differing only in non-ASCII case become duplicates            | bug         | low      | 3     | [x]  |
+| B-15 | Deleting a transaction leaves orphan tags                          | bug         | low      | 3     | [x]  |
+| B-16 | An expected movement stays confirmed after its transaction is gone | bug         | low      | 3     | [x]  |
+| B-17 | Windows: attachment name is the full path                          | bug         | low      | 3     | [x]  |
+| I-02 | Import dedupe drops legitimate repeats within one file             | improvement | medium   | 3     | [x]  |
+| I-03 | Re-importing the app's own CSV fails after Excel (es-AR)           | improvement | low      | 3     | [x]  |
+| I-04 | Deleting an account re-creates unassigned transactions             | improvement | low      | 3     | [x]  |
+| I-05 | Missing integrity constraints                                      | improvement | low      | 3     | [x]  |
+| I-06 | Amounts are REAL and summed without rounding                       | improvement | low      | 3     | [x]  |
 | I-07 | Copy mixes tuteo and voseo                                         | improvement | medium   | 4     | [ ]  |
 | I-08 | `es-ES` locale and a new `Intl` formatter per call                 | improvement | low      | 4     | [ ]  |
 | B-18 | Raw OS errors in English reach the user; size rounding is wrong    | bug         | low      | 4     | [ ]  |
@@ -373,7 +373,7 @@ excluded.source = 'manual'` to the single upsert, plus a test for that path.
   list of statements and commits. For confirmations use compare-and-set:
   `UPDATE … SET confirmed_count = confirmed_count + 1 WHERE id = $1 AND
 confirmed_count = $2`, inserting the transaction only if `rowsAffected = 1`.
-- [ ] Done
+- [x] Done
 
 ### B-10 · Statement importer applies rules of the wrong category type
 
@@ -387,7 +387,7 @@ confirmed_count = $2`, inserting the transaction only if `rowsAffected = 1`.
 - **Proposal:** extract `matchCategoryIdForType(description, rules,
 categories, type)` into `src/lib/categoryRules.ts` and use it in all three
   places.
-- [ ] Done
+- [x] Done
 
 ### B-11 · Savings goal due in under a month always shows "not on track"
 
@@ -402,7 +402,7 @@ categories, type)` into `src/lib/categoryRules.ts` and use it in all three
 - **Proposal:** separate "already past" (`target_date < today`) from "less
   than a month left"; for the latter compare the remainder against
   `monthlyPace × days / 30`. Add the test.
-- [ ] Done
+- [x] Done
 
 ### B-12 · Every new category gets the same grey
 
@@ -416,7 +416,7 @@ categories, type)` into `src/lib/categoryRules.ts` and use it in all three
   dots are indistinguishable.
 - **Proposal:** auto-assign the first unused colour from a palette (fewest
   clicks), and/or a row of swatches like `EMOJI_SUGGESTIONS`.
-- [ ] Done
+- [x] Done
 
 ### B-13 · Chart and printed report cap at 12 months while totals do not
 
@@ -429,7 +429,7 @@ categories, type)` into `src/lib/categoryRules.ts` and use it in all three
   up to itself.
 - **Proposal:** cap only the chart; the report lists every month (or states
   that the range was trimmed).
-- [ ] Done
+- [x] Done
 
 ### B-14 · Tags differing only in non-ASCII case become duplicates
 
@@ -443,7 +443,7 @@ categories, type)` into `src/lib/categoryRules.ts` and use it in all three
 - **Proposal:** in `setTransactionTags`, read `SELECT id, name FROM tags`,
   match with `toLocaleLowerCase("es")` and reuse the existing tag before
   inserting.
-- [ ] Done
+- [x] Done
 
 ### B-15 · Deleting a transaction leaves orphan tags
 
@@ -456,7 +456,7 @@ categories, type)` into `src/lib/categoryRules.ts` and use it in all three
   saved — exactly what that comment wants to prevent.
 - **Proposal:** run the same cleanup after `deleteTransaction`, or an
   `AFTER DELETE ON transaction_tags` trigger.
-- [ ] Done
+- [x] Done
 
 ### B-16 · An expected movement stays confirmed after its transaction is gone
 
@@ -472,7 +472,7 @@ categories, type)` into `src/lib/categoryRules.ts` and use it in all three
 - **Proposal:** reopen it (back to `pending`) when its transaction is deleted —
   e.g. a trigger, or in `deleteTransaction` — or drop the promise. Add
   `CREATE INDEX` on `expected_movements(transaction_id)`.
-- [ ] Done
+- [x] Done
 
 ### B-17 · Windows: attachment name is the full path
 
@@ -484,7 +484,7 @@ categories, type)` into `src/lib/categoryRules.ts` and use it in all three
   `saveAttachmentCopy` does `join(documentDir, absolutePath)`, suggesting the
   original location instead of Documentos.
 - **Proposal:** `split(/[\\/]/)` or `basename()` from `@tauri-apps/api/path`.
-- [ ] Done
+- [x] Done
 
 ### I-02 · Import dedupe drops legitimate repeats within one file
 
@@ -496,7 +496,7 @@ categories, type)` into `src/lib/categoryRules.ts` and use it in all three
   the UI says they "ya existían", which is false in that case.
 - **Proposal:** count occurrences per key; skip a file row only when the
   database already holds as many as the file brings.
-- [ ] Done
+- [x] Done
 
 ### I-03 · Re-importing the app's own CSV fails after Excel (es-AR)
 
@@ -509,7 +509,7 @@ categories, type)` into `src/lib/categoryRules.ts` and use it in all three
   obligatorias".
 - **Proposal:** reuse `detectDelimiter` and `parseFlexibleAmount`, as
   `src/lib/files.ts:163-164` does for statements.
-- [ ] Done
+- [x] Done
 
 ### I-04 · Deleting an account re-creates unassigned transactions
 
@@ -526,7 +526,7 @@ categories, type)` into `src/lib/categoryRules.ts` and use it in all three
 - **Proposal:** reassign to the "Sin asignar (<moneda>)" account instead of
   NULL and show `countTransactionsForPaymentMethod` in the dialog — or delete
   that function.
-- [ ] Done
+- [x] Done
 
 ### I-05 · Missing integrity constraints
 
@@ -541,7 +541,7 @@ categories, type)` into `src/lib/categoryRules.ts` and use it in all three
   validate min/max).
 - **Proposal:** `BEFORE INSERT/UPDATE … RAISE(ABORT)` triggers — no table
   rebuild needed.
-- [ ] Done
+- [x] Done
 
 ### I-06 · Amounts are REAL and summed without rounding
 
@@ -554,7 +554,7 @@ categories, type)` into `src/lib/categoryRules.ts` and use it in all three
 - **Proposal:** round to cents at aggregation points. Migrating to integer
   cents would mean rebuilding `transactions` (and its referencing tables,
   `lib.rs:431-434`) — not worth it today.
-- [ ] Done
+- [x] Done
 
 ---
 

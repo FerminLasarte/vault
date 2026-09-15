@@ -185,6 +185,7 @@ export function CategoriesView({ tab }: ViewProps) {
         open={isFormOpen}
         onOpenChange={setIsFormOpen}
         editing={editing}
+        categories={categories}
         onSubmitCategory={handleSubmitCategory}
       />
 

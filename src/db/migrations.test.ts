@@ -209,12 +209,19 @@ describe("migrations", () => {
     const database = newDatabase("types");
     applyMigrations(database);
 
-    for (const type of ["income", "expense", "transfer"]) {
+    // A transfer has to say where the money went (migration 28); account 1 is
+    // one of the accounts migration 5 seeds.
+    for (const [type, destination] of [
+      ["income", "NULL"],
+      ["expense", "NULL"],
+      ["transfer", "1"],
+    ]) {
       expect(() =>
         sql(
           database,
-          `INSERT INTO transactions (amount, type, description, date, currency)
-           VALUES (1, '${type}', 'x', '2026-01-01', 'ARS');`,
+          `INSERT INTO transactions
+             (amount, type, destination_payment_method_id, description, date, currency)
+           VALUES (1, '${type}', ${destination}, 'x', '2026-01-01', 'ARS');`,
         ),
       ).not.toThrow();
     }

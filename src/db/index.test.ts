@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createTestDatabase } from "./testing/database";
 import {
-  advanceLoan,
-  countTransactionsForPaymentMethod,
+  confirmExpectedMovement,
   deletePaymentMethod,
   deleteTransaction,
+  dismissExpectedMovement,
   dismissRecurringOccurrence,
+  insertExpectedMovement,
+  insertTransactionWithTags,
+  listExpectedMovements,
   EXCHANGE_RATE_TYPE,
   getLatestExchangeRate,
   getSetting,
@@ -22,6 +25,7 @@ import {
   listExchangeRates,
   listInstallmentPlans,
   listLoans,
+  listPaymentMethods,
   listRecurringTransactions,
   listTags,
   listTransactionsWithCategory,
@@ -31,12 +35,14 @@ import {
   setDatabaseForTesting,
   setSetting,
   setTransactionTags,
+  updateInstallmentPlan,
   updateLoan,
   updateTransaction,
   upsertExchangeRate,
   upsertExchangeRates,
 } from "./index";
-import type { ExchangeRate, NewLoan, NewTransaction } from "./index";
+import type { ExchangeRate, NewLoan, NewTransaction, PaymentMethod } from "./index";
+import { calculateAccountBalances } from "@/lib/finance";
 
 let db: ReturnType<typeof createTestDatabase>;
 
@@ -242,14 +248,6 @@ describe("deleting", () => {
     expect(await listAttachments(transaction.id)).toHaveLength(0);
     const links = await db.select<unknown[]>("SELECT * FROM transaction_tags");
     expect(links).toHaveLength(0);
-  });
-
-  it("counts what an account would take with it before deleting", async () => {
-    const account = await anAccount();
-    await insertTransaction(anExpense({ paymentMethodId: account.id }));
-    await insertTransaction(anExpense({ paymentMethodId: account.id }));
-
-    expect(await countTransactionsForPaymentMethod(account.id)).toBe(2);
   });
 
   it("keeps the history when its account is deleted", async () => {
@@ -585,7 +583,7 @@ describe("loans", () => {
   it("keeps the payments already recorded when the terms are edited", async () => {
     await insertLoan(aLoan());
     const [created] = await listLoans();
-    await advanceLoan(created.id, 3);
+    await db.execute("UPDATE loans SET confirmed_count = 3 WHERE id = $1", [created.id]);
 
     await updateLoan(created.id, aLoan({ principal: 2_000_000 }));
 
@@ -595,13 +593,15 @@ describe("loans", () => {
     expect(updated.confirmed_count).toBe(3);
   });
 
-  it("will not advance past the end of the schedule", async () => {
+  it("will not register a payment past the end of the schedule", async () => {
     await insertLoan(aLoan({ installmentCount: 12 }));
     const [loan] = await listLoans();
+    await db.execute("UPDATE loans SET confirmed_count = 12 WHERE id = $1", [loan.id]);
 
-    await advanceLoan(loan.id, 13);
+    await expect(recordLoanPayment(loan.id, 12, "2027-09-10", 100)).rejects.toThrow();
 
-    expect((await listLoans())[0].confirmed_count).toBe(0);
+    expect((await listLoans())[0].confirmed_count).toBe(12);
+    expect(await listTransactionsWithCategory()).toHaveLength(0);
   });
 
   it("keeps the loan when its account is deleted", async () => {
@@ -612,5 +612,391 @@ describe("loans", () => {
 
     const [loan] = await listLoans();
     expect(loan.payment_method_id).toBeNull();
+  });
+});
+
+describe("writes that span several statements", () => {
+  // Each statement used to go to whichever pooled connection was free, so a
+  // write could land halfway, and two clicks before the re-render each read
+  // the plan as it was and each registered the same payment.
+
+  async function aPlan() {
+    await insertInstallmentPlan({
+      description: "Heladera",
+      totalAmount: 1200,
+      installmentCount: 12,
+      currency: "ARS",
+      categoryId: null,
+      paymentMethodId: null,
+      firstDueDate: "2026-07-10",
+      cashPrice: null,
+    });
+    return (await listInstallmentPlans())[0];
+  }
+
+  async function aLoan() {
+    await insertLoan({
+      direction: "borrowed",
+      counterparty: "Banco",
+      description: "Préstamo personal",
+      principal: 1200,
+      currency: "ARS",
+      annualRate: 0,
+      installmentCount: 12,
+      categoryId: null,
+      paymentMethodId: null,
+      firstDueDate: "2026-07-10",
+    });
+    return (await listLoans())[0];
+  }
+
+  async function aSeries() {
+    await insertRecurringTransaction({
+      description: "Alquiler",
+      amount: 500,
+      type: "expense",
+      categoryId: null,
+      paymentMethodId: null,
+      currency: "ARS",
+      frequency: "monthly",
+      startDate: "2026-08-08",
+      isActive: true,
+    });
+    return (await listRecurringTransactions())[0];
+  }
+
+  async function anExpectedMovement() {
+    await insertExpectedMovement({
+      description: "VTV",
+      amount: 80_000,
+      type: "expense",
+      currency: "ARS",
+      categoryId: null,
+      paymentMethodId: null,
+      dueDate: "2026-10-01",
+    });
+    return (await listExpectedMovements())[0];
+  }
+
+  // A trigger standing in for a write that fails partway, the way SQLITE_BUSY
+  // or a full disk would.
+  async function failOnTag(name: string) {
+    await db.execute(
+      `CREATE TRIGGER fail_on_tag BEFORE INSERT ON tags
+       WHEN NEW.name = '${name}'
+       BEGIN SELECT RAISE(ABORT, 'simulated failure'); END`,
+    );
+  }
+
+  it("registers an instalment once when it is confirmed twice at once", async () => {
+    const plan = await aPlan();
+
+    await Promise.allSettled([
+      recordInstallment(plan.id, 0, "2026-07-10", 100),
+      recordInstallment(plan.id, 0, "2026-07-10", 100),
+    ]);
+
+    expect(await listTransactionsWithCategory()).toHaveLength(1);
+    expect((await listInstallmentPlans())[0].confirmed_count).toBe(1);
+  });
+
+  it("registers a loan payment once when it is confirmed twice at once", async () => {
+    const loan = await aLoan();
+
+    await Promise.allSettled([
+      recordLoanPayment(loan.id, 0, "2026-07-10", 100),
+      recordLoanPayment(loan.id, 0, "2026-07-10", 100),
+    ]);
+
+    expect(await listTransactionsWithCategory()).toHaveLength(1);
+    expect((await listLoans())[0].confirmed_count).toBe(1);
+  });
+
+  it("registers a recurring occurrence once when it is confirmed twice at once", async () => {
+    const series = await aSeries();
+
+    await Promise.allSettled([
+      recordRecurringOccurrence(series.id, "2026-08-08"),
+      recordRecurringOccurrence(series.id, "2026-08-08"),
+    ]);
+
+    expect(await listTransactionsWithCategory()).toHaveLength(1);
+    expect((await listRecurringTransactions())[0].last_confirmed_date).toBe("2026-08-08");
+  });
+
+  it("registers an expected movement once when it is confirmed twice at once", async () => {
+    const movement = await anExpectedMovement();
+
+    await Promise.allSettled([
+      confirmExpectedMovement(movement.id),
+      confirmExpectedMovement(movement.id),
+    ]);
+
+    const transactions = await listTransactionsWithCategory();
+    expect(transactions).toHaveLength(1);
+    const [confirmed] = await listExpectedMovements();
+    expect(confirmed.status).toBe("confirmed");
+    expect(confirmed.transaction_id).toBe(transactions[0].id);
+  });
+
+  it("does not record an expected movement that was already dismissed", async () => {
+    const movement = await anExpectedMovement();
+    await dismissExpectedMovement(movement.id);
+
+    await expect(confirmExpectedMovement(movement.id)).rejects.toThrow();
+
+    expect(await listTransactionsWithCategory()).toHaveLength(0);
+    expect((await listExpectedMovements())[0].status).toBe("dismissed");
+  });
+
+  it("keeps a transaction's tags when saving new ones fails partway", async () => {
+    await insertTransaction(anExpense());
+    const [transaction] = await listTransactionsWithCategory();
+    await setTransactionTags(transaction.id, ["viaje"]);
+    await failOnTag("boom");
+
+    await expect(setTransactionTags(transaction.id, ["auto", "boom"])).rejects.toThrow();
+
+    const [row] = await listTransactionsWithCategory();
+    expect(row.tag_names).toBe("viaje");
+  });
+
+  it("does not add a transaction whose tags could not be saved", async () => {
+    await failOnTag("boom");
+
+    await expect(insertTransactionWithTags(anExpense(), ["boom"])).rejects.toThrow();
+
+    expect(await listTransactionsWithCategory()).toHaveLength(0);
+  });
+
+  it("adds a transaction together with its tags", async () => {
+    const id = await insertTransactionWithTags(anExpense(), ["viaje", "auto"]);
+
+    const [row] = await listTransactionsWithCategory();
+    expect(row.id).toBe(id);
+    expect(row.tag_names?.split(",").sort()).toEqual(["auto", "viaje"]);
+  });
+});
+
+describe("deleting an account", () => {
+  async function placeholder(currency = "ARS") {
+    const rows = await db.select<PaymentMethod[]>(
+      "SELECT * FROM payment_methods WHERE name = $1",
+      [`Sin asignar (${currency})`],
+    );
+    return rows;
+  }
+
+  it("moves its movements and its balance to the unassigned account", async () => {
+    const bank = await anAccount("Banco");
+    await db.execute("UPDATE payment_methods SET initial_balance = 5000 WHERE id = $1", [
+      bank.id,
+    ]);
+    const cash = await anAccount("Efectivo");
+    await insertTransaction(anExpense({ paymentMethodId: bank.id, amount: 1000 }));
+    await insertTransaction(
+      anExpense({
+        type: "transfer",
+        amount: 300,
+        paymentMethodId: cash.id,
+        destinationPaymentMethodId: bank.id,
+        destinationAmount: 300,
+      }),
+    );
+    const before = calculateAccountBalances(
+      await listPaymentMethods(),
+      await listTransactionsWithCategory(),
+    );
+
+    await deletePaymentMethod(bank.id);
+
+    // Left pointing at nothing, the movements counted towards no balance —
+    // the state migration 13 once had to repair — and the account's money
+    // vanished from the total along with it.
+    const [unassigned] = await placeholder();
+    const transactions = await listTransactionsWithCategory();
+    expect(transactions.every((row) => row.payment_method_id !== null)).toBe(true);
+    expect(
+      transactions.find((row) => row.type === "transfer")?.destination_payment_method_id,
+    ).toBe(unassigned.id);
+    const after = calculateAccountBalances(await listPaymentMethods(), transactions);
+    expect(after.get(unassigned.id)).toBe(before.get(bank.id));
+    expect(after.get(cash.id)).toBe(before.get(cash.id));
+  });
+
+  it("reuses the unassigned account when there already is one", async () => {
+    const first = await anAccount("Uno");
+    const second = await anAccount("Dos");
+    await insertTransaction(anExpense({ paymentMethodId: first.id }));
+    await insertTransaction(anExpense({ paymentMethodId: second.id }));
+
+    await deletePaymentMethod(first.id);
+    await deletePaymentMethod(second.id);
+
+    expect(await placeholder()).toHaveLength(1);
+  });
+
+  it("files it under the unassigned account of its own currency", async () => {
+    const dollars = await anAccount("Dólares", "USD");
+    await insertTransaction(anExpense({ paymentMethodId: dollars.id, currency: "USD" }));
+
+    await deletePaymentMethod(dollars.id);
+
+    expect(await placeholder("USD")).toHaveLength(1);
+    expect(await placeholder("ARS")).toHaveLength(0);
+  });
+
+  it("leaves nothing behind for an account with no history", async () => {
+    const empty = await anAccount("Vacía");
+
+    await deletePaymentMethod(empty.id);
+
+    expect(await placeholder()).toHaveLength(0);
+  });
+});
+
+describe("integrity rules the schema enforces", () => {
+  // Checked by the dialogs today, but nothing stopped a bad row from reaching
+  // the table — and a row in a currency the app does not know silently
+  // disappears from every view, which migration 8 once had to rescue.
+
+  it("refuses a currency the app does not support", async () => {
+    await expect(insertTransaction(anExpense({ currency: "EUR" }))).rejects.toThrow();
+    await expect(
+      insertPaymentMethod({
+        name: "Euros",
+        type: "cash",
+        currency: "EUR",
+        initialBalance: 0,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("refuses a movement of no money", async () => {
+    await expect(insertTransaction(anExpense({ amount: 0 }))).rejects.toThrow();
+    await expect(insertTransaction(anExpense({ amount: -10 }))).rejects.toThrow();
+  });
+
+  it("refuses a transfer with nowhere to go", async () => {
+    const account = await anAccount();
+    await expect(
+      insertTransaction(
+        anExpense({
+          type: "transfer",
+          paymentMethodId: account.id,
+          destinationAmount: 10,
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("refuses to change a movement into one of those either", async () => {
+    const id = await insertTransaction(anExpense());
+    await expect(updateTransaction(id, anExpense({ currency: "EUR" }))).rejects.toThrow();
+    expect((await listTransactionsWithCategory())[0].currency).toBe("ARS");
+  });
+
+  it("refuses to shrink a schedule below the payments already recorded", async () => {
+    await insertInstallmentPlan({
+      description: "Heladera",
+      totalAmount: 1200,
+      installmentCount: 12,
+      currency: "ARS",
+      categoryId: null,
+      paymentMethodId: null,
+      firstDueDate: "2026-07-10",
+      cashPrice: null,
+    });
+    const [plan] = await listInstallmentPlans();
+    await db.execute("UPDATE installment_plans SET confirmed_count = 5 WHERE id = $1", [
+      plan.id,
+    ]);
+
+    await expect(
+      updateInstallmentPlan(plan.id, {
+        description: "Heladera",
+        totalAmount: 1200,
+        installmentCount: 3,
+        currency: "ARS",
+        categoryId: null,
+        paymentMethodId: null,
+        firstDueDate: "2026-07-10",
+        cashPrice: null,
+      }),
+    ).rejects.toThrow();
+    expect((await listInstallmentPlans())[0].installment_count).toBe(12);
+  });
+});
+
+describe("what a transaction leaves behind", () => {
+  it("treats tags differing only in the case of an accent or ñ as one tag", async () => {
+    await insertTransaction(anExpense({ description: "Uno" }));
+    await insertTransaction(anExpense({ description: "Dos" }));
+    const [first, second] = await listTransactionsWithCategory();
+
+    await setTransactionTags(first.id, ["Ñandú", "Ámbito"]);
+    await setTransactionTags(second.id, ["ñandú", "ámbito"]);
+
+    // SQLite's NOCASE folds ASCII only, so the column alone let these through
+    // as separate tags.
+    const tags = await listTags();
+    expect(tags.map((tag) => tag.name).sort()).toEqual(["Ámbito", "Ñandú"]);
+    const [row] = await listTransactionsWithCategory();
+    expect(row.tag_names?.split(",").sort()).toEqual(["Ámbito", "Ñandú"]);
+  });
+
+  it("forgets a tag once the only transaction carrying it is deleted", async () => {
+    await insertTransaction(anExpense());
+    const [transaction] = await listTransactionsWithCategory();
+    await setTransactionTags(transaction.id, ["viaje"]);
+
+    await deleteTransaction(transaction.id);
+
+    expect(await listTags()).toEqual([]);
+  });
+
+  it("keeps a tag another transaction still carries", async () => {
+    await insertTransaction(anExpense({ description: "Uno" }));
+    await insertTransaction(anExpense({ description: "Dos" }));
+    const [first, second] = await listTransactionsWithCategory();
+    await setTransactionTags(first.id, ["viaje"]);
+    await setTransactionTags(second.id, ["viaje"]);
+
+    await deleteTransaction(first.id);
+
+    expect((await listTags()).map((tag) => tag.name)).toEqual(["viaje"]);
+  });
+
+  it("reopens an expected movement when the transaction it became is deleted", async () => {
+    await insertExpectedMovement({
+      description: "VTV",
+      amount: 80_000,
+      type: "expense",
+      currency: "ARS",
+      categoryId: null,
+      paymentMethodId: null,
+      dueDate: "2026-10-01",
+    });
+    const [movement] = await listExpectedMovements();
+    await confirmExpectedMovement(movement.id);
+    const [transaction] = await listTransactionsWithCategory();
+
+    await deleteTransaction(transaction.id);
+
+    // Left "confirmed" it vanished from the ledger and from the projection,
+    // with nothing left to reopen it from.
+    const [reopened] = await listExpectedMovements();
+    expect(reopened.status).toBe("pending");
+    expect(reopened.transaction_id).toBeNull();
+  });
+
+  it("finds the expected movement of a deleted transaction through an index", async () => {
+    const plan = await db.select<{ detail: string }[]>(
+      "EXPLAIN QUERY PLAN SELECT id FROM expected_movements WHERE transaction_id = $1",
+      [1],
+    );
+    expect(plan.map((step) => step.detail).join(" ")).toMatch(
+      /USING (COVERING )?INDEX idx_expected_movements_transaction/,
+    );
   });
 });

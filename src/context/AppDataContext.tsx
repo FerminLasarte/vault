@@ -38,7 +38,7 @@ import {
   insertRecurringTransaction,
   insertCategoryRule,
   insertPaymentMethod,
-  insertTransaction,
+  insertTransactionWithTags,
   insertTransactions,
   listBudgets,
   listCategories,
@@ -51,7 +51,8 @@ import {
   insertExpectedMovement,
   updateExpectedMovement,
   deleteExpectedMovement,
-  closeExpectedMovement,
+  confirmExpectedMovement,
+  dismissExpectedMovement,
   listRecurringTransactions,
   listCategoryRules,
   listPaymentMethods,
@@ -59,7 +60,6 @@ import {
   listTransactionsWithCategory,
   updateCategory,
   setSetting,
-  setTransactionTags,
   dismissRecurringOccurrence,
   recordInstallment,
   recordLoanPayment,
@@ -71,7 +71,7 @@ import {
   updateCategoryRule,
   updateRecurringTransaction,
   updatePaymentMethod,
-  updateTransaction,
+  updateTransactionWithTags,
   upsertExchangeRate,
   upsertExchangeRates,
   type BudgetWithCategory,
@@ -169,9 +169,8 @@ export interface AppData {
   addLoan: (loan: NewLoan) => Promise<void>;
   editLoan: (id: number, loan: NewLoan) => Promise<void>;
   removeLoan: (id: number) => Promise<void>;
-  // Records the payment as a real movement and advances the loan by one, in
-  // that order, so a failure never leaves a loan claiming a payment that was
-  // never written.
+  // Records the payment as a real movement and advances the loan by one, as a
+  // single write: neither can land without the other.
   confirmLoanPayment: (
     id: number,
     index: number,
@@ -562,18 +561,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       addTransaction: (transaction, transactionTags) =>
         runMutation(
           async () => {
-            const id = await insertTransaction(transaction);
-            await setTransactionTags(id, transactionTags);
+            await insertTransactionWithTags(transaction, transactionTags);
           },
           "Transacción agregada",
           "No se pudo agregar la transacción",
         ),
       editTransaction: (id, transaction, transactionTags) =>
         runMutation(
-          async () => {
-            await updateTransaction(id, transaction);
-            await setTransactionTags(id, transactionTags);
-          },
+          () => updateTransactionWithTags(id, transaction, transactionTags),
           "Transacción actualizada",
           "No se pudo actualizar la transacción",
         ),
@@ -735,32 +730,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         ),
       confirmExpected: (id) =>
         runMutation(
-          async () => {
-            const movement = expectedMovements.find((entry) => entry.id === id);
-            if (!movement) return;
-
-            // Dated the day it was due rather than today: the user is recording
-            // that the thing they foresaw happened, and moving it to whenever
-            // they got around to confirming would put it in the wrong month.
-            const transactionId = await insertTransaction({
-              amount: movement.amount,
-              type: movement.type,
-              currency: movement.currency,
-              categoryId: movement.category_id,
-              paymentMethodId: movement.payment_method_id,
-              destinationPaymentMethodId: null,
-              destinationAmount: null,
-              description: movement.description,
-              date: movement.due_date,
-            });
-            await closeExpectedMovement(id, "confirmed", transactionId);
-          },
+          () => confirmExpectedMovement(id),
           "Movimiento registrado",
           "No se pudo registrar el movimiento",
         ),
       dismissExpected: (id) =>
         runMutation(
-          () => closeExpectedMovement(id, "dismissed", null),
+          () => dismissExpectedMovement(id),
           "Movimiento descartado",
           "No se pudo descartar el movimiento",
         ),

@@ -1160,6 +1160,62 @@ describe("recentMonthsRange", () => {
   });
 });
 
+describe("amounts added up to the cent", () => {
+  // Amounts are stored as REAL, so 0.1 + 0.2 comes out as 0.30000000000000004.
+  // The formatting hid it; comparisons at the boundary did not.
+
+  it("totals income and expenses without floating-point residue", () => {
+    const summary = calculateSummary([
+      makeTransaction({ amount: 0.1, type: "expense" }),
+      makeTransaction({ amount: 0.2, type: "expense" }),
+      makeTransaction({ amount: 0.3, type: "income" }),
+    ]);
+    expect(summary).toEqual({ income: 0.3, expenses: 0.3, balance: 0 });
+  });
+
+  it("groups a category's spending to the cent", () => {
+    const [entry] = groupByCategory(
+      [0.1, 0.2].map((amount) =>
+        makeTransactionWithCategory({ amount, category_id: 5, category_name: "Comida" }),
+      ),
+      "expense",
+    );
+    expect(entry.total).toBe(0.3);
+  });
+
+  it("keeps account balances to the cent", () => {
+    const accounts: PaymentMethod[] = [
+      { id: 1, name: "Efectivo", type: "cash", currency: "ARS", initial_balance: 0.1 },
+    ];
+    const balances = calculateAccountBalances(accounts, [
+      makeTransaction({ amount: 0.2, type: "income", payment_method_id: 1 }),
+    ]);
+    expect(balances.get(1)).toBe(0.3);
+  });
+
+  it("does not call a budget spent exactly to its cap exceeded", () => {
+    const budget: BudgetWithCategory = {
+      id: 1,
+      category_id: 5,
+      currency: "ARS",
+      amount: 0.3,
+      period: "monthly",
+      category_name: "Comida",
+      category_icon: "🍽️",
+      category_color: "#f00",
+    };
+    const [progress] = calculateBudgetProgress(
+      [budget],
+      [0.1, 0.2].map((amount) =>
+        makeTransaction({ amount, category_id: 5, date: "2026-08-10" }),
+      ),
+      new Date(2026, 7, 15),
+    );
+    expect(progress.isExceeded).toBe(false);
+    expect(progress.remaining).toBe(0);
+  });
+});
+
 describe("getNextMonthKeys", () => {
   it("lists the months ahead, leaving out the one in progress", () => {
     expect(getNextMonthKeys(3, "2026-08")).toEqual(["2026-09", "2026-10", "2026-11"]);

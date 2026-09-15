@@ -1,5 +1,5 @@
 import type { SavingsContribution, SavingsGoalWithNames, Transaction } from "@/db/schema";
-import { calculateAccountBalances } from "@/lib/finance";
+import { calculateAccountBalances, roundToCents } from "@/lib/finance";
 import type { PaymentMethod } from "@/db/schema";
 
 // How far back the pace is measured. Short enough to reflect what the user is
@@ -110,7 +110,9 @@ export function calculateSavingsProgress(
         .reduce((total, contribution) => total + contribution.amount, 0);
     }
 
-    const remaining = goal.target_amount - current;
+    current = roundToCents(current);
+    recentSaved = roundToCents(recentSaved);
+    const remaining = roundToCents(goal.target_amount - current);
     const isReached = current >= goal.target_amount;
     // A negative pace means the balance is going the wrong way; reporting it as
     // a pace would imply a projection that does not exist.
@@ -125,9 +127,7 @@ export function calculateSavingsProgress(
     let isOnTrack: boolean | null = null;
 
     if (goal.target_date !== null && !isReached) {
-      const monthsLeft = monthsBetween(today, goal.target_date);
-      // A deadline already past cannot be met by any pace.
-      requiredMonthlyPace = monthsLeft > 0 ? remaining / monthsLeft : Infinity;
+      requiredMonthlyPace = requiredPace(remaining, today, goal.target_date);
       isOnTrack = monthlyPace >= requiredMonthlyPace;
     } else if (isReached) {
       isOnTrack = true;
@@ -145,6 +145,34 @@ export function calculateSavingsProgress(
       isOnTrack,
     };
   });
+}
+
+// What has to be saved per month to reach the goal by its deadline.
+//
+// A deadline already past, or today with money still missing, cannot be met by
+// any pace. Less than a whole month left is a different case, not the same one:
+// counted in whole months it is zero, which used to paint a goal $1 short with
+// a month to go as "el ritmo no alcanza". It is measured in days instead.
+function requiredPace(remaining: number, today: string, targetDate: string): number {
+  if (targetDate <= today) return Infinity;
+
+  const monthsLeft = monthsBetween(today, targetDate);
+  if (monthsLeft > 0) return remaining / monthsLeft;
+
+  return remaining / (daysBetween(today, targetDate) / DAYS_PER_MONTH);
+}
+
+// The month a pace is scaled down by when less than one is left.
+const DAYS_PER_MONTH = 30;
+
+function daysBetween(fromDate: string, toDate: string): number {
+  const [fromYear, fromMonth, fromDay] = fromDate.split("-").map(Number);
+  const [toYear, toMonth, toDay] = toDate.split("-").map(Number);
+  // UTC, so a daylight-saving change in between does not shave off an hour
+  // and round a day away.
+  const elapsed =
+    Date.UTC(toYear, toMonth - 1, toDay) - Date.UTC(fromYear, fromMonth - 1, fromDay);
+  return Math.round(elapsed / 86_400_000);
 }
 
 // Whole months from one date to another; negative or zero when the second date

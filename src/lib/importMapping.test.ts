@@ -300,16 +300,50 @@ describe("buildMappedImportPlan", () => {
     expect(plan.duplicates).toBe(1);
   });
 
-  it("catches a row the file repeats within itself", () => {
-    // Re-downloading an overlapping period is the normal way this happens.
+  it("keeps a movement the statement genuinely repeats", () => {
+    // Two identical fares on the same day are two fares. Dropping one, and
+    // saying it "ya existía", was wrong on both counts.
     const plan = buildMappedImportPlan(
       [
         ["Fecha", "Concepto", "Importe"],
-        ["05/08/2026", "Supermercado", "-1.000,00"],
-        ["05/08/2026", "Supermercado", "-1.000,00"],
+        ["05/08/2026", "SUBE", "-1.000,00"],
+        ["05/08/2026", "SUBE", "-1.000,00"],
       ],
       SIGNED,
       CONTEXT,
+    );
+
+    expect(plan.ready).toHaveLength(2);
+    expect(plan.duplicates).toBe(0);
+  });
+
+  it("skips only as many repeats as the app already has", () => {
+    // Re-downloading an overlapping period is the normal way this happens: one
+    // fare was imported last time, the new file carries both.
+    const plan = buildMappedImportPlan(
+      [
+        ["Fecha", "Concepto", "Importe"],
+        ["05/08/2026", "SUBE", "-1.000,00"],
+        ["05/08/2026", "SUBE", "-1.000,00"],
+      ],
+      SIGNED,
+      {
+        ...CONTEXT,
+        existing: [
+          {
+            id: 1,
+            amount: 1000,
+            type: "expense",
+            category_id: null,
+            payment_method_id: null,
+            destination_payment_method_id: null,
+            destination_amount: null,
+            description: "SUBE",
+            date: "2026-08-05",
+            currency: "ARS",
+          },
+        ],
+      },
     );
 
     expect(plan.ready).toHaveLength(1);
@@ -325,12 +359,39 @@ describe("buildMappedImportPlan", () => {
       SIGNED,
       {
         ...CONTEXT,
+        categories: [
+          { id: 7, name: "Supermercado", type: "expense", color: "#f97316", icon: "🛒" },
+        ],
         categoryRules: [{ id: 1, pattern: "coto", category_id: 7 }],
       },
     );
 
     // A statement should land classified the same way a hand-made file would.
     expect(plan.ready[0].transaction.categoryId).toBe(7);
+  });
+
+  it("does not file money coming in under an expense rule", () => {
+    const plan = buildMappedImportPlan(
+      [
+        ["Fecha", "Concepto", "Importe"],
+        ["05/08/2026", "Transferencia recibida Mercado Pago", "5.000,00"],
+        ["06/08/2026", "Pago Mercado Pago", "-1.000,00"],
+      ],
+      SIGNED,
+      {
+        ...CONTEXT,
+        categories: [
+          { id: 7, name: "Compras", type: "expense", color: "#f97316", icon: "🛍️" },
+        ],
+        categoryRules: [{ id: 1, pattern: "mercado pago", category_id: 7 }],
+      },
+    );
+
+    // An income filed under Compras would show up in the income breakdown and
+    // in the monthly close as if Compras were a source of money.
+    expect(plan.ready[0].transaction.type).toBe("income");
+    expect(plan.ready[0].transaction.categoryId).toBeNull();
+    expect(plan.ready[1].transaction.categoryId).toBe(7);
   });
 
   it("assigns the account chosen for the file", () => {

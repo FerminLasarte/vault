@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use tauri::Manager;
 use tauri_plugin_sql::{DbInstances, DbPool, Migration, MigrationKind};
 
+mod db;
 mod files;
 mod menu;
 
@@ -77,6 +78,8 @@ fn print_window(window: tauri::WebviewWindow) -> Result<(), String> {
     window.print().map_err(|error| error.to_string())
 }
 
+const DATABASE_NOT_OPEN: &str = "La base de datos no está abierta";
+
 // Saves a snapshot of the live database, taken through the SQL plugin's own
 // connection pool so it sees exactly what the app sees (see files::backup_to).
 #[tauri::command]
@@ -85,10 +88,26 @@ async fn backup_database(app: tauri::AppHandle, destination: String) -> Result<(
     let instances = app.state::<DbInstances>();
     let instances = instances.0.read().await;
     let Some(DbPool::Sqlite(pool)) = instances.get(DATABASE_URL) else {
-        return Err("La base de datos no está abierta".to_string());
+        return Err(DATABASE_NOT_OPEN.to_string());
     };
 
     files::backup_to(pool, &database, Path::new(&destination)).await
+}
+
+// Writes several statements as one transaction, on the SQL plugin's own pool
+// (see db::run_batch for why the frontend cannot do this itself).
+#[tauri::command]
+async fn execute_batch(
+    app: tauri::AppHandle,
+    statements: Vec<db::Statement>,
+) -> Result<Vec<db::StatementResult>, String> {
+    let instances = app.state::<DbInstances>();
+    let instances = instances.0.read().await;
+    let Some(DbPool::Sqlite(pool)) = instances.get(DATABASE_URL) else {
+        return Err(DATABASE_NOT_OPEN.to_string());
+    };
+
+    db::run_batch(pool, statements).await
 }
 
 // Run automatically by the SQL plugin the moment the frontend opens the
@@ -760,6 +779,168 @@ fn migrations() -> Vec<Migration> {
             ",
             kind: MigrationKind::Up,
         },
+        // Deleting a transaction reopens the expected movement it was confirmed
+        // into, which means finding that movement by `transaction_id` — and the
+        // foreign key's ON DELETE SET NULL was already making the same search on
+        // every transaction delete, scanning the whole table each time.
+        Migration {
+            version: 27,
+            description: "index_expected_movements_transaction",
+            sql: "
+                CREATE INDEX IF NOT EXISTS idx_expected_movements_transaction
+                    ON expected_movements(transaction_id);
+            ",
+            kind: MigrationKind::Up,
+        },
+        // Rules the dialogs already check but nothing below them enforced. A
+        // row in a currency the app does not know silently vanishes from every
+        // view (migration 8 once had to rescue such rows); a transfer with no
+        // destination moves money out of one account and into none; a plan
+        // edited down below the instalments already paid claims more paid than
+        // it has.
+        //
+        // Triggers rather than CHECK constraints because adding a CHECK means
+        // rebuilding the table, and transactions has other tables pointing at
+        // it. They guard writes only, so rows already stored are left as they
+        // are, and the UPDATE triggers fire only when a guarded column is
+        // written — an old transfer that lost its destination can still be
+        // moved to another account or recategorised.
+        Migration {
+            version: 28,
+            description: "enforce_integrity_rules",
+            sql: "
+                CREATE TRIGGER IF NOT EXISTS transactions_check_insert
+                BEFORE INSERT ON transactions
+                BEGIN
+                    SELECT RAISE(ABORT, 'transactions: currency must be ARS or USD')
+                        WHERE NEW.currency NOT IN ('ARS', 'USD');
+                    SELECT RAISE(ABORT, 'transactions: amount must be positive')
+                        WHERE NEW.amount <= 0;
+                    SELECT RAISE(ABORT, 'transactions: destination amount must be positive')
+                        WHERE NEW.destination_amount IS NOT NULL AND NEW.destination_amount <= 0;
+                    SELECT RAISE(ABORT, 'transactions: a transfer needs a destination account')
+                        WHERE NEW.type = 'transfer' AND NEW.destination_payment_method_id IS NULL;
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS transactions_check_update
+                BEFORE UPDATE OF amount, type, currency, destination_payment_method_id,
+                    destination_amount ON transactions
+                BEGIN
+                    SELECT RAISE(ABORT, 'transactions: currency must be ARS or USD')
+                        WHERE NEW.currency NOT IN ('ARS', 'USD');
+                    SELECT RAISE(ABORT, 'transactions: amount must be positive')
+                        WHERE NEW.amount <= 0;
+                    SELECT RAISE(ABORT, 'transactions: destination amount must be positive')
+                        WHERE NEW.destination_amount IS NOT NULL AND NEW.destination_amount <= 0;
+                    SELECT RAISE(ABORT, 'transactions: a transfer needs a destination account')
+                        WHERE NEW.type = 'transfer' AND NEW.destination_payment_method_id IS NULL;
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS payment_methods_check_insert
+                BEFORE INSERT ON payment_methods
+                BEGIN
+                    SELECT RAISE(ABORT, 'payment_methods: currency must be ARS or USD')
+                        WHERE NEW.currency NOT IN ('ARS', 'USD');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS payment_methods_check_update
+                BEFORE UPDATE OF currency ON payment_methods
+                BEGIN
+                    SELECT RAISE(ABORT, 'payment_methods: currency must be ARS or USD')
+                        WHERE NEW.currency NOT IN ('ARS', 'USD');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS recurring_transactions_check_insert
+                BEFORE INSERT ON recurring_transactions
+                BEGIN
+                    SELECT RAISE(ABORT, 'recurring_transactions: currency must be ARS or USD')
+                        WHERE NEW.currency NOT IN ('ARS', 'USD');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS recurring_transactions_check_update
+                BEFORE UPDATE OF currency ON recurring_transactions
+                BEGIN
+                    SELECT RAISE(ABORT, 'recurring_transactions: currency must be ARS or USD')
+                        WHERE NEW.currency NOT IN ('ARS', 'USD');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS expected_movements_check_insert
+                BEFORE INSERT ON expected_movements
+                BEGIN
+                    SELECT RAISE(ABORT, 'expected_movements: currency must be ARS or USD')
+                        WHERE NEW.currency NOT IN ('ARS', 'USD');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS expected_movements_check_update
+                BEFORE UPDATE OF currency ON expected_movements
+                BEGIN
+                    SELECT RAISE(ABORT, 'expected_movements: currency must be ARS or USD')
+                        WHERE NEW.currency NOT IN ('ARS', 'USD');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS savings_goals_check_insert
+                BEFORE INSERT ON savings_goals
+                BEGIN
+                    SELECT RAISE(ABORT, 'savings_goals: currency must be ARS or USD')
+                        WHERE NEW.currency NOT IN ('ARS', 'USD');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS savings_goals_check_update
+                BEFORE UPDATE OF currency ON savings_goals
+                BEGIN
+                    SELECT RAISE(ABORT, 'savings_goals: currency must be ARS or USD')
+                        WHERE NEW.currency NOT IN ('ARS', 'USD');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS budgets_check_insert
+                BEFORE INSERT ON budgets
+                BEGIN
+                    SELECT RAISE(ABORT, 'budgets: currency must be ARS or USD')
+                        WHERE NEW.currency NOT IN ('ARS', 'USD');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS budgets_check_update
+                BEFORE UPDATE OF currency ON budgets
+                BEGIN
+                    SELECT RAISE(ABORT, 'budgets: currency must be ARS or USD')
+                        WHERE NEW.currency NOT IN ('ARS', 'USD');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS installment_plans_check_insert
+                BEFORE INSERT ON installment_plans
+                BEGIN
+                    SELECT RAISE(ABORT, 'installment_plans: currency must be ARS or USD')
+                        WHERE NEW.currency NOT IN ('ARS', 'USD');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS installment_plans_check_update
+                BEFORE UPDATE OF currency, installment_count, confirmed_count
+                    ON installment_plans
+                BEGIN
+                    SELECT RAISE(ABORT, 'installment_plans: currency must be ARS or USD')
+                        WHERE NEW.currency NOT IN ('ARS', 'USD');
+                    SELECT RAISE(ABORT, 'installment_plans: more instalments paid than the plan has')
+                        WHERE NEW.confirmed_count > NEW.installment_count;
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS loans_check_insert
+                BEFORE INSERT ON loans
+                BEGIN
+                    SELECT RAISE(ABORT, 'loans: currency must be ARS or USD')
+                        WHERE NEW.currency NOT IN ('ARS', 'USD');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS loans_check_update
+                BEFORE UPDATE OF currency, installment_count, confirmed_count ON loans
+                BEGIN
+                    SELECT RAISE(ABORT, 'loans: currency must be ARS or USD')
+                        WHERE NEW.currency NOT IN ('ARS', 'USD');
+                    SELECT RAISE(ABORT, 'loans: more payments made than the loan has')
+                        WHERE NEW.confirmed_count > NEW.installment_count;
+                END;
+            ",
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -801,6 +982,7 @@ pub fn run() {
             read_file_base64,
             write_file_base64,
             backup_database,
+            execute_batch,
             print_window
         ]);
 
