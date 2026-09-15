@@ -2,15 +2,20 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ClosesView } from "./ClosesView";
-import type { AppData } from "@/context/AppDataContext";
+import type { AppActions, AppData, AppStatus } from "@/context/AppDataContext";
+
+// The provider's three halves, read here from one object.
+type AppContext = AppData & AppActions & AppStatus;
 import type { TransactionWithCategory } from "@/db";
 
 // The view reads everything through this one hook, so replacing it is enough to
 // drive the component without a database or a Tauri runtime behind it.
-const appData = vi.hoisted(() => ({ current: {} as AppData }));
+const appData = vi.hoisted(() => ({ current: {} as AppContext }));
 
 vi.mock("@/hooks/useAppData", () => ({
   useAppData: () => appData.current,
+  useAppActions: () => appData.current,
+  useAppStatus: () => appData.current,
 }));
 
 afterEach(() => {
@@ -47,7 +52,7 @@ function aTransaction(
 function renderView(transactions: TransactionWithCategory[]) {
   // Pinned so "closed" means the same months whenever the suite runs.
   vi.useFakeTimers({ now: new Date(2026, 8, 14), toFake: ["Date"] });
-  appData.current = { transactions, isLoading: false } as unknown as AppData;
+  appData.current = { transactions, isLoading: false } as unknown as AppContext;
   return render(<ClosesView />);
 }
 

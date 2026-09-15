@@ -2,15 +2,20 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { SavingsView } from "./SavingsView";
-import type { AppData } from "@/context/AppDataContext";
+import type { AppActions, AppData, AppStatus } from "@/context/AppDataContext";
+
+// The provider's three halves, read here from one object.
+type AppContext = AppData & AppActions & AppStatus;
 import type { SavingsGoalWithNames } from "@/db";
 
 // The view reads everything through this one hook, so replacing it is enough to
 // drive the component without a database or a Tauri runtime behind it.
-const appData = vi.hoisted(() => ({ current: {} as AppData }));
+const appData = vi.hoisted(() => ({ current: {} as AppContext }));
 
 vi.mock("@/hooks/useAppData", () => ({
   useAppData: () => appData.current,
+  useAppActions: () => appData.current,
+  useAppStatus: () => appData.current,
 }));
 
 function aGoal(
@@ -37,13 +42,14 @@ function renderView(savingsGoals: SavingsGoalWithNames[]) {
     savingsContributions: [],
     paymentMethods: [],
     transactions: [],
+    today: "2026-09-15",
     isLoading: false,
     isMutating: false,
     addSavingsGoal: vi.fn(),
     editSavingsGoal: vi.fn(),
     removeSavingsGoal: vi.fn(),
     addSavingsContribution: vi.fn(),
-  } as unknown as AppData;
+  } as unknown as AppContext;
 
   return render(<SavingsView />);
 }

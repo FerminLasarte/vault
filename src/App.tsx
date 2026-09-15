@@ -2,7 +2,6 @@ import { useCallback, useMemo, useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { useAppData } from "@/hooks/useAppData";
 import { pendingBadges } from "@/lib/pendingBadges";
-import { todayIsoDate } from "@/lib/format";
 import { StatisticsView } from "@/components/views/StatisticsView";
 import { TransactionsView } from "@/components/views/TransactionsView";
 import { CategoriesView } from "@/components/views/CategoriesView";
@@ -49,16 +48,11 @@ function SidebarWithBadges({
   currentView: View;
   onNavigate: (view: View) => void;
 }) {
-  const { recurring, installmentPlans, loans, expectedMovements, budgets, transactions } =
-    useAppData();
+  const { pending, budgets, transactions, today } = useAppData();
 
   const badges = useMemo(
-    () =>
-      pendingBadges(
-        { recurring, installmentPlans, loans, expectedMovements, budgets, transactions },
-        todayIsoDate(),
-      ),
-    [recurring, installmentPlans, loans, expectedMovements, budgets, transactions],
+    () => pendingBadges({ pending, budgets, transactions }, today),
+    [pending, budgets, transactions, today],
   );
 
   return <Sidebar currentView={currentView} badges={badges} onNavigate={onNavigate} />;

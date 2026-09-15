@@ -13,9 +13,9 @@ import {
 } from "@/components/ui/card";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { ExpectedMovementDialog } from "@/components/ExpectedMovementDialog";
-import { useAppData } from "@/hooks/useAppData";
-import { collectPendingExpected, collectUpcomingExpected } from "@/lib/expected";
-import { formatCurrency, formatDate, todayIsoDate } from "@/lib/format";
+import { useAppActions, useAppData, useAppStatus } from "@/hooks/useAppData";
+import { collectUpcomingExpected } from "@/lib/expected";
+import { formatCurrency, formatDate } from "@/lib/format";
 import { TRANSACTION_TYPE_LABELS } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import type { ExpectedMovementWithNames, NewExpectedMovement } from "@/db";
@@ -71,25 +71,21 @@ export function ExpectedSection() {
     categories,
     paymentMethods,
     isLoading,
-    isMutating,
-    addExpected,
-    editExpected,
-    removeExpected,
-    confirmExpected,
-    dismissExpected,
+    today,
+    pending: pendingCommitments,
   } = useAppData();
+  const { isMutating } = useAppStatus();
+  const { addExpected, editExpected, removeExpected, confirmExpected, dismissExpected } =
+    useAppActions();
 
   // Split rather than filtered in the markup: what needs a decision and what is
   // merely coming are two different requests of the reader, and mixing them in
   // one list makes the first easy to scroll past.
-  const pending = useMemo(
-    () => collectPendingExpected(expectedMovements, todayIsoDate()),
-    [expectedMovements],
-  );
+  const pending = pendingCommitments.expected;
 
   const upcoming = useMemo(
-    () => collectUpcomingExpected(expectedMovements, todayIsoDate()),
-    [expectedMovements],
+    () => collectUpcomingExpected(expectedMovements, today),
+    [expectedMovements, today],
   );
 
   const [isFormOpen, setIsFormOpen] = useState(false);

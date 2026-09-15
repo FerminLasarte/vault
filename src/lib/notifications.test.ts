@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { decideNotifications, pendingNotifications } from "./notifications";
 import type { NotificationSources } from "./notifications";
+import { collectPendingCommitments } from "./pendingCommitments";
+import type { CommitmentSources } from "./pendingCommitments";
 import type {
   BudgetWithCategory,
   ExpectedMovementWithNames,
@@ -49,8 +51,12 @@ function anExpected(
   };
 }
 
-function sources(overrides: Partial<NotificationSources> = {}): NotificationSources {
-  return {
+type RawSources = CommitmentSources & Omit<NotificationSources, "pending">;
+
+// Takes the stored lists, as the provider holds them, and works out what is
+// pending as of TODAY the way the provider does.
+function sources(overrides: Partial<RawSources> = {}): NotificationSources {
+  const raw: RawSources = {
     installmentPlans: [],
     loans: [],
     recurring: [],
@@ -58,6 +64,11 @@ function sources(overrides: Partial<NotificationSources> = {}): NotificationSour
     budgets: [],
     transactions: [],
     ...overrides,
+  };
+  return {
+    pending: collectPendingCommitments(raw, TODAY),
+    budgets: raw.budgets,
+    transactions: raw.transactions,
   };
 }
 

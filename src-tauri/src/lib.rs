@@ -29,29 +29,51 @@ fn database_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 // granting the webview blanket access to the user's home directory. These
 // commands only ever touch the exact path the user picked in the native dialog,
 // and never the live database (see files::guard_destination).
+//
+// All four are async and hand their work to files::blocking, so the window
+// keeps responding while a file is read or written.
 #[tauri::command]
-fn write_text_file(app: tauri::AppHandle, path: String, contents: String) -> Result<(), String> {
-    files::write_atomically(Path::new(&path), &database_path(&app)?, contents.as_bytes())
+async fn write_text_file(
+    app: tauri::AppHandle,
+    path: String,
+    contents: String,
+) -> Result<(), String> {
+    let database = database_path(&app)?;
+    files::blocking(move || {
+        files::write_atomically(Path::new(&path), &database, contents.as_bytes())
+    })
+    .await
 }
 
 #[tauri::command]
-fn read_text_file(path: String) -> Result<String, String> {
-    files::read_text(Path::new(&path))
+async fn read_text_file(path: String) -> Result<String, String> {
+    files::blocking(move || files::read_text(Path::new(&path))).await
 }
 
 #[tauri::command]
-fn read_file_base64(path: String) -> Result<String, String> {
-    files::read_attachment(Path::new(&path)).map(|bytes| BASE64.encode(bytes))
+async fn read_file_base64(path: String) -> Result<String, String> {
+    files::blocking(move || {
+        files::read_attachment(Path::new(&path)).map(|bytes| BASE64.encode(bytes))
+    })
+    .await
 }
 
 #[tauri::command]
-fn write_file_base64(app: tauri::AppHandle, path: String, contents: String) -> Result<(), String> {
-    let bytes = BASE64.decode(contents).map_err(|error| {
-        eprintln!("The attachment is not valid base64: {error}");
-        files::DAMAGED_ATTACHMENT_ERROR.to_string()
-    })?;
+async fn write_file_base64(
+    app: tauri::AppHandle,
+    path: String,
+    contents: String,
+) -> Result<(), String> {
+    let database = database_path(&app)?;
+    files::blocking(move || {
+        let bytes = BASE64.decode(contents).map_err(|error| {
+            eprintln!("The attachment is not valid base64: {error}");
+            files::DAMAGED_ATTACHMENT_ERROR.to_string()
+        })?;
 
-    files::write_atomically(Path::new(&path), &database_path(&app)?, &bytes)
+        files::write_atomically(Path::new(&path), &database, &bytes)
+    })
+    .await
 }
 
 // Opens the system print dialog for this window.

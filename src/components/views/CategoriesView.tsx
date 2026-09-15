@@ -14,7 +14,7 @@ import { useRequestedTab } from "@/hooks/useRequestedTab";
 import { CATEGORY_TABS, DEFAULT_CATEGORY_TAB } from "@/lib/navigation";
 import type { CategoryTab } from "@/lib/navigation";
 import type { ViewProps } from "@/lib/menu";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppActions, useAppData, useAppStatus } from "@/hooks/useAppData";
 import { CATEGORY_TYPE_LABELS } from "@/lib/labels";
 import { categoryDeletionNotice } from "@/lib/deletionNotice";
 import type { Category, CategoryType, NewCategory } from "@/db";
@@ -31,16 +31,11 @@ export function CategoriesView({ tab }: ViewProps) {
     DEFAULT_CATEGORY_TAB,
   );
 
-  const {
-    categories,
-    budgets,
-    categoryRules,
-    isLoading,
-    isMutating,
-    addCategory,
-    editCategory,
-    removeCategory,
-  } = useAppData();
+  const { categories, budgets, categoryRules, isLoading } = useAppData();
+
+  const { isMutating } = useAppStatus();
+
+  const { addCategory, editCategory, removeCategory } = useAppActions();
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editing, setEditing] = useState<Category | null>(null);

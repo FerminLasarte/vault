@@ -31,7 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppActions, useAppData, useAppStatus } from "@/hooks/useAppData";
 import { useMenuRequest } from "@/hooks/useMenuRequest";
 import { isReported } from "@/lib/reportedError";
 import { useTheme } from "@/hooks/useTheme";
@@ -88,18 +88,19 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
     categories,
     categoryRules,
     paymentMethods,
-    importTransactions,
-    isMutating,
     exchangeRateHistory,
-    isRefreshingRate,
-    backfillExchangeRates,
     lastBackupAt,
-    recordBackup,
     rateType,
-    setRateType,
     notificationsEnabled,
-    setNotificationsEnabled,
   } = useAppData();
+  const { isMutating, isRefreshingRate } = useAppStatus();
+  const {
+    importTransactions,
+    backfillExchangeRates,
+    recordBackup,
+    setRateType,
+    setNotificationsEnabled,
+  } = useAppActions();
   const { preference, setPreference } = useTheme();
   const updater = useUpdater();
 

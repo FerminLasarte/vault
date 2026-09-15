@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { getAttachmentContent, listAttachments } from "@/db";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppActions, useAppStatus } from "@/hooks/useAppData";
 import { fileErrorMessage } from "@/lib/fileErrors";
 import { pickAttachment, saveAttachmentCopy } from "@/lib/files";
 import { fileNameFromPath } from "@/lib/paths";
@@ -33,7 +33,8 @@ interface AttachmentsDialogProps {
 }
 
 export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDialogProps) {
-  const { addAttachment, removeAttachment, isMutating } = useAppData();
+  const { isMutating } = useAppStatus();
+  const { addAttachment, removeAttachment } = useAppActions();
 
   // Held together with the transaction they belong to, so a list is only ever
   // shown under its own transaction. A bare list kept the previous one on screen

@@ -26,7 +26,7 @@ import { UpcomingMonths } from "@/components/UpcomingMonths";
 import { ExchangeRateBar } from "@/components/ExchangeRateBar";
 import { CategoryBreakdownChart } from "@/components/charts/CategoryBreakdownChart";
 import { IncomeVsExpenseChart } from "@/components/charts/IncomeVsExpenseChart";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppActions, useAppData } from "@/hooks/useAppData";
 import { usePrintRequest } from "@/hooks/usePrintRequest";
 import { Printer } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -40,7 +40,7 @@ import {
   calculateAccountBalances,
   consolidateByCurrency,
   filterByCurrency,
-  recentMonthsRange,
+  periodRange,
   totalBalanceByCurrency,
   buildMonthlyTrend,
   buildRateLookup,
@@ -55,6 +55,7 @@ import {
   yearFromRange,
   yearRange,
 } from "@/lib/finance";
+import type { StatisticsPeriod } from "@/lib/finance";
 import { DEFAULT_CURRENCY } from "@/lib/currency";
 import { buildAttentionItems } from "@/lib/attention";
 import type { AttentionKind } from "@/lib/attention";
@@ -62,12 +63,9 @@ import { buildMonthOverview } from "@/lib/monthOverview";
 import { buildMonthlyClose, hasClose, lastClosedMonthKey } from "@/lib/monthlyClose";
 import { projectCommitments, projectExpected, withoutEmptyTail } from "@/lib/projection";
 import { calculateSavingsProgress } from "@/lib/savings";
-import { collectPendingRecurrences } from "@/lib/pendingRecurring";
-import { collectPendingInstallments } from "@/lib/pendingInstallments";
-import { collectPendingExpected } from "@/lib/expected";
-import { collectPendingLoanPayments } from "@/lib/pendingLoans";
 import { backupStatus } from "@/lib/backupReminder";
-import { todayIsoDate } from "@/lib/format";
+import { parseIsoDate } from "@/lib/format";
+import { countPending } from "@/lib/pendingCommitments";
 
 // How far ahead the commitments are read. Three months is the horizon a
 // monthly schedule makes meaningful: far enough to see an instalment plan
@@ -111,21 +109,29 @@ export function StatisticsView({ request, tab, onRequestHandled }: ViewProps) {
     exchangeRateHistory,
     lastBackupAt,
     lastSeenClose,
-    markCloseSeen,
+    today,
+    pending,
     isLoading,
   } = useAppData();
 
+  const { markCloseSeen } = useAppActions();
+
   const [currency, setCurrency] = useState(DEFAULT_CURRENCY);
   const [categoryId, setCategoryId] = useState<number | null>(null);
-  // Computed once, on mount: the analysis opens on a real period rather than on
-  // the whole history.
-  const [dateRange, setDateRange] = useState(recentMonthsRange);
+  // The analysis opens on a real period rather than on the whole history. Held
+  // as the choice rather than as its dates, so "Últimos 12 meses" follows
+  // today (see periodRange).
+  const [period, setPeriod] = useState<StatisticsPeriod>({ kind: "recent" });
+  const dateRange = useMemo(() => periodRange(period, today), [period, today]);
+  // Every figure below that depends on the date reads this rather than the
+  // clock, so it moves on at midnight with the rest.
+  const reference = useMemo(() => parseIsoDate(today), [today]);
 
   // Deliberately computed from the unfiltered list: a budget is about the real
   // period total, not about whatever slice the user is currently looking at.
   const overspent = useMemo(
-    () => exceededBudgets(calculateBudgetProgress(budgets, transactions)),
-    [budgets, transactions],
+    () => exceededBudgets(calculateBudgetProgress(budgets, transactions, reference)),
+    [budgets, transactions, reference],
   );
 
   // The same figures the savings screen shows, so the card above can only ever
@@ -139,9 +145,9 @@ export function StatisticsView({ request, tab, onRequestHandled }: ViewProps) {
           transactions,
           contributions: savingsContributions,
         },
-        todayIsoDate(),
+        today,
       ),
-    [savingsGoals, paymentMethods, transactions, savingsContributions],
+    [savingsGoals, paymentMethods, transactions, savingsContributions, today],
   );
 
   // Everything the user holds, in one figure.
@@ -174,8 +180,12 @@ export function StatisticsView({ request, tab, onRequestHandled }: ViewProps) {
   // currency is the exception — totals in two currencies cannot be added.
   const monthOverview = useMemo(
     () =>
-      buildMonthOverview({ transactions, budgets, savings: savingsProgress }, currency),
-    [transactions, budgets, savingsProgress, currency],
+      buildMonthOverview(
+        { transactions, budgets, savings: savingsProgress },
+        currency,
+        reference,
+      ),
+    [transactions, budgets, savingsProgress, currency, reference],
   );
 
   // What the months ahead already owe. Read from the same schedules the
@@ -184,10 +194,10 @@ export function StatisticsView({ request, tab, onRequestHandled }: ViewProps) {
     () =>
       projectCommitments(
         { recurring, installmentPlans, loans },
-        getNextMonthKeys(PROJECTED_MONTHS, currentMonthKey()),
+        getNextMonthKeys(PROJECTED_MONTHS, currentMonthKey(reference)),
         currency,
       ),
-    [recurring, installmentPlans, loans, currency],
+    [recurring, installmentPlans, loans, currency, reference],
   );
 
   // Deliberately a second projection rather than more fields on the first: see
@@ -197,22 +207,16 @@ export function StatisticsView({ request, tab, onRequestHandled }: ViewProps) {
     () =>
       projectExpected(
         expectedMovements,
-        getNextMonthKeys(PROJECTED_MONTHS, currentMonthKey()),
+        getNextMonthKeys(PROJECTED_MONTHS, currentMonthKey(reference)),
         currency,
       ),
-    [expectedMovements, currency],
+    [expectedMovements, currency, reference],
   );
 
   // Every kind of pending commitment is surfaced together: separate notices
   // would make it easy to act on one and never notice the others.
-  const pendingCount = useMemo(
-    () =>
-      collectPendingRecurrences(recurring, todayIsoDate()).length +
-      collectPendingInstallments(installmentPlans, todayIsoDate()).length +
-      collectPendingLoanPayments(loans, todayIsoDate()).length +
-      collectPendingExpected(expectedMovements, todayIsoDate()).length,
-    [recurring, installmentPlans, loans, expectedMovements],
-  );
+  // The same count the sidebar badge shows, from the same list.
+  const pendingCount = countPending(pending);
 
   // Every chart and KPI below reads from this single filtered list, so the
   // three filters combine naturally and recalculate on any change.
@@ -242,7 +246,7 @@ export function StatisticsView({ request, tab, onRequestHandled }: ViewProps) {
   // The month that just ended. Always built, whether or not the notice is
   // showing: the printable document has to exist in the DOM before the print
   // dialog opens, and building it costs one pass over the history.
-  const closedMonthKey = lastClosedMonthKey();
+  const closedMonthKey = lastClosedMonthKey(reference);
 
   const close = useMemo(
     () => buildMonthlyClose(transactions, closedMonthKey),
@@ -306,11 +310,9 @@ export function StatisticsView({ request, tab, onRequestHandled }: ViewProps) {
   // selector could end up naming a year the charts are no longer showing.
   const selectedYear = yearFromRange(dateRange);
 
-  // The same reasoning for the rolling window, and for admitting that the range
-  // came from the date picker instead of from this list.
-  const defaultRange = recentMonthsRange();
-  const isRecentPeriod =
-    dateRange.from === defaultRange.from && dateRange.to === defaultRange.to;
+  // The same reasoning for admitting that the range came from the date picker
+  // instead of from this list.
+  const isRecentPeriod = period.kind === "recent";
   const isCustomPeriod = !isRecentPeriod && selectedYear === null;
 
   const summary = useMemo(() => calculateSummary(filtered), [filtered]);
@@ -354,13 +356,13 @@ export function StatisticsView({ request, tab, onRequestHandled }: ViewProps) {
   // Tacking three future months onto a chart of 2025 would put a gap in the
   // axis and answer a question nobody asked.
   const trendWithProjection = useMemo(() => {
-    if ((dateRange.to ?? "") < todayIsoDate()) return monthlyTrend;
+    if ((dateRange.to ?? "") < today) return monthlyTrend;
 
     return [
       ...monthlyTrend,
       ...withoutEmptyTail(projection).map((month) => ({ ...month, isProjected: true })),
     ];
-  }, [monthlyTrend, projection, dateRange]);
+  }, [monthlyTrend, projection, dateRange, today]);
 
   return (
     <div className="flex flex-col gap-6 sm:gap-8">
@@ -478,10 +480,10 @@ export function StatisticsView({ request, tab, onRequestHandled }: ViewProps) {
                     : String(selectedYear)
               }
               onValueChange={(value) =>
-                setDateRange(
+                setPeriod(
                   String(value) === RECENT_PERIOD
-                    ? recentMonthsRange()
-                    : yearRange(Number(value)),
+                    ? { kind: "recent" }
+                    : { kind: "range", range: yearRange(Number(value)) },
                 )
               }
             >
@@ -513,8 +515,10 @@ export function StatisticsView({ request, tab, onRequestHandled }: ViewProps) {
                 // Clearing the dates means "back to the default window", not
                 // "no period at all": the figures below are flows and an
                 // unbounded one says nothing.
-                setDateRange(
-                  range.from === null && range.to === null ? recentMonthsRange() : range,
+                setPeriod(
+                  range.from === null && range.to === null
+                    ? { kind: "recent" }
+                    : { kind: "range", range },
                 )
               }
             />

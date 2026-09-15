@@ -1,16 +1,18 @@
 // @vitest-environment jsdom
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, render, renderHook, waitFor } from "@testing-library/react";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppDataProvider } from "./AppDataContext";
 import * as db from "@/db";
 import type * as DbModule from "@/db";
 import type { ExchangeRate } from "@/db";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppActions, useAppData, useAppStatus } from "@/hooks/useAppData";
+import type { AppActions } from "./AppDataContext";
 import { DEFAULT_RATE_TYPE, RATE_TYPES, fetchRate } from "@/lib/exchangeRate";
 import type * as ExchangeRateModule from "@/lib/exchangeRate";
 import type { RateType } from "@/lib/exchangeRate";
 import { isReported } from "@/lib/reportedError";
+import { todayIsoDate } from "@/lib/format";
 
 // The provider is exercised for real; only what sits behind it is replaced —
 // the database, the network and the toasts — so these tests see exactly which
@@ -51,13 +53,17 @@ vi.mock("@/db", async (importOriginal) => {
 
 const OTHER_RATE_TYPE = RATE_TYPES.find((type) => type !== DEFAULT_RATE_TYPE)!;
 
-function aRate(type: RateType, sell = 1100): ExchangeRate {
+function aRate(
+  type: RateType,
+  sell = 1100,
+  { date = "2026-09-14", source = `dolarapi:${type}` } = {},
+): ExchangeRate {
   return {
-    date: "2026-09-14",
+    date,
     rate_type: type,
     buy: sell - 50,
     sell,
-    source: `dolarapi:${type}`,
+    source,
     fetched_at: "2026-09-14T15:00:00.000Z",
   };
 }
@@ -69,8 +75,13 @@ const aCategory = {
   color: "#000",
 };
 
+// The three halves of the provider read as one, as most of these tests only
+// care about what it does, not about who re-renders.
 async function mount() {
-  const { result } = renderHook(() => useAppData(), { wrapper: AppDataProvider });
+  const { result } = renderHook(
+    () => ({ ...useAppData(), ...useAppActions(), ...useAppStatus() }),
+    { wrapper: AppDataProvider },
+  );
   await waitFor(() => expect(result.current.isLoading).toBe(false));
   return result;
 }
@@ -165,17 +176,58 @@ describe("a step that can be taken back", () => {
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("No se pudo deshacer"));
   });
 
-  it("does not offer it for Registrar todas", async () => {
+  it("offers one Deshacer for Registrar todas, which takes back every step", async () => {
     const data = await mount();
-    vi.mocked(db.recordInstallment).mockResolvedValueOnce(vi.fn());
+    const undo = vi.fn(() => Promise.resolve());
+    vi.mocked(db.recordSteps).mockResolvedValueOnce(undo);
+    const steps = [
+      { kind: "installment", id: 1, index: 0, date: "2026-08-01", amount: 100 },
+      { kind: "installment", id: 1, index: 1, date: "2026-09-01", amount: 100 },
+    ] as const;
 
     await act(async () => {
-      await data.current.confirmInstallment(1, 0, "2026-09-01", 100, {
-        offerUndo: false,
-      });
+      await data.current.registerAll([...steps]);
     });
 
-    expect(toast.success).toHaveBeenCalledWith("Cuota registrada");
+    // One write and one toast for the lot, not one of each per step.
+    expect(db.recordSteps).toHaveBeenCalledExactlyOnceWith([...steps]);
+    expect(toast.success).toHaveBeenCalledOnce();
+    const action = toastOptions("2 cuotas registradas")?.action;
+    expect(action?.label).toBe("Deshacer");
+
+    act(() => {
+      action?.onClick();
+    });
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Se deshizo"));
+    expect(undo).toHaveBeenCalledOnce();
+  });
+
+  it("calls recurring steps movements rather than instalments", async () => {
+    const data = await mount();
+    vi.mocked(db.recordSteps).mockResolvedValueOnce(vi.fn());
+
+    await act(async () => {
+      await data.current.registerAll([
+        { kind: "recurring", id: 1, date: "2026-08-08" },
+        { kind: "recurring", id: 2, date: "2026-08-10" },
+      ]);
+    });
+
+    expect(toastOptions("2 movimientos registrados")?.action?.label).toBe("Deshacer");
+  });
+
+  it("says nothing was registered when Registrar todas fails", async () => {
+    const data = await mount();
+    vi.mocked(db.recordSteps).mockRejectedValueOnce(new Error("simulated failure"));
+
+    await act(async () => {
+      await data.current
+        .registerAll([{ kind: "loan", id: 1, index: 0, date: "2026-08-01", amount: 100 }])
+        .catch(() => {});
+    });
+
+    expect(toast.error).toHaveBeenCalledWith("No se pudo registrar ninguna cuota");
   });
 
   it("withdraws the offer as soon as anything else is written", async () => {
@@ -191,6 +243,254 @@ describe("a step that can be taken back", () => {
     });
 
     expect(toast.dismiss).toHaveBeenCalledWith("undo-toast");
+  });
+});
+
+describe("who re-renders", () => {
+  // Whether a write or a download is in progress used to live beside the data,
+  // so every reader of the data — the sidebar, every section, each rate bar —
+  // rendered again when it started and again when it ended.
+  async function mountReaders() {
+    const renders = { data: 0 };
+    const actions: { current: AppActions | null } = { current: null };
+    const status = { isMutating: false, isRefreshingRate: false };
+
+    function DataReader() {
+      useAppData();
+      renders.data += 1;
+      return null;
+    }
+    function ActionsHolder() {
+      actions.current = useAppActions();
+      return null;
+    }
+    function StatusReader() {
+      ({ isMutating: status.isMutating, isRefreshingRate: status.isRefreshingRate } =
+        useAppStatus());
+      return null;
+    }
+
+    let loaded = false;
+    function LoadWatcher() {
+      loaded = !useAppData().isLoading;
+      return null;
+    }
+
+    render(
+      <AppDataProvider>
+        <DataReader />
+        <ActionsHolder />
+        <StatusReader />
+        <LoadWatcher />
+      </AppDataProvider>,
+    );
+    await waitFor(() => expect(loaded).toBe(true));
+    // The start-up download settles before anything is counted.
+    await waitFor(() => expect(fetchRate).toHaveBeenCalled());
+    await act(async () => {});
+
+    return { renders, actions, status };
+  }
+
+  // Held open by the test, so the render in which the work is in progress
+  // actually happens: settled inside one `act`, the flag would go up and down
+  // in a single batch and nobody would render in between.
+  function deferred<T>() {
+    let reject: (error: Error) => void = () => {};
+    const promise = new Promise<T>((_, rejectWith) => {
+      reject = rejectWith;
+    });
+    return { promise, reject };
+  }
+
+  it("leaves a reader of the data alone while a write fails", async () => {
+    const { renders, actions, status } = await mountReaders();
+    const before = renders.data;
+    const write = deferred<void>();
+    vi.mocked(db.insertCategory).mockReturnValueOnce(write.promise);
+
+    let finished: Promise<void> = Promise.resolve();
+    act(() => {
+      finished = actions.current!.addCategory(aCategory).catch(() => {});
+    });
+    expect(status.isMutating).toBe(true);
+
+    await act(async () => {
+      write.reject(new Error("disk I/O error"));
+      await finished;
+    });
+
+    expect(status.isMutating).toBe(false);
+    expect(renders.data).toBe(before);
+  });
+
+  it("leaves a reader of the data alone while a download fails", async () => {
+    const { renders, actions, status } = await mountReaders();
+    const before = renders.data;
+    const download = deferred<ExchangeRate>();
+    vi.mocked(fetchRate).mockReturnValueOnce(download.promise);
+
+    let finished: Promise<void> = Promise.resolve();
+    act(() => {
+      finished = actions.current!.refreshExchangeRate({ silent: true });
+    });
+    expect(status.isRefreshingRate).toBe(true);
+
+    await act(async () => {
+      download.reject(new Error("offline"));
+      await finished;
+    });
+
+    expect(status.isRefreshingRate).toBe(false);
+    expect(renders.data).toBe(before);
+  });
+
+  it("keeps the same actions across writes and a change of dollar type", async () => {
+    const { actions } = await mountReaders();
+    const before = actions.current;
+
+    await act(async () => {
+      await actions.current!.addCategory(aCategory);
+    });
+    await act(async () => {
+      await actions.current!.setRateType(OTHER_RATE_TYPE);
+    });
+    await act(async () => {});
+
+    expect(actions.current).toBe(before);
+  });
+});
+
+describe("what a write reloads", () => {
+  // Reading every table after every write re-sent the whole ledger and years
+  // of quotes over IPC to create a budget, and gave every list a new identity,
+  // so every memo in every mounted view ran again.
+  async function mountAndForgetTheLoad() {
+    const data = await mount();
+    await waitFor(() => expect(data.current.isRefreshingRate).toBe(false));
+    vi.clearAllMocks();
+    return data;
+  }
+
+  it("reads back only what the write touched", async () => {
+    const data = await mountAndForgetTheLoad();
+
+    await act(async () => {
+      await data.current.addBudget({
+        categoryId: 1,
+        currency: "ARS",
+        amount: 1000,
+        period: "monthly",
+      });
+    });
+
+    expect(db.listBudgets).toHaveBeenCalledOnce();
+    expect(db.listTransactionsWithCategory).not.toHaveBeenCalled();
+    expect(db.listCategories).not.toHaveBeenCalled();
+    expect(db.listExchangeRates).not.toHaveBeenCalled();
+  });
+
+  it("reads back the plan and the ledger after an instalment is registered", async () => {
+    const data = await mountAndForgetTheLoad();
+
+    await act(async () => {
+      await data.current.confirmInstallment(1, 0, "2026-09-01", 100);
+    });
+
+    expect(db.listInstallmentPlans).toHaveBeenCalledOnce();
+    expect(db.listTransactionsWithCategory).toHaveBeenCalledOnce();
+    expect(db.listLoans).not.toHaveBeenCalled();
+  });
+
+  it("reads back the expected movements when a transaction is deleted", async () => {
+    // Deleting the transaction a movement was confirmed into reopens it.
+    const data = await mountAndForgetTheLoad();
+
+    await act(async () => {
+      await data.current.removeTransaction(1);
+    });
+
+    expect(db.listTransactionsWithCategory).toHaveBeenCalledOnce();
+    expect(db.listExpectedMovements).toHaveBeenCalledOnce();
+    expect(db.listBudgets).not.toHaveBeenCalled();
+  });
+
+  it("reads back every list that shows a category when one is edited", async () => {
+    const data = await mountAndForgetTheLoad();
+
+    await act(async () => {
+      await data.current.editCategory(1, aCategory);
+    });
+
+    expect(db.listTransactionsWithCategory).toHaveBeenCalledOnce();
+    expect(db.listBudgets).toHaveBeenCalledOnce();
+    expect(db.listRecurringTransactions).toHaveBeenCalledOnce();
+    expect(db.listExchangeRates).not.toHaveBeenCalled();
+  });
+});
+
+describe("the exchange rate on screen", () => {
+  it("is the latest quote of the history loaded at start-up", async () => {
+    vi.mocked(fetchRate).mockRejectedValueOnce(new Error("offline"));
+    vi.mocked(db.listExchangeRates).mockResolvedValueOnce([
+      aRate(DEFAULT_RATE_TYPE, 1000, { date: "2026-09-10" }),
+      aRate(DEFAULT_RATE_TYPE, 1100, { date: "2026-09-14" }),
+    ]);
+
+    const data = await mount();
+    await waitFor(() => expect(data.current.isRefreshingRate).toBe(false));
+
+    expect(data.current.exchangeRate?.sell).toBe(1100);
+    expect(db.listExchangeRates).toHaveBeenCalledOnce();
+  });
+
+  it("joins the history once downloaded", async () => {
+    const data = await mount();
+
+    await waitFor(() => expect(data.current.exchangeRateHistory).toHaveLength(1));
+    expect(data.current.exchangeRateHistory[0].sell).toBe(1100);
+  });
+
+  it("stays the manual correction when a download for the same day arrives", async () => {
+    // The download is refused by the database; the screen showed it anyway,
+    // until the next reload put the correction back.
+    vi.mocked(db.listExchangeRates).mockResolvedValueOnce([
+      aRate(DEFAULT_RATE_TYPE, 1500, { source: "manual" }),
+    ]);
+
+    const data = await mount();
+    await waitFor(() => expect(fetchRate).toHaveBeenCalled());
+    await waitFor(() => expect(data.current.isRefreshingRate).toBe(false));
+
+    expect(data.current.exchangeRate?.sell).toBe(1500);
+  });
+});
+
+describe("what is pending", () => {
+  it("is worked out once, as of today, for every screen to read", async () => {
+    vi.mocked(db.listRecurringTransactions).mockResolvedValueOnce([
+      {
+        id: 1,
+        description: "Alquiler",
+        amount: 500000,
+        type: "expense",
+        category_id: null,
+        payment_method_id: null,
+        currency: "ARS",
+        frequency: "monthly",
+        start_date: "2026-01-05",
+        last_confirmed_date: null,
+        is_active: 1,
+        category_name: null,
+        category_icon: null,
+        payment_method_name: null,
+      },
+    ]);
+
+    const data = await mount();
+
+    expect(data.current.today).toBe(todayIsoDate());
+    expect(data.current.pending.recurring[0]?.date).toBe("2026-01-05");
   });
 });
 

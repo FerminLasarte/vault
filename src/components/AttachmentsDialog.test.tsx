@@ -3,13 +3,20 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AttachmentsDialog } from "./AttachmentsDialog";
-import type { AppData } from "@/context/AppDataContext";
+import type { AppActions, AppData, AppStatus } from "@/context/AppDataContext";
+
+// The provider's three halves, read here from one object.
+type AppContext = AppData & AppActions & AppStatus;
 import type { AttachmentMeta, TransactionWithCategory } from "@/db";
 
 // The dialog reads its actions through this hook and its rows straight from the
 // database module, so replacing both is enough to drive it without either.
-const appData = vi.hoisted(() => ({ current: {} as AppData }));
-vi.mock("@/hooks/useAppData", () => ({ useAppData: () => appData.current }));
+const appData = vi.hoisted(() => ({ current: {} as AppContext }));
+vi.mock("@/hooks/useAppData", () => ({
+  useAppData: () => appData.current,
+  useAppActions: () => appData.current,
+  useAppStatus: () => appData.current,
+}));
 
 const database = vi.hoisted(() => ({
   listAttachments: vi.fn(),
@@ -49,7 +56,7 @@ beforeEach(() => {
     addAttachment: vi.fn(),
     removeAttachment: vi.fn(),
     isMutating: false,
-  } as unknown as AppData;
+  } as unknown as AppContext;
 });
 
 describe("AttachmentsDialog", () => {

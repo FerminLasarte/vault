@@ -79,18 +79,19 @@ earlier decision and are not listed.
 | I-15 | Hand-rolled progress bars duplicate `ui/progress-bar`              | improvement | low      | 5     | [x]  |
 | I-16 | "Descartar" is irreversible; offer undo instead                    | improvement | medium   | 5     | [x]  |
 | I-17 | Delete dialogs do not mention cascading effects                    | improvement | low      | 5     | [x]  |
-| I-18 | Every mutation reloads the whole dataset                           | improvement | medium   | 6     | [ ]  |
-| I-19 | One giant context re-renders every consumer on each mutation       | improvement | medium   | 6     | [ ]  |
-| I-20 | Sync Tauri commands run on the main thread                         | improvement | medium   | 6     | [ ]  |
-| I-21 | "Registrar todas" and imports do one round trip per item           | improvement | low      | 6     | [ ]  |
-| I-22 | "Today" goes stale with the app open overnight                     | improvement | low      | 6     | [ ]  |
-| I-23 | Pending counts computed in several places                          | improvement | low      | 6     | [ ]  |
+| I-18 | Every mutation reloads the whole dataset                           | improvement | medium   | 6     | [x]  |
+| I-19 | One giant context re-renders every consumer on each mutation       | improvement | medium   | 6     | [x]  |
+| I-20 | Sync Tauri commands run on the main thread                         | improvement | medium   | 6     | [x]  |
+| I-21 | "Registrar todas" and imports do one round trip per item           | improvement | low      | 6     | [x]  |
+| I-22 | "Today" goes stale with the app open overnight                     | improvement | low      | 6     | [x]  |
+| I-23 | Pending counts computed in several places                          | improvement | low      | 6     | [x]  |
 | I-24 | File commands accept any path, and there is no CSP                 | improvement | medium   | 7     | [ ]  |
 | I-25 | Capabilities grant more than is used                               | improvement | low      | 7     | [ ]  |
 | I-26 | `read_file_base64` reads the whole file before checking its size   | improvement | low      | 7     | [ ]  |
 | B-22 | Backup and Settings look for the DB in the wrong folder on Linux   | bug         | low      | 7     | [ ]  |
 | I-27 | Dead code, unused tokens and template assets                       | improvement | low      | 7     | [ ]  |
 | I-28 | Dependencies, release profile and version in three places          | improvement | low      | 7     | [ ]  |
+| I-29 | `backup_database` still does blocking file work on an async thread | improvement | low      | 7     | [ ]  |
 
 ---
 
@@ -787,7 +788,16 @@ dark:text-emerald-400` in ~14 places: `SummaryBar.tsx:69-76`,
 - **Proposal:** `runMutation` takes which domains to reload
   (`reloadTransactions`, `reloadLoans`, …); load the rate history only on rate
   type change or backfill; derive the latest rate from the history.
-- [ ] Done
+- **Done as:** each write names the domains it touches and reads back only
+  those; the rate history is read at start-up, on a type change and after a
+  back-fill, a download joins it through `withRate`, and the quote on screen is
+  its last entry.
+- **Found on the way, fixed here:** after a download the rate bar showed the
+  provider's figure even when the database kept a manual correction for that
+  day (B-05 guarded the database, not the screen), until the next reload.
+- **Left as is:** the two correlated subqueries per row in
+  `listTransactionsWithCategory`; with per-domain reloads it runs far less often.
+- [x] Done
 
 ### I-19 · One giant context re-renders every consumer on each mutation
 
@@ -799,7 +809,10 @@ dark:text-emerald-400` in ~14 places: `SummaryBar.tsx:69-76`,
   each `ExchangeRateBar`); the silent rate refresh on startup does too.
 - **Proposal:** split into three contexts: data, actions (stable) and status
   (`isMutating` / `isRefreshingRate`).
-- [ ] Done
+- **Done as:** `useAppData`, `useAppActions` and `useAppStatus`.
+- **Not checked in the running app:** the render counts themselves; covered by
+  "who re-renders" in `src/context/AppDataContext.test.tsx`.
+- [x] Done
 
 ### I-20 · Sync Tauri commands run on the main thread
 
@@ -811,7 +824,12 @@ dark:text-emerald-400` in ~14 places: `SummaryBar.tsx:69-76`,
   encoding 5 MB, or writing files freezes the window and the menu meanwhile.
 - **Proposal:** `#[tauri::command(async)]` or `async fn` (arguments are
   already owned `String`s). `print_window` can stay as is.
-- [ ] Done
+- **Done as:** `async fn` handing the I/O to `files::blocking`
+  (`spawn_blocking`), rather than `#[tauri::command(async)]`, which would have
+  kept the blocking work on one of the async runtime's threads.
+- **Not checked in the running app:** no export, backup or attachment was run
+  (each writes a file); covered by the `files.rs` tests. Follow-up: I-29.
+- [x] Done
 
 ### I-21 · "Registrar todas" and imports do one round trip per item
 
@@ -831,7 +849,16 @@ dark:text-emerald-400` in ~14 places: `SummaryBar.tsx:69-76`,
   movimientos registrados"; batched `INSERT … RETURNING id` for imports with a
   single tag cleanup at the end, inside B-09's Rust transaction; skip
   `setTransactionTags` when there are no tags.
-- [ ] Done
+- **Done as:** "Registrar todas" is one all-or-nothing batch (`recordSteps`)
+  with one toast whose single "Deshacer" takes every step back or none (one
+  batch, a compare-and-set per step). The import is one batch with one statement
+  per row rather than a multi-row `INSERT … RETURNING`, and all or nothing; an
+  insert unlinks no tag, so it needs no tag sweep at all.
+- **Not checked in the running app:** "Registrar todas", its toast and its
+  undo, and an import: that database has no commitments, and trying either
+  writes data. Covered by `src/db/index.test.ts`, `AppDataContext.test.tsx` and
+  `LoansSection.test.tsx`.
+- [x] Done
 
 ### I-22 · "Today" goes stale with the app open overnight
 
@@ -852,7 +879,10 @@ dark:text-emerald-400` in ~14 places: `SummaryBar.tsx:69-76`,
 - **Proposal:** a `useToday()` hook that ticks at midnight and on window focus,
   used as a memo dependency; store the Statistics period as "last 12 months"
   rather than fixed dates.
-- [ ] Done
+- **Checked in the running app:** Análisis opens on "Últimos 12 meses" ending
+  today. **Not checked there:** the change at midnight and on focus; covered by
+  `src/hooks/useToday.test.ts` and `periodRange` in `finance.test.ts`.
+- [x] Done
 
 ### I-23 · Pending counts computed in several places
 
@@ -863,7 +893,12 @@ dark:text-emerald-400` in ~14 places: `SummaryBar.tsx:69-76`,
   `src/App.tsx:53` and in `useNotifications`.
 - **Proposal:** compute once in the context, together with I-22's `today`, so
   the badge, the notice and the section cannot disagree.
-- [ ] Done
+- **Done as:** `collectPendingCommitments` (`src/lib/pendingCommitments.ts`),
+  worked out in the provider as `pending` and passed to the badge, the
+  notifications, Estadísticas and the four sections.
+- **Checked in the running app:** Compromisos renders from it (that database
+  has no commitments, so only the empty states).
+- [x] Done
 
 ---
 
@@ -956,6 +991,9 @@ https://api.argentinadatos.com; object-src 'none'; base-uri 'self'`, plus a
   - `countTransactionsForPaymentMethod` (`src/db/index.ts:164`) — test-only;
     use it (I-04) or delete it.
   - `expected_movements.transaction_id` — write-only today (see B-16).
+  - `insertTransaction` (`src/db/index.ts`) — test-only since I-21 (the import
+    is one batch); the tests can use `insertTransactionWithTags(…, [])`.
+    Found in batch 6.
 - [ ] Done
 
 ### I-28 · Dependencies, release profile and version in three places
@@ -979,4 +1017,19 @@ https://api.argentinadatos.com; object-src 'none'; base-uri 'self'`, plus a
     with nothing checking they match (the updater compares against
     `tauri.conf.json`). Use `"version": "../package.json"` in
     `tauri.conf.json`.
+- [ ] Done
+
+### I-29 · `backup_database` still does blocking file work on an async thread
+
+- **Type:** improvement · **Severity:** low · **Batch:** 7 · **Verified:** read
+  (found while doing I-20 in batch 6)
+- **Where:** `src-tauri/src/files.rs` (`backup_to`: `guard_destination`, which
+  calls `fs::canonicalize`; `fs::rename`; `fs::remove_file`), called from
+  `backup_database` in `src-tauri/src/lib.rs`.
+- **What happens:** I-20 sent the sync file commands through `files::blocking`.
+  `backup_database` was already `async`, so it was left alone, but around its
+  `VACUUM INTO` it still makes blocking calls on one of the async runtime's
+  threads. Each is short (a rename within one folder), so the effect is small.
+- **Proposal:** run the guard and the final rename through `files::blocking`,
+  keeping `VACUUM INTO` on the pool.
 - [ ] Done

@@ -4,11 +4,14 @@ import {
   fetchRate,
   fetchRateHistory,
   isRateType,
+  MANUAL_RATE_SOURCE,
   RATE_TYPE_DESCRIPTIONS,
   RATE_TYPE_LABELS,
   RATE_TYPES,
   rateSourceFor,
+  withRate,
 } from "./exchangeRate";
+import type { ExchangeRate } from "@/db/schema";
 
 function jsonResponse(body: unknown, ok = true): Response {
   return {
@@ -179,5 +182,52 @@ describe("fetchRateHistory", () => {
   it("fails when the response is not a list", async () => {
     mockFetch({ error: "nope" });
     await expect(fetchRateHistory("bolsa")).rejects.toThrow();
+  });
+});
+
+describe("withRate", () => {
+  function aQuote(
+    date: string,
+    sell: number,
+    source = rateSourceFor("bolsa"),
+  ): ExchangeRate {
+    return {
+      date,
+      rate_type: "bolsa",
+      buy: sell - 50,
+      sell,
+      source,
+      fetched_at: "2026-09-14T15:00:00.000Z",
+    };
+  }
+
+  it("adds a new day in date order", () => {
+    const history = [aQuote("2026-09-10", 1100), aQuote("2026-09-14", 1300)];
+
+    expect(
+      withRate(history, aQuote("2026-09-12", 1200)).map((rate) => rate.date),
+    ).toEqual(["2026-09-10", "2026-09-12", "2026-09-14"]);
+  });
+
+  it("replaces the quote already stored for that day", () => {
+    const history = [aQuote("2026-09-10", 1100), aQuote("2026-09-14", 1300)];
+
+    expect(
+      withRate(history, aQuote("2026-09-14", 1350)).map((rate) => rate.sell),
+    ).toEqual([1100, 1350]);
+  });
+
+  it("keeps a manual correction over a download for the same day", () => {
+    // The database refuses that overwrite (see upsertExchangeRate); the copy on
+    // screen has to refuse it too, or it shows a figure that is not stored.
+    const manual = aQuote("2026-09-14", 1500, MANUAL_RATE_SOURCE);
+
+    expect(withRate([manual], aQuote("2026-09-14", 1300))).toEqual([manual]);
+  });
+
+  it("lets a manual correction replace a download", () => {
+    const manual = aQuote("2026-09-14", 1500, MANUAL_RATE_SOURCE);
+
+    expect(withRate([aQuote("2026-09-14", 1300)], manual)).toEqual([manual]);
   });
 });

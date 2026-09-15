@@ -37,7 +37,7 @@ import { CategorySelect } from "@/components/filters/CategorySelect";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { TransactionDialog } from "@/components/TransactionDialog";
 import { AttachmentsDialog } from "@/components/AttachmentsDialog";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppActions, useAppData, useAppStatus } from "@/hooks/useAppData";
 import { applyTransactionFilters, EMPTY_DATE_RANGE, filterByTag } from "@/lib/finance";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { splitTagNames } from "@/lib/text";
@@ -91,18 +91,10 @@ function TransferAmount({ transaction }: { transaction: TransactionWithCategory 
 }
 
 export function TransactionsView({ request, onRequestHandled }: ViewProps) {
-  const {
-    transactions,
-    categories,
-    categoryRules,
-    tags,
-    paymentMethods,
-    isLoading,
-    isMutating,
-    addTransaction,
-    editTransaction,
-    removeTransaction,
-  } = useAppData();
+  const { transactions, categories, categoryRules, tags, paymentMethods, isLoading } =
+    useAppData();
+  const { isMutating } = useAppStatus();
+  const { addTransaction, editTransaction, removeTransaction } = useAppActions();
 
   const [currency, setCurrency] = useState(DEFAULT_CURRENCY);
   const [categoryId, setCategoryId] = useState<number | null>(null);

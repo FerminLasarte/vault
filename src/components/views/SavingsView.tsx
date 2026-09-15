@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { SavingsGoalDialog } from "@/components/SavingsGoalDialog";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppActions, useAppData, useAppStatus } from "@/hooks/useAppData";
 import { calculateSavingsProgress } from "@/lib/savings";
 import { formatCurrency, formatDate, todayIsoDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -22,12 +22,11 @@ export function SavingsView() {
     paymentMethods,
     transactions,
     isLoading,
-    isMutating,
-    addSavingsGoal,
-    editSavingsGoal,
-    removeSavingsGoal,
-    addSavingsContribution,
+    today,
   } = useAppData();
+  const { isMutating } = useAppStatus();
+  const { addSavingsGoal, editSavingsGoal, removeSavingsGoal, addSavingsContribution } =
+    useAppActions();
 
   const progress = useMemo(
     () =>
@@ -38,9 +37,9 @@ export function SavingsView() {
           transactions,
           contributions: savingsContributions,
         },
-        todayIsoDate(),
+        today,
       ),
-    [savingsGoals, paymentMethods, transactions, savingsContributions],
+    [savingsGoals, paymentMethods, transactions, savingsContributions, today],
   );
 
   const [isFormOpen, setIsFormOpen] = useState(false);

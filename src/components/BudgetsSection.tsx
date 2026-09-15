@@ -7,23 +7,16 @@ import { ProgressBar } from "@/components/ui/progress-bar";
 import { ActionButton } from "@/components/ActionButton";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { BudgetDialog } from "@/components/BudgetDialog";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppActions, useAppData, useAppStatus } from "@/hooks/useAppData";
 import { calculateBudgetProgress } from "@/lib/finance";
 import { formatCurrency } from "@/lib/format";
 import { BUDGET_PERIOD_LABELS } from "@/lib/labels";
 import type { BudgetWithCategory, NewBudget } from "@/db";
 
 export function BudgetsSection() {
-  const {
-    budgets,
-    transactions,
-    categories,
-    isLoading,
-    isMutating,
-    addBudget,
-    editBudget,
-    removeBudget,
-  } = useAppData();
+  const { budgets, transactions, categories, isLoading } = useAppData();
+  const { isMutating } = useAppStatus();
+  const { addBudget, editBudget, removeBudget } = useAppActions();
 
   const progress = useMemo(
     () => calculateBudgetProgress(budgets, transactions),

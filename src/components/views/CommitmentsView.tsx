@@ -24,14 +24,13 @@ import { COMMITMENT_TABS, DEFAULT_COMMITMENT_TAB } from "@/lib/navigation";
 import type { CommitmentTab } from "@/lib/navigation";
 import type { ViewProps } from "@/lib/menu";
 import { InstallmentPlanDialog } from "@/components/InstallmentPlanDialog";
-import { useAppData } from "@/hooks/useAppData";
-import { collectPendingInstallments } from "@/lib/pendingInstallments";
+import { useAppActions, useAppData, useAppStatus } from "@/hooks/useAppData";
 import {
   financingCost,
   outstandingAmount,
   outstandingByCurrency,
 } from "@/lib/installments";
-import { formatCurrency, formatDate, formatPercent, todayIsoDate } from "@/lib/format";
+import { formatCurrency, formatDate, formatPercent } from "@/lib/format";
 import type { InstallmentPlanWithNames, NewInstallmentPlan } from "@/db";
 
 export function CommitmentsView({ tab }: ViewProps) {
@@ -46,17 +45,20 @@ export function CommitmentsView({ tab }: ViewProps) {
     categories,
     paymentMethods,
     isLoading,
-    isMutating,
+    pending: pendingCommitments,
+  } = useAppData();
+
+  const { isMutating } = useAppStatus();
+
+  const {
     addInstallmentPlan,
     editInstallmentPlan,
     removeInstallmentPlan,
     confirmInstallment,
-  } = useAppData();
+    registerAll,
+  } = useAppActions();
 
-  const pending = useMemo(
-    () => collectPendingInstallments(installmentPlans, todayIsoDate()),
-    [installmentPlans],
-  );
+  const pending = pendingCommitments.installments;
 
   const outstanding = useMemo(
     () => Array.from(outstandingByCurrency(installmentPlans)),
@@ -89,14 +91,17 @@ export function CommitmentsView({ tab }: ViewProps) {
   }
 
   async function payAll() {
-    // Sequential: each confirmation advances its plan, and the next instalment
-    // of the same plan depends on that having happened. No "Deshacer" per
-    // instalment: a toast offering to take back one of many would be noise.
-    for (const entry of pending) {
-      await confirmInstallment(entry.plan.id, entry.index, entry.date, entry.amount, {
-        offerUndo: false,
-      });
-    }
+    // One write for the lot, in the order listed: a plan's later instalment
+    // follows its earlier one (see recordSteps).
+    await registerAll(
+      pending.map((entry) => ({
+        kind: "installment",
+        id: entry.plan.id,
+        index: entry.index,
+        date: entry.date,
+        amount: entry.amount,
+      })),
+    );
   }
 
   return (
