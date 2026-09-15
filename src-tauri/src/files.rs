@@ -1,6 +1,6 @@
 use sqlx::SqlitePool;
 use std::fs;
-use std::io::ErrorKind;
+use std::io::{ErrorKind, Read};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -50,15 +50,42 @@ pub fn read_text(path: &Path) -> Result<String, String> {
 // unbounded file would bloat every backup from then on.
 pub const MAX_ATTACHMENT_BYTES: usize = 5 * 1024 * 1024;
 
-pub fn read_attachment(path: &Path) -> Result<Vec<u8>, String> {
-    let bytes = fs::read(path).map_err(user_error)?;
+// Largest spreadsheet statement accepted. A statement is parsed and dropped,
+// so it is not held to the receipt limit; this one only keeps a wrong pick (a
+// video, a disk image) from being loaded into memory and sent to the webview.
+pub const MAX_STATEMENT_BYTES: usize = 20 * 1024 * 1024;
 
-    if bytes.len() > MAX_ATTACHMENT_BYTES {
-        return Err(format!(
-            "El archivo pesa {} MB y el máximo es {} MB",
-            format_megabytes(bytes.len() as u64),
-            format_megabytes(MAX_ATTACHMENT_BYTES as u64)
-        ));
+pub fn read_attachment(path: &Path) -> Result<Vec<u8>, String> {
+    read_limited(path, MAX_ATTACHMENT_BYTES)
+}
+
+pub fn read_statement(path: &Path) -> Result<Vec<u8>, String> {
+    read_limited(path, MAX_STATEMENT_BYTES)
+}
+
+fn too_large(bytes: u64, limit: usize) -> String {
+    format!(
+        "El archivo pesa {} MB y el máximo es {} MB",
+        format_megabytes(bytes),
+        format_megabytes(limit as u64)
+    )
+}
+
+// Checks the size the file system reports before reading anything, so an
+// oversized file is refused without being loaded into memory first. The read
+// itself stops one byte past the limit, for a file that grew in between.
+fn read_limited(path: &Path, limit: usize) -> Result<Vec<u8>, String> {
+    let size = fs::metadata(path).map_err(user_error)?.len();
+    if size > limit as u64 {
+        return Err(too_large(size, limit));
+    }
+
+    let mut bytes = Vec::with_capacity(size as usize);
+    fs::File::open(path)
+        .and_then(|file| file.take(limit as u64 + 1).read_to_end(&mut bytes))
+        .map_err(user_error)?;
+    if bytes.len() > limit {
+        return Err(too_large(bytes.len() as u64, limit));
     }
     Ok(bytes)
 }
@@ -207,20 +234,29 @@ pub fn write_atomically(destination: &Path, database: &Path, bytes: &[u8]) -> Re
 // includes whatever is still in the -wal sidecar and cannot catch the main file
 // halfway through a checkpoint. Copying vault-ai.db byte for byte could do
 // both.
+//
+// Only `VACUUM INTO` runs on the pool; the guard (which resolves paths on
+// disk) and the final rename go through `blocking`, like every other file
+// operation, so none of them holds up a thread that drives async commands.
 pub async fn backup_to(
     pool: &SqlitePool,
     database: &Path,
     destination: &Path,
 ) -> Result<(), String> {
-    guard_destination(destination, database)?;
-
-    let temporary = temporary_sibling(destination)?;
+    let temporary = {
+        let (database, destination) = (database.to_owned(), destination.to_owned());
+        blocking(move || {
+            guard_destination(&destination, &database)?;
+            temporary_sibling(&destination)
+        })
+        .await?
+    };
     let target = temporary
         .to_str()
         .ok_or_else(|| "La ruta elegida no es válida".to_string())?
         .to_string();
 
-    let result = sqlx::query("VACUUM INTO ?")
+    let snapshot = sqlx::query("VACUUM INTO ?")
         .bind(target)
         .execute(pool)
         .await
@@ -229,12 +265,18 @@ pub async fn backup_to(
         .map_err(|error| {
             eprintln!("The backup failed: {error}");
             FILE_ERROR.to_string()
-        })
-        .and_then(|_| fs::rename(&temporary, destination).map_err(user_error));
-    if result.is_err() {
-        let _ = fs::remove_file(&temporary);
-    }
-    result
+        });
+
+    let destination = destination.to_owned();
+    blocking(move || {
+        let result =
+            snapshot.and_then(|_| fs::rename(&temporary, &destination).map_err(user_error));
+        if result.is_err() {
+            let _ = fs::remove_file(&temporary);
+        }
+        result
+    })
+    .await
 }
 
 #[cfg(test)]
@@ -400,6 +442,47 @@ mod tests {
         assert_eq!(
             read_attachment(&receipt),
             Err("El archivo pesa 5,1 MB y el máximo es 5 MB".to_string())
+        );
+    }
+
+    // The size comes from the file system, before a single byte is read: a
+    // file the app cannot even open is still refused for its size.
+    #[cfg(unix)]
+    #[test]
+    fn an_oversized_file_is_refused_before_it_is_read() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let workspace = Workspace::new("read-unopened");
+        let receipt = workspace.path("recibo.pdf");
+        // Sparse, so the test does not write 10 MB to disk.
+        let file = fs::File::create(&receipt).unwrap();
+        file.set_len(2 * MAX_ATTACHMENT_BYTES as u64).unwrap();
+        fs::set_permissions(&receipt, fs::Permissions::from_mode(0o000)).unwrap();
+
+        assert_eq!(
+            read_attachment(&receipt),
+            Err("El archivo pesa 10 MB y el máximo es 5 MB".to_string())
+        );
+    }
+
+    // A bank's spreadsheet export is not held to the receipt limit, which is
+    // about keeping the database small; a statement is read and dropped.
+    #[test]
+    fn a_statement_may_be_larger_than_a_receipt() {
+        let workspace = Workspace::new("read-statement");
+        let statement = workspace.path("resumen.xlsx");
+        let file = fs::File::create(&statement).unwrap();
+        file.set_len(MAX_ATTACHMENT_BYTES as u64 + 1).unwrap();
+
+        assert_eq!(
+            read_statement(&statement).map(|bytes| bytes.len()),
+            Ok(MAX_ATTACHMENT_BYTES + 1)
+        );
+
+        file.set_len(MAX_STATEMENT_BYTES as u64 + 1).unwrap();
+        assert_eq!(
+            read_statement(&statement),
+            Err("El archivo pesa 20,1 MB y el máximo es 20 MB".to_string())
         );
     }
 

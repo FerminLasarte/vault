@@ -15,7 +15,7 @@ import { formatCompactAmount, formatCurrency, formatMonthLabel } from "@/lib/for
 import type { MonthlyTrendEntry } from "@/lib/finance";
 
 // A month of the trend, plus whether it has happened yet.
-export interface TrendEntry extends MonthlyTrendEntry {
+interface TrendEntry extends MonthlyTrendEntry {
   // True for months that have not arrived: their figures are commitments read
   // off a schedule, not movements that were recorded.
   isProjected?: boolean;

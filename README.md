@@ -86,9 +86,10 @@ Then:
 5. Publish the draft. Until then the updater endpoint 404s and nobody, not even
    an installed copy, can see the new version.
 
-Bumping the version means all four of `package.json`, `src-tauri/tauri.conf.json`,
-`src-tauri/Cargo.toml` and `src-tauri/Cargo.lock`. The tag does not set it; the
-one baked into the installers comes from these files.
+Bumping the version means `package.json` and `src-tauri/Cargo.toml` (then run
+`cargo check` in `src-tauri` so `Cargo.lock` follows). `tauri.conf.json` reads it
+from `package.json`, and `src/version.test.ts` fails if the three disagree. The
+tag does not set it; the one baked into the installers comes from these files.
 
 A manual run builds the same installers and hands them back as run artifacts,
 without touching any release — which makes it the way to try a change to this

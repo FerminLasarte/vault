@@ -11,10 +11,10 @@ import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import type { Update } from "@tauri-apps/plugin-updater";
 
-export type UpdaterStatus =
+type UpdaterStatus =
   "idle" | "checking" | "current" | "available" | "downloading" | "error";
 
-export interface AvailableUpdate {
+interface AvailableUpdate {
   version: string;
   notes?: string;
 }

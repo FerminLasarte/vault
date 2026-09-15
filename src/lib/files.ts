@@ -1,78 +1,37 @@
 import { invoke } from "@tauri-apps/api/core";
-import { documentDir, join } from "@tauri-apps/api/path";
-import { open, save } from "@tauri-apps/plugin-dialog";
 import { fileNameFromPath } from "@/lib/paths";
 
-// The native pickers return the path the user chose; the actual reading and
-// writing happens in Rust (see src-tauri/src/lib.rs), which keeps the webview
-// from needing filesystem permissions of its own.
+// Rust opens the native file dialogs and does the reading and writing (see
+// src-tauri/src/lib.rs and dialogs.rs). No path ever leaves the webview: a
+// command that took one would read or write wherever a script told it to, so
+// the only path Rust uses is the one the user picked in the dialog. The
+// webview has no filesystem or dialog permissions of its own.
 
-const CSV_FILTER = [{ name: "CSV", extensions: ["csv"] }];
-const DB_FILTER = [{ name: "Base de datos SQLite", extensions: ["db"] }];
-// Bank statements arrive in whatever the bank felt like exporting.
-const STATEMENT_FILTER = [
-  { name: "Resumen bancario", extensions: ["csv", "txt", "xlsx", "xls"] },
-];
-
-// Suggests the user's Documents folder rather than letting the panel reopen
-// wherever it happened to be last. Documents is the sane default for a file the
-// user is meant to keep: it is backed up by Time Machine and picked up by
-// iCloud Drive when Desktop & Documents sync is on, which puts a copy off the
-// machine — the one thing a local-first app cannot do for itself. Falls back to
-// a bare file name if the folder cannot be resolved, which only loses the
-// suggestion, not the save.
-//
-// Only the name is kept: an attachment picked on Windows before names were cut
-// down stored its whole original path, and joining that would suggest the
-// original folder instead of Documents.
-async function suggestPath(fileName: string): Promise<string> {
-  try {
-    return await join(await documentDir(), fileNameFromPath(fileName));
-  } catch {
-    return fileName;
-  }
-}
-
-// Returns false when the user dismissed the dialog, which is not an error.
+// Each returns false or null when the user dismissed the dialog, which is not
+// an error.
 export async function saveCsvFile(
   defaultName: string,
   contents: string,
 ): Promise<boolean> {
-  const path = await save({
-    defaultPath: await suggestPath(defaultName),
-    filters: CSV_FILTER,
-  });
-  if (path === null) return false;
-
-  await invoke("write_text_file", { path, contents });
-  return true;
+  return invoke<boolean>("export_csv", { defaultName, contents });
 }
 
-// Returns the file's contents, or null when the user dismissed the dialog.
 export async function openCsvFile(): Promise<string | null> {
-  const path = await open({ multiple: false, directory: false, filters: CSV_FILTER });
-  if (path === null || typeof path !== "string") return null;
-
-  return invoke<string>("read_text_file", { path });
+  return invoke<string | null>("import_csv");
 }
 
-// Rust takes the snapshot through SQLite itself (`VACUUM INTO`), so nothing
-// has to be checkpointed first and anything written while the dialog was open
-// is included.
+// Rust takes the snapshot through SQLite itself (`VACUUM INTO`) once the
+// dialog has closed, so nothing has to be checkpointed first and anything
+// written while the dialog was open is included.
 export async function saveDatabaseCopy(defaultName: string): Promise<boolean> {
-  const destination = await save({
-    defaultPath: await suggestPath(defaultName),
-    filters: DB_FILTER,
-  });
-  if (destination === null) return false;
-
-  await invoke("backup_database", { destination });
-  return true;
+  return invoke<boolean>("backup_database", { defaultName });
 }
 
-const ATTACHMENT_FILTER = [
-  { name: "Comprobantes", extensions: ["png", "jpg", "jpeg", "webp", "heic", "pdf"] },
-];
+// Where the live database is, for Ajustes to show. Rust works it out from the
+// same place the SQL plugin opens it.
+export async function getDatabasePath(): Promise<string> {
+  return invoke<string>("database_path");
+}
 
 const MIME_BY_EXTENSION: Record<string, string> = {
   png: "image/png",
@@ -90,18 +49,16 @@ export interface PickedAttachment {
   contentBase64: string;
 }
 
-// Returns the chosen file already encoded, or null when the dialog was
-// dismissed. Rust enforces the size ceiling and reports it as an error.
+// Returns the chosen file already encoded. Rust enforces the size ceiling and
+// reports it as an error.
 export async function pickAttachment(): Promise<PickedAttachment | null> {
-  const path = await open({
-    multiple: false,
-    directory: false,
-    filters: ATTACHMENT_FILTER,
-  });
-  if (path === null || typeof path !== "string") return null;
+  const picked = await invoke<{ fileName: string; contentBase64: string } | null>(
+    "pick_attachment",
+  );
+  if (picked === null) return null;
 
-  const contentBase64 = await invoke<string>("read_file_base64", { path });
-  const fileName = fileNameFromPath(path) || "comprobante";
+  const { contentBase64 } = picked;
+  const fileName = picked.fileName || "comprobante";
   const extension = fileName.split(".").pop()?.toLowerCase() ?? "";
 
   return {
@@ -113,15 +70,17 @@ export async function pickAttachment(): Promise<PickedAttachment | null> {
   };
 }
 
+// Only the name is sent, and Rust suggests it in the user's Documents folder:
+// an attachment picked on Windows before names were cut down stored its whole
+// original path, which would otherwise suggest the original folder.
 export async function saveAttachmentCopy(
   fileName: string,
   contentBase64: string,
 ): Promise<boolean> {
-  const path = await save({ defaultPath: await suggestPath(fileName) });
-  if (path === null) return false;
-
-  await invoke("write_file_base64", { path, contents: contentBase64 });
-  return true;
+  return invoke<boolean>("save_attachment_copy", {
+    fileName: fileNameFromPath(fileName),
+    contents: contentBase64,
+  });
 }
 
 // Opens the system print dialog.
@@ -140,6 +99,14 @@ export interface PickedStatement {
   rows: string[][];
 }
 
+// What Rust sends: a spreadsheet as base64, for read-excel-file to parse
+// here; anything else as its text.
+interface StatementFile {
+  fileName: string;
+  kind: "spreadsheet" | "text";
+  content: string;
+}
+
 // Opens a bank statement and returns its rows.
 //
 // CSV and Excel both end up as a grid of strings. Excel cells arrive typed —
@@ -147,18 +114,13 @@ export interface PickedStatement {
 // they were displayed as, so one parser handles both and the user sees in the
 // preview exactly what the mapping will be applied to.
 export async function openStatementFile(): Promise<PickedStatement | null> {
-  const path = await open({
-    multiple: false,
-    directory: false,
-    filters: STATEMENT_FILTER,
-  });
-  if (path === null || typeof path !== "string") return null;
+  const picked = await invoke<StatementFile | null>("open_statement");
+  if (picked === null) return null;
 
-  const fileName = fileNameFromPath(path);
+  const { fileName } = picked;
 
-  if (/\.xlsx?$/i.test(path)) {
-    const base64 = await invoke<string>("read_file_base64", { path });
-    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+  if (picked.kind === "spreadsheet") {
+    const bytes = Uint8Array.from(atob(picked.content), (char) => char.charCodeAt(0));
     // The browser entry point: this runs in a webview, not in Node. And
     // `readSheet` rather than the default export, which returns every sheet
     // wrapped in metadata — a statement is one table on the first sheet.
@@ -167,9 +129,8 @@ export async function openStatementFile(): Promise<PickedStatement | null> {
     return { fileName, rows: rows.map((row) => row.map(cellToText)) };
   }
 
-  const text = await invoke<string>("read_text_file", { path });
   const { parseCsv, detectDelimiter } = await import("@/lib/csv");
-  return { fileName, rows: parseCsv(text, detectDelimiter(text)) };
+  return { fileName, rows: parseCsv(picked.content, detectDelimiter(picked.content)) };
 }
 
 // Excel hands back typed cells. A date has to become the ISO form the parser

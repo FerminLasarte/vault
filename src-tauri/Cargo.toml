@@ -29,7 +29,8 @@ tauri-plugin-sql = { version = "2.4.0", features = ["sqlite"] }
 # plugin's own connection pool rather than opening a second connection.
 sqlx = { version = "0.8", default-features = false, features = ["sqlite"] }
 tauri-plugin-dialog = "2.7.2"
-base64 = "0.23.1"
+# 0.22, the version Tauri itself depends on, rather than a third copy in the tree.
+base64 = "0.22"
 tauri-plugin-window-state = "2.4.1"
 tauri-plugin-notification = "2.3.3"
 # Used by the updater flow to relaunch the app once the new version is in place.
@@ -42,3 +43,11 @@ tauri-plugin-updater = "2"
 
 [profile.dev]
 debug = "line-tables-only"
+
+# A smaller binary, and so a smaller update download (the macOS build carries
+# two architectures). Not `panic = "abort"`: files::blocking reports a panic in
+# file work as an error the user can read, and abort would close the app.
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

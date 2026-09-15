@@ -10,7 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-export interface EmptyState {
+interface EmptyState {
   // Why the list is empty, in the words of whatever it lists. Worth writing per
   // section: "todavía no hay recurrentes" teaches nothing on its own, while
   // naming an example does.

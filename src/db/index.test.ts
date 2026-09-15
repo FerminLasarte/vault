@@ -17,7 +17,6 @@ import {
   insertLoan,
   insertPaymentMethod,
   insertRecurringTransaction,
-  insertTransaction,
   insertTransactions,
   listAttachments,
   listCategories,
@@ -43,6 +42,12 @@ import {
 } from "./index";
 import type { ExchangeRate, NewLoan, NewTransaction, PaymentMethod } from "./index";
 import { calculateAccountBalances } from "@/lib/finance";
+
+// A plain insert, as the app no longer has one outside a batch: every write
+// it makes goes through insertTransactionWithTags or insertTransactions.
+function insertTransaction(transaction: Parameters<typeof insertTransactionWithTags>[0]) {
+  return insertTransactionWithTags(transaction, []);
+}
 
 let db: ReturnType<typeof createTestDatabase>;
 
