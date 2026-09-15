@@ -12,6 +12,9 @@
       "allow": [
         {
           "url": "mailto:*"
+        },
+        {
+          "url": "https://mpago.la/PENDIENTE"
         }
       ]
     },

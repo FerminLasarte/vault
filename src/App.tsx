@@ -17,6 +17,7 @@ import { ThemeProvider } from "@/context/ThemeContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { UpdatePrompt } from "@/components/UpdatePrompt";
+import { DonationPrompt } from "@/components/DonationPrompt";
 import { AppErrorFallback, ViewErrorFallback } from "@/components/ErrorFallback";
 import { useMenuEvents } from "@/hooks/useMenuEvents";
 import { usePendingMenuRequest } from "@/hooks/useMenuRequest";
@@ -137,6 +138,7 @@ function App() {
                 </main>
               </div>
               <UpdatePrompt />
+              <DonationPrompt />
               <Toaster position="bottom-right" />
             </AppDataProvider>
           </UpdaterProvider>
