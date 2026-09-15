@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ClosesView } from "./ClosesView";
 import type { AppActions, AppData, AppStatus } from "@/context/AppDataContext";
@@ -16,6 +16,14 @@ vi.mock("@/hooks/useAppData", () => ({
   useAppData: () => appData.current,
   useAppActions: () => appData.current,
   useAppStatus: () => appData.current,
+}));
+
+// Printing goes through a Tauri command, which does not exist here.
+const printWindow = vi.hoisted(() => vi.fn());
+
+vi.mock(import("@/lib/files"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  printWindow,
 }));
 
 afterEach(() => {
@@ -81,5 +89,18 @@ describe("ClosesView", () => {
 
     expect(screen.getByText("Agosto de 2026")).toBeInTheDocument();
     expect(screen.queryByText("Julio de 2026")).not.toBeInTheDocument();
+  });
+
+  // The print panel suggests the document title as the PDF's file name, so
+  // without this every close was offered as "Vault.pdf".
+  it("names the PDF after the month it closes", () => {
+    printWindow.mockResolvedValue(undefined);
+
+    renderView([aTransaction(1, { date: "2026-08-05" })]);
+    fireEvent.click(screen.getByRole("button", { name: /Guardar como PDF/ }));
+
+    expect(printWindow).toHaveBeenCalledExactlyOnceWith(
+      "Vault - Cierre de agosto de 2026",
+    );
   });
 });

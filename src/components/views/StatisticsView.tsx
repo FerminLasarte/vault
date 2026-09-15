@@ -28,6 +28,7 @@ import { CategoryBreakdownChart } from "@/components/charts/CategoryBreakdownCha
 import { IncomeVsExpenseChart } from "@/components/charts/IncomeVsExpenseChart";
 import { useAppActions, useAppData } from "@/hooks/useAppData";
 import { usePrintRequest } from "@/hooks/usePrintRequest";
+import { closeDocumentTitle } from "@/lib/monthlyClose";
 import { Printer } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMenuRequest } from "@/hooks/useMenuRequest";
@@ -283,7 +284,7 @@ export function StatisticsView({ request, tab, onRequestHandled }: ViewProps) {
     // never reports whether the user went through with it, and a notice that
     // reappears because they cancelled once would have no way to ever stop.
     await markCloseSeen(closedMonthKey);
-    requestPrint("close");
+    requestPrint("close", closeDocumentTitle(closedMonthKey));
   }
 
   const report = useMemo(

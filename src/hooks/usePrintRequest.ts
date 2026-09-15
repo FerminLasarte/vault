@@ -5,6 +5,9 @@ interface PrintRequest<T> {
   // Which document was asked for. What that means is the caller's business:
   // one screen chooses between two documents, another names a month.
   target: T;
+  // What "Save as PDF" suggests as the file name. Without one the dialog falls
+  // back to the window's title, "Vault".
+  title?: string;
   seq: number;
 }
 
@@ -22,12 +25,12 @@ interface PrintRequest<T> {
 // wants instead, and what stays mounted is invisible on screen anyway.
 export function usePrintRequest<T>(): {
   request: PrintRequest<T> | null;
-  requestPrint: (target: T) => void;
+  requestPrint: (target: T, title?: string) => void;
 } {
   const [request, setRequest] = useState<PrintRequest<T> | null>(null);
 
-  const requestPrint = useCallback((target: T) => {
-    setRequest((previous) => ({ target, seq: (previous?.seq ?? 0) + 1 }));
+  const requestPrint = useCallback((target: T, title?: string) => {
+    setRequest((previous) => ({ target, title, seq: (previous?.seq ?? 0) + 1 }));
   }, []);
 
   // Printing happens in an effect rather than in the click handler, so the
@@ -35,7 +38,7 @@ export function usePrintRequest<T>(): {
   // the print engine reads the window.
   useEffect(() => {
     if (request === null) return;
-    void printWindow();
+    void printWindow(request.title);
   }, [request]);
 
   return { request, requestPrint };

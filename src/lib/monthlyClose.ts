@@ -9,6 +9,7 @@ import {
 } from "@/lib/finance";
 import type { CategoryBreakdownEntry, FinancialSummary } from "@/lib/finance";
 import { CURRENCY_CODES } from "@/lib/currency";
+import { formatMonthLabel } from "@/lib/format";
 
 // How a month ended, against the two periods worth comparing it to.
 //
@@ -236,6 +237,13 @@ export function buildMonthlyClose(
 
 // The most recent month that has finished, whatever the calendar says about
 // today. A close is only ever drawn for a month that cannot change any more.
+// The close's title for the print dialog, which suggests it as the PDF's file
+// name: "Vault - Cierre de agosto de 2026". The month is lowercase because it
+// reads as part of a sentence there, not as a heading.
+export function closeDocumentTitle(monthKey: string): string {
+  return `Vault - Cierre de ${formatMonthLabel(monthKey).toLowerCase()}`;
+}
+
 export function lastClosedMonthKey(today: Date = new Date()): string {
   return getRecentMonthKeys(2, currentMonthKey(today))[0];
 }

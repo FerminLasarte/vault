@@ -9,6 +9,8 @@ mod db;
 mod dialogs;
 mod files;
 mod menu;
+#[cfg(target_os = "macos")]
+mod printing;
 
 // Deliberately still "vault-ai.db" after the app was renamed to Vault; see the
 // note in src/db/index.ts. Both constants must name the same file, and the
@@ -157,8 +159,20 @@ async fn open_statement(window: tauri::Window) -> Result<Option<PickedStatement>
 // `window.print()` from JavaScript is a no-op in the macOS webview — it does
 // not throw, it simply does nothing — so the only way to reach the print
 // dialog is from the native side.
+//
+// `title` is what "Save as PDF" suggests as the file name. Without one, macOS
+// names the PDF after the window, "Vault"; the page's own title plays no part.
 #[tauri::command]
-fn print_window(window: tauri::WebviewWindow) -> Result<(), String> {
+fn print_window(window: tauri::WebviewWindow, title: Option<String>) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    if let Some(title) = title {
+        return window
+            .with_webview(move |webview| printing::print_titled(&webview, &title))
+            .map_err(|error| error.to_string());
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = title;
+
     window.print().map_err(|error| error.to_string())
 }
 
