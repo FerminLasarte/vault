@@ -3,6 +3,7 @@ import type { TransactionWithCategory } from "@/db/schema";
 import type { CategoryBreakdownEntry } from "@/lib/finance";
 import {
   buildMonthlyClose,
+  closeDocumentTitle,
   closedMonthKeys,
   compareByCategory,
   hasClose,
@@ -389,5 +390,13 @@ describe("closedMonthKeys", () => {
       tx({ date: "2026-06-10", type: "transfer", category_id: null }),
     ];
     expect(closedMonthKeys(history, TODAY)).toEqual(["2026-07"]);
+  });
+});
+
+describe("closeDocumentTitle", () => {
+  // It becomes the PDF's suggested file name, where the month reads as part of
+  // a sentence rather than as a heading.
+  it("names the month in lowercase", () => {
+    expect(closeDocumentTitle("2026-08")).toBe("Vault - Cierre de agosto de 2026");
   });
 });

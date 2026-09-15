@@ -16,6 +16,7 @@ const {
   openCsvFile,
   openStatementFile,
   pickAttachment,
+  printWindow,
   saveAttachmentCopy,
   saveCsvFile,
   saveDatabaseCopy,
@@ -34,6 +35,20 @@ describe("file commands", () => {
   beforeEach(() => {
     invoke.mockReset();
     readSheet.mockReset();
+  });
+
+  // The title is what "Save as PDF" suggests as the file name. Without one,
+  // macOS names every PDF after the window: "Vault.pdf".
+  it("hands the print dialog the document's title, or none", async () => {
+    invoke.mockResolvedValue(undefined);
+
+    await printWindow("Vault - Cierre de agosto de 2026");
+    await printWindow();
+
+    expect(invoke.mock.calls).toEqual([
+      ["print_window", { title: "Vault - Cierre de agosto de 2026" }],
+      ["print_window", { title: null }],
+    ]);
   });
 
   it("exports a CSV through Rust's own save dialog", async () => {

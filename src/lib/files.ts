@@ -88,8 +88,10 @@ export async function saveAttachmentCopy(
 // Deliberately not `window.print()`: in the macOS webview that call silently
 // does nothing — no dialog, no error — so printing has to be asked for from
 // the native side.
-export async function printWindow(): Promise<void> {
-  await invoke("print_window");
+//
+// `title` is what "Save as PDF" suggests as the file name (see print_window).
+export async function printWindow(title?: string): Promise<void> {
+  await invoke("print_window", { title: title ?? null });
 }
 
 export interface PickedStatement {

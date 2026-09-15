@@ -41,6 +41,13 @@ tauri-plugin-process = "2"
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
 
+# AppKit and WebKit, to give a print job its title (see printing.rs). The same
+# 0.3 bindings wry is built on, rather than another copy in the tree.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-app-kit = { version = "0.3", default-features = false, features = ["NSPrintInfo", "NSPrintOperation", "NSResponder", "NSWindow"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["NSString"] }
+objc2-web-kit = { version = "0.3", default-features = false, features = ["WKWebView", "objc2-app-kit"] }
+
 [profile.dev]
 debug = "line-tables-only"
 

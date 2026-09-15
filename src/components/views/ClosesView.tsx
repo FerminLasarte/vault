@@ -8,7 +8,11 @@ import { PrintableClose } from "@/components/reports/PrintableClose";
 import { useAppData } from "@/hooks/useAppData";
 import { usePrintRequest } from "@/hooks/usePrintRequest";
 import { buildMonthlyTrend, filterByCurrency } from "@/lib/finance";
-import { buildMonthlyClose, closedMonthKeys } from "@/lib/monthlyClose";
+import {
+  buildMonthlyClose,
+  closeDocumentTitle,
+  closedMonthKeys,
+} from "@/lib/monthlyClose";
 import { CURRENCY_CODES } from "@/lib/currency";
 import { formatCurrency, formatMonthLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -157,7 +161,9 @@ export function ClosesView() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => requestPrint(month.monthKey)}
+                    onClick={() =>
+                      requestPrint(month.monthKey, closeDocumentTitle(month.monthKey))
+                    }
                   >
                     <FileDown />
                     Guardar como PDF
