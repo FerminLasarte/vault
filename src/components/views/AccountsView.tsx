@@ -16,7 +16,7 @@ import {
   totalBalanceByCurrency,
 } from "@/lib/finance";
 import { formatCurrency } from "@/lib/format";
-import { outstandingByCurrency } from "@/lib/installments";
+import { netWorthAdjustments } from "@/lib/netWorth";
 import { PAYMENT_METHOD_TYPE_LABELS } from "@/lib/labels";
 import { accountCommitmentsNotice, accountGoalsNotice } from "@/lib/deletionNotice";
 import { cn } from "@/lib/utils";
@@ -51,14 +51,19 @@ export function AccountsView() {
 
   const currencyTotals = useMemo(() => Array.from(totalsByCurrency), [totalsByCurrency]);
 
-  const debtByCurrency = useMemo(
-    () => outstandingByCurrency(installmentPlans),
-    [installmentPlans],
+  const adjustments = useMemo(
+    () => netWorthAdjustments(installmentPlans, loans),
+    [installmentPlans, loans],
   );
 
   const debtArs = useMemo(
-    () => consolidateByCurrency(debtByCurrency, "ARS", exchangeRate?.sell ?? 0),
-    [debtByCurrency, exchangeRate],
+    () => consolidateByCurrency(adjustments.debt, "ARS", exchangeRate?.sell ?? 0),
+    [adjustments, exchangeRate],
+  );
+
+  const receivableArs = useMemo(
+    () => consolidateByCurrency(adjustments.receivable, "ARS", exchangeRate?.sell ?? 0),
+    [adjustments, exchangeRate],
   );
 
   // Null whenever there is no usable rate yet, which the card reports instead
@@ -188,37 +193,46 @@ export function AccountsView() {
             </Card>
           </div>
 
-          {/* Shown only when there is debt: an always-visible pair of zeroes
-              would add noise for anyone who never buys in instalments. */}
-          {debtArs !== null && debtArs > 0 && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardDescription>Deuda pendiente</CardDescription>
-                  <CardTitle className="text-2xl text-negative">
-                    {formatCurrency(debtArs, "ARS")}
-                  </CardTitle>
-                  <p className="text-xs text-muted-foreground">
-                    Cuotas que todavía no registraste
-                  </p>
-                </CardHeader>
-              </Card>
+          {/* Shown only when something is owed either way: an always-visible
+              pair of zeroes would add noise for anyone who never buys in
+              instalments or lends money. */}
+          {debtArs !== null &&
+            receivableArs !== null &&
+            (debtArs > 0 || receivableArs > 0) && (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {debtArs > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardDescription>Deuda pendiente</CardDescription>
+                      <CardTitle className="text-2xl text-negative">
+                        {formatCurrency(debtArs, "ARS")}
+                      </CardTitle>
+                      <p className="text-xs text-muted-foreground">
+                        Cuotas sin registrar y el capital de los préstamos que debés
+                      </p>
+                    </CardHeader>
+                  </Card>
+                )}
 
-              <Card>
-                <CardHeader>
-                  <CardDescription>Patrimonio neto</CardDescription>
-                  <CardTitle className="text-2xl">
-                    {netWorthArs === null
-                      ? "—"
-                      : formatCurrency(netWorthArs - debtArs, "ARS")}
-                  </CardTitle>
-                  <p className="text-xs text-muted-foreground">
-                    Bruto menos la deuda pendiente
-                  </p>
-                </CardHeader>
-              </Card>
-            </div>
-          )}
+                <Card>
+                  <CardHeader>
+                    <CardDescription>Patrimonio neto</CardDescription>
+                    <CardTitle className="text-2xl">
+                      {netWorthArs === null
+                        ? "—"
+                        : formatCurrency(netWorthArs - debtArs + receivableArs, "ARS")}
+                    </CardTitle>
+                    <p className="text-xs text-muted-foreground">
+                      {receivableArs === 0
+                        ? "Bruto menos la deuda pendiente"
+                        : debtArs === 0
+                          ? "Bruto más lo que te deben"
+                          : "Bruto menos la deuda, más lo que te deben"}
+                    </p>
+                  </CardHeader>
+                </Card>
+              </div>
+            )}
 
           <ExchangeRateBar />
         </div>
