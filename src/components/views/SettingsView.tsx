@@ -36,7 +36,7 @@ import { useMenuRequest } from "@/hooks/useMenuRequest";
 import { isReported } from "@/lib/reportedError";
 import { useTheme } from "@/hooks/useTheme";
 import { useUpdater } from "@/hooks/useUpdater";
-import { buildImportPlan, parseCsv, transactionsToCsv } from "@/lib/csv";
+import { buildImportPlan, detectDelimiter, parseCsv, transactionsToCsv } from "@/lib/csv";
 import { CURRENCY_CODES } from "@/lib/currency";
 import {
   openCsvFile,
@@ -243,7 +243,9 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
       const contents = await openCsvFile();
       if (contents === null) return;
 
-      const plan = buildImportPlan(parseCsv(contents), {
+      // Detected rather than assumed: the app writes commas, but a file saved
+      // again by Excel in an Argentine locale comes back with semicolons.
+      const plan = buildImportPlan(parseCsv(contents, detectDelimiter(contents)), {
         categories,
         categoryRules,
         accounts: paymentMethods,

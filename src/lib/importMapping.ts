@@ -1,4 +1,4 @@
-import { matchCategoryId } from "@/lib/categoryRules";
+import { matchCategoryIdForType } from "@/lib/categoryRules";
 import { normalizeForSearch as normalize } from "@/lib/text";
 import type { ImportContext, ImportPlan, ImportSkip } from "@/lib/csv";
 import type { NewTransaction } from "@/db/schema";
@@ -194,17 +194,21 @@ export function buildMappedImportPlan(
   const skipped: ImportSkip[] = [];
   let duplicates = 0;
 
-  const seen = new Set(
-    context.existing.map((transaction) =>
-      [
-        transaction.date,
-        transaction.type,
-        transaction.amount,
-        transaction.currency,
-        normalize(transaction.description),
-      ].join("|"),
-    ),
-  );
+  // How many of each movement the app already holds. A row is skipped only
+  // while the file has not yet brought more of it than that: re-importing an
+  // overlapping statement skips what came in last time, but two identical
+  // fares on the same day are two fares.
+  const alreadyHeld = new Map<string, number>();
+  for (const transaction of context.existing) {
+    const key = [
+      transaction.date,
+      transaction.type,
+      transaction.amount,
+      transaction.currency,
+      normalize(transaction.description),
+    ].join("|");
+    alreadyHeld.set(key, (alreadyHeld.get(key) ?? 0) + 1);
+  }
 
   for (let index = mapping.headerRow + 1; index < rows.length; index++) {
     const row = rows[index];
@@ -236,7 +240,12 @@ export function buildMappedImportPlan(
       amount: money.amount,
       type: money.type,
       currency: mapping.currency,
-      categoryId: matchCategoryId(description, context.categoryRules ?? []),
+      categoryId: matchCategoryIdForType(
+        description,
+        context.categoryRules ?? [],
+        context.categories,
+        money.type,
+      ),
       paymentMethodId: mapping.paymentMethodId,
       destinationPaymentMethodId: null,
       destinationAmount: null,
@@ -245,12 +254,12 @@ export function buildMappedImportPlan(
     };
 
     const key = duplicateKey(transaction);
-    if (seen.has(key)) {
+    const held = alreadyHeld.get(key) ?? 0;
+    if (held > 0) {
+      alreadyHeld.set(key, held - 1);
       duplicates++;
       continue;
     }
-    // Added as we go, so a file that repeats a row inside itself is caught too.
-    seen.add(key);
 
     ready.push({ transaction, tags: [] });
   }

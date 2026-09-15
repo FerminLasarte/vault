@@ -79,6 +79,30 @@ describe("buildReport", () => {
     expect(report.summary.expenses).toBe(1000);
   });
 
+  it("lists every month of a range longer than a year", () => {
+    const report = buildReport(
+      sources({
+        transactions: [
+          aTransaction({ date: "2025-01-10", amount: 100 }),
+          aTransaction({ date: "2026-09-10", amount: 200 }),
+        ],
+      }),
+      {
+        currency: "ARS",
+        categoryId: null,
+        dateRange: { from: "2025-01-01", to: "2026-09-14" },
+      },
+      GENERATED_AT,
+    );
+
+    // The monthly table has to add up to the totals printed above it.
+    expect(report.monthly).toHaveLength(21);
+    expect(report.monthly[0].monthKey).toBe("2025-01");
+    expect(report.monthly.reduce((total, month) => total + month.expenses, 0)).toBe(
+      report.summary.expenses,
+    );
+  });
+
   it("never mixes currencies", () => {
     // Adding pesos to dollars would produce a total that means nothing.
     const report = buildReport(

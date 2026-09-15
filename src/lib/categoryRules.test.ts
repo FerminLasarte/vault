@@ -1,10 +1,61 @@
 import { describe, expect, it } from "vitest";
-import type { CategoryRule } from "@/db/schema";
-import { matchCategoryId, matchCategoryRule } from "@/lib/categoryRules";
+import type { Category, CategoryRule } from "@/db/schema";
+import {
+  matchCategoryId,
+  matchCategoryIdForType,
+  matchCategoryRule,
+} from "@/lib/categoryRules";
 
 function rule(id: number, pattern: string, categoryId: number): CategoryRule {
   return { id, pattern, category_id: categoryId };
 }
+
+describe("matchCategoryIdForType", () => {
+  const categories: Category[] = [
+    { id: 3, name: "Compras", type: "expense", color: "#f97316", icon: "🛍️" },
+    { id: 8, name: "Cobros", type: "income", color: "#10b981", icon: "💰" },
+  ];
+  const rules = [rule(1, "mercado pago", 3), rule(2, "transferencia recibida", 8)];
+
+  it("uses a rule whose category is of the movement's kind", () => {
+    expect(
+      matchCategoryIdForType("Pago Mercado Pago", rules, categories, "expense"),
+    ).toBe(3);
+  });
+
+  it("never files a movement under a category of the other kind", () => {
+    expect(
+      matchCategoryIdForType("Pago Mercado Pago", rules, categories, "income"),
+    ).toBeNull();
+  });
+
+  it("falls back to a shorter rule of the right kind over a longer one of the wrong kind", () => {
+    // "transferencia recibida" is longer, but "mercado pago" is the only rule
+    // that can hold an expense.
+    expect(
+      matchCategoryIdForType(
+        "Transferencia recibida Mercado Pago",
+        rules,
+        categories,
+        "expense",
+      ),
+    ).toBe(3);
+    expect(
+      matchCategoryIdForType(
+        "Transferencia recibida Mercado Pago",
+        rules,
+        categories,
+        "income",
+      ),
+    ).toBe(8);
+  });
+
+  it("ignores a rule whose category no longer exists", () => {
+    expect(
+      matchCategoryIdForType("Netflix", [rule(9, "netflix", 99)], categories, "expense"),
+    ).toBeNull();
+  });
+});
 
 describe("matchCategoryRule", () => {
   const rules = [

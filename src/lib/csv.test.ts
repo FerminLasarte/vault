@@ -7,6 +7,7 @@ import type {
 } from "@/db/schema";
 import {
   buildImportPlan,
+  detectDelimiter,
   parseCsv,
   transactionsToCsv,
   CSV_HEADERS,
@@ -250,9 +251,34 @@ describe("buildImportPlan", () => {
     expect(plan.duplicates).toBe(1);
   });
 
-  it("collapses a row repeated inside the same file", () => {
-    const line = "2026-08-01,Gasto,10,ARS,Comida,Efectivo ARS,,,Igual\n";
+  it("keeps a movement the file genuinely repeats", () => {
+    // Two identical fares on one day are two fares, not one imported twice.
+    const line = "2026-08-01,Gasto,10,ARS,Comida,Efectivo ARS,,,SUBE\n";
     const plan = planFor(line + line);
+    expect(plan.ready).toHaveLength(2);
+    expect(plan.duplicates).toBe(0);
+  });
+
+  it("skips only as many repeats as the database already holds", () => {
+    const existing: Transaction[] = [
+      {
+        id: 1,
+        amount: 10,
+        type: "expense",
+        category_id: 7,
+        payment_method_id: 1,
+        destination_payment_method_id: null,
+        destination_amount: null,
+        description: "SUBE",
+        date: "2026-08-01",
+        currency: "ARS",
+      },
+    ];
+    const line = "2026-08-01,Gasto,10,ARS,Comida,Efectivo ARS,,,SUBE\n";
+    const plan = buildImportPlan(parseCsv(`${CSV_HEADERS.join(",")}\n${line}${line}`), {
+      ...context,
+      existing,
+    });
     expect(plan.ready).toHaveLength(1);
     expect(plan.duplicates).toBe(1);
   });
@@ -269,6 +295,38 @@ describe("buildImportPlan", () => {
       skipped: [],
       duplicates: 0,
     });
+  });
+});
+
+describe("a file the app exported, after a round trip through Excel (es-AR)", () => {
+  // Opened and saved again by Excel with Argentine settings: semicolons,
+  // decimal commas, and dates in Excel's own short format. It used to fail as
+  // a whole with "Faltan columnas obligatorias".
+  const text = [
+    `${[...CSV_HEADERS, TAGS_HEADER].join(";")}`,
+    "1/8/2026;Gasto;1234,56;ARS;Comida;Efectivo ARS;;;Almuerzo;viaje",
+    "15/8/2026;Transferencia;100;USD;;Cuenta Bancaria USD;Efectivo ARS;120000,5;Cambio;",
+  ].join("\r\n");
+
+  it("reads it back", () => {
+    const plan = buildImportPlan(parseCsv(text, detectDelimiter(text)), context);
+
+    expect(plan.skipped).toEqual([]);
+    expect(
+      plan.ready.map((row) => [row.transaction.date, row.transaction.amount]),
+    ).toEqual([
+      ["2026-08-01", 1234.56],
+      ["2026-08-15", 100],
+    ]);
+    expect(plan.ready[0].tags).toEqual(["viaje"]);
+    expect(plan.ready[1].transaction.destinationAmount).toBe(120000.5);
+  });
+
+  it("still reads the app's own file as exported", () => {
+    const exported = transactionsToCsv([makeRow({ amount: 1234.56 })]);
+    const plan = buildImportPlan(parseCsv(exported, detectDelimiter(exported)), context);
+    expect(plan.ready[0].transaction.amount).toBe(1234.56);
+    expect(plan.ready[0].transaction.date).toBe("2026-08-01");
   });
 });
 

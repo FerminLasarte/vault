@@ -15,13 +15,27 @@ export interface FinancialSummary {
   expenses: number;
 }
 
+// Rounds a total to the cent.
+//
+// Amounts are stored as REAL, so adding them up leaves floating-point residue:
+// 0.1 + 0.2 is 0.30000000000000004. Formatting hides it, but a comparison at
+// the boundary does not — a budget spent exactly to its cap read as exceeded.
+// Applied wherever amounts are added up, rather than migrating the columns to
+// integer cents, which would mean rebuilding tables other tables point at.
+// The `+ 0` turns a -0 into 0, so a balance that nets out is not "-0".
+export function roundToCents(value: number): number {
+  return Math.round(value * 100) / 100 + 0;
+}
+
 export function sumByType<T extends Transaction>(
   transactions: T[],
   type: TransactionType,
 ): number {
-  return transactions
-    .filter((transaction) => transaction.type === type)
-    .reduce((total, transaction) => total + transaction.amount, 0);
+  return roundToCents(
+    transactions
+      .filter((transaction) => transaction.type === type)
+      .reduce((total, transaction) => total + transaction.amount, 0),
+  );
 }
 
 export function calculateSummary<T extends Transaction>(
@@ -29,7 +43,7 @@ export function calculateSummary<T extends Transaction>(
 ): FinancialSummary {
   const income = sumByType(transactions, "income");
   const expenses = sumByType(transactions, "expense");
-  return { balance: income - expenses, income, expenses };
+  return { balance: roundToCents(income - expenses), income, expenses };
 }
 
 // "YYYY-MM" key for the given date (local time). Transaction dates are
@@ -202,7 +216,10 @@ export function groupByCategory(
     });
   }
 
-  return Array.from(totals.values()).sort((a, b) => b.total - a.total);
+  return Array.from(totals.values(), (entry) => ({
+    ...entry,
+    total: roundToCents(entry.total),
+  })).sort((a, b) => b.total - a.total);
 }
 
 // Ascending "YYYY-MM" keys for the `count` months up to and including
@@ -311,6 +328,9 @@ export function calculateAccountBalances(
     }
   }
 
+  for (const [accountId, balance] of balances) {
+    balances.set(accountId, roundToCents(balance));
+  }
   return balances;
 }
 
@@ -324,7 +344,10 @@ export function totalBalanceByCurrency(
 
   for (const account of accounts) {
     const balance = balances.get(account.id) ?? 0;
-    totals.set(account.currency, (totals.get(account.currency) ?? 0) + balance);
+    totals.set(
+      account.currency,
+      roundToCents((totals.get(account.currency) ?? 0) + balance),
+    );
   }
 
   return totals;
@@ -398,15 +421,17 @@ export function calculateBudgetProgress(
   return budgets.map((budget) => {
     const key = budgetPeriodKey(budget.period, reference);
 
-    const spent = transactions
-      .filter(
-        (transaction) =>
-          transaction.type === "expense" &&
-          transaction.category_id === budget.category_id &&
-          transaction.currency === budget.currency &&
-          transaction.date.startsWith(key),
-      )
-      .reduce((total, transaction) => total + transaction.amount, 0);
+    const spent = roundToCents(
+      transactions
+        .filter(
+          (transaction) =>
+            transaction.type === "expense" &&
+            transaction.category_id === budget.category_id &&
+            transaction.currency === budget.currency &&
+            transaction.date.startsWith(key),
+        )
+        .reduce((total, transaction) => total + transaction.amount, 0),
+    );
 
     // A zero or negative cap has no meaningful ratio; treat it as fully used
     // rather than dividing by zero and producing Infinity in the UI.
@@ -415,7 +440,7 @@ export function calculateBudgetProgress(
     return {
       budget,
       spent,
-      remaining: budget.amount - spent,
+      remaining: roundToCents(budget.amount - spent),
       ratio,
       isExceeded: spent > budget.amount,
     };

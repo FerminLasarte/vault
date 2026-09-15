@@ -13,6 +13,7 @@ import {
 import { getAttachmentContent, listAttachments } from "@/db";
 import { useAppData } from "@/hooks/useAppData";
 import { pickAttachment, saveAttachmentCopy, saveErrorMessage } from "@/lib/files";
+import { fileNameFromPath } from "@/lib/paths";
 import { isReported } from "@/lib/reportedError";
 import { formatDate } from "@/lib/format";
 import type { AttachmentMeta, TransactionWithCategory } from "@/db";
@@ -138,7 +139,9 @@ export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDial
                   className="flex items-center justify-between gap-3 border-b border-border py-2 last:border-0"
                 >
                   <div className="flex min-w-0 flex-col">
-                    <span className="truncate text-sm">{meta.file_name}</span>
+                    <span className="truncate text-sm">
+                      {fileNameFromPath(meta.file_name)}
+                    </span>
                     <span className="text-xs text-muted-foreground">
                       {formatSize(meta.byte_size)} ·{" "}
                       {formatDate(meta.created_at.slice(0, 10))}
@@ -155,7 +158,9 @@ export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDial
                         onClick={() => void handlePreview(meta)}
                       >
                         <Eye />
-                        <span className="sr-only">Ver {meta.file_name}</span>
+                        <span className="sr-only">
+                          Ver {fileNameFromPath(meta.file_name)}
+                        </span>
                       </ActionButton>
                     )}
                     <ActionButton
@@ -167,7 +172,9 @@ export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDial
                       onClick={() => void handleSaveCopy(meta)}
                     >
                       <Download />
-                      <span className="sr-only">Guardar {meta.file_name}</span>
+                      <span className="sr-only">
+                        Guardar {fileNameFromPath(meta.file_name)}
+                      </span>
                     </ActionButton>
                     <ActionButton
                       type="button"
@@ -178,7 +185,9 @@ export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDial
                       onClick={() => void handleDelete(meta)}
                     >
                       <Trash2 />
-                      <span className="sr-only">Eliminar {meta.file_name}</span>
+                      <span className="sr-only">
+                        Eliminar {fileNameFromPath(meta.file_name)}
+                      </span>
                     </ActionButton>
                   </div>
                 </li>
@@ -189,7 +198,7 @@ export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDial
           {preview && (
             <img
               src={preview.url}
-              alt={preview.meta.file_name}
+              alt={fileNameFromPath(preview.meta.file_name)}
               className="max-h-72 w-full rounded-lg border border-border object-contain"
             />
           )}

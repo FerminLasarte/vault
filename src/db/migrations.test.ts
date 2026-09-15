@@ -97,6 +97,10 @@ const SHIPPED_MIGRATIONS: Record<number, string> = {
   24: "f8239465605fba1e58bb381432ea2cca9ef7809559e84d72d8d21cc662e35883",
   25: "bebc7b7b1d7d6738192831deb8e7f0235b92e62980d3068b24a8a34c25ae94c2",
   26: "e35bd0b95cc9de105239aaadf66b2b61236276aab98d573bfc50f36aa74053da",
+  // Not in a release yet, but already applied to a real database by a running
+  // `tauri dev`, which sqlx would refuse to open just the same.
+  27: "9b45b1c90ac537a953aa044a3c957e14290f9c2f87cd2e6023735523877b25a8",
+  28: "970ead188133e4994dd6f98da6ae0e7a01dec2490a9b20fe904ff02161667dbc",
 };
 
 function sha256(text: string): string {
@@ -209,12 +213,19 @@ describe("migrations", () => {
     const database = newDatabase("types");
     applyMigrations(database);
 
-    for (const type of ["income", "expense", "transfer"]) {
+    // A transfer has to say where the money went (migration 28); account 1 is
+    // one of the accounts migration 5 seeds.
+    for (const [type, destination] of [
+      ["income", "NULL"],
+      ["expense", "NULL"],
+      ["transfer", "1"],
+    ]) {
       expect(() =>
         sql(
           database,
-          `INSERT INTO transactions (amount, type, description, date, currency)
-           VALUES (1, '${type}', 'x', '2026-01-01', 'ARS');`,
+          `INSERT INTO transactions
+             (amount, type, destination_payment_method_id, description, date, currency)
+           VALUES (1, '${type}', ${destination}, 'x', '2026-01-01', 'ARS');`,
         ),
       ).not.toThrow();
     }

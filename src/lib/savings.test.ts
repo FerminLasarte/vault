@@ -252,6 +252,36 @@ describe("calculateSavingsProgress", () => {
     expect(progress.isOnTrack).toBe(false);
   });
 
+  it("does not call a deadline less than a month away impossible", () => {
+    // 30 days left, but not a whole month: $1 to go at $5000 a month.
+    const [progress] = calculateSavingsProgress(
+      [makeGoal({ target_amount: 20_000, target_date: "2026-09-21" })],
+      {
+        ...empty,
+        contributions: [
+          contribution(4_999, "2026-01-10"),
+          contribution(15_000, "2026-08-01"),
+        ],
+      },
+      TODAY,
+    );
+    expect(progress.remaining).toBe(1);
+    expect(progress.monthlyPace).toBe(5_000);
+    expect(progress.isOnTrack).toBe(true);
+    expect(progress.requiredMonthlyPace).toBeCloseTo(1);
+  });
+
+  it("measures a deadline less than a month away by the days left", () => {
+    // 15 days left at $300 a month covers $150, not the $200 still missing.
+    const [progress] = calculateSavingsProgress(
+      [makeGoal({ target_amount: 1_100, target_date: "2026-09-06" })],
+      { ...empty, contributions: [contribution(900, "2026-08-01")] },
+      TODAY,
+    );
+    expect(progress.isOnTrack).toBe(false);
+    expect(progress.requiredMonthlyPace).toBeCloseTo(400);
+  });
+
   it("treats a deadline already past as impossible rather than dividing by zero", () => {
     const [progress] = calculateSavingsProgress(
       [makeGoal({ target_date: "2026-01-01" })],

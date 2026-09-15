@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import Database from "@tauri-apps/plugin-sql";
 import { pendingOccurrences } from "@/lib/recurring";
 import type {
@@ -8,6 +9,7 @@ import type {
   CategoryRuleWithCategory,
   CategoryType,
   ExchangeRate,
+  ExpectedMovement,
   ExpectedMovementWithNames,
   PaymentMethod,
   PaymentMethodType,
@@ -39,6 +41,22 @@ export interface QueryResult {
   lastInsertId?: number;
 }
 
+// One statement of a write that must land whole or not at all.
+export interface BatchStatement {
+  query: string;
+  values?: unknown[];
+  // When set, the statement must change exactly this many rows or the whole
+  // batch is undone. Used as a compare-and-set, so a second click on the same
+  // "Registrar" finds the row already moved on and writes nothing.
+  expectChanges?: number;
+}
+
+// Stands for the id that the statement at `index` of the same batch inserted,
+// which is not known when the batch is put together.
+export function insertedIdOf(index: number): { insertedIdOf: number } {
+  return { insertedIdOf: index };
+}
+
 // The surface of the connection this module actually uses. Naming it means the
 // query functions below can run against anything that honours it — in practice
 // the plugin in the app, and an in-memory database with the same schema under
@@ -46,6 +64,11 @@ export interface QueryResult {
 export interface SqlConnection {
   select<T>(query: string, values?: unknown[]): Promise<T>;
   execute(query: string, values?: unknown[]): Promise<QueryResult>;
+  // Runs the statements as one transaction. The plugin cannot: it sends each
+  // `execute` to whichever pooled connection is free, so a BEGIN sent from
+  // here would not cover the statements after it. Rust does it instead (see
+  // execute_batch in src-tauri/src/lib.rs).
+  batch(statements: BatchStatement[]): Promise<QueryResult[]>;
 }
 
 let dbPromise: Promise<SqlConnection> | null = null;
@@ -56,7 +79,11 @@ let dbPromise: Promise<SqlConnection> | null = null;
 // this promise resolves, the database is fully ready.
 function getDb(): Promise<SqlConnection> {
   if (!dbPromise) {
-    dbPromise = Database.load(DATABASE_URL);
+    dbPromise = Database.load(DATABASE_URL).then((plugin) => ({
+      select: (query, values) => plugin.select(query, values),
+      execute: (query, values) => plugin.execute(query, values),
+      batch: (statements) => invoke<QueryResult[]>("execute_batch", { statements }),
+    }));
   }
   return dbPromise;
 }
@@ -107,10 +134,13 @@ export async function updateCategory(id: number, category: NewCategory): Promise
 // detaches it from its history rather than destroying the records.
 export async function deleteCategory(id: number): Promise<void> {
   const db = await getDb();
-  await db.execute("UPDATE transactions SET category_id = NULL WHERE category_id = $1", [
-    id,
+  await db.batch([
+    {
+      query: "UPDATE transactions SET category_id = NULL WHERE category_id = $1",
+      values: [id],
+    },
+    { query: "DELETE FROM categories WHERE id = $1", values: [id] },
   ]);
-  await db.execute("DELETE FROM categories WHERE id = $1", [id]);
 }
 
 export async function listPaymentMethods(): Promise<PaymentMethod[]> {
@@ -149,29 +179,59 @@ export async function updatePaymentMethod(
   );
 }
 
-// Transactions reference payment methods with a nullable FK, so deleting an
-// account detaches it from its history rather than destroying the records.
+// The "Sin asignar" account in the currency of account $1, other than $1
+// itself; NULL when there is none yet.
+const UNASSIGNED_ACCOUNT_OF = `(
+  SELECT p.id FROM payment_methods p
+  JOIN payment_methods m ON m.id = $1
+  WHERE p.id <> m.id
+    AND p.currency = m.currency
+    AND p.name = 'Sin asignar (' || m.currency || ')'
+  ORDER BY p.id LIMIT 1
+)`;
+
+// Deleting an account keeps its history and its money. Its movements, and the
+// balance it opened with, move to the "Sin asignar" account of its currency —
+// the placeholder migration 13 introduced for movements that belong to no
+// account — which is created if there is none yet, so the total the user holds
+// does not change. Detaching them instead left movements that counted towards
+// no balance (the state migration 13 had to repair) and quietly took the
+// account's money out of the total.
 export async function deletePaymentMethod(id: number): Promise<void> {
   const db = await getDb();
-  await db.execute(
-    "UPDATE transactions SET payment_method_id = NULL WHERE payment_method_id = $1",
-    [id],
-  );
-  await db.execute(
-    `UPDATE transactions SET destination_payment_method_id = NULL
-     WHERE destination_payment_method_id = $1`,
-    [id],
-  );
-  await db.execute("DELETE FROM payment_methods WHERE id = $1", [id]);
-}
-
-export async function countTransactionsForPaymentMethod(id: number): Promise<number> {
-  const db = await getDb();
-  const rows = await db.select<{ total: number }[]>(
-    "SELECT COUNT(*) AS total FROM transactions WHERE payment_method_id = $1",
-    [id],
-  );
-  return rows[0]?.total ?? 0;
+  await db.batch([
+    {
+      query: `INSERT INTO payment_methods (name, type, currency, initial_balance)
+              SELECT 'Sin asignar (' || m.currency || ')', 'other', m.currency, 0
+              FROM payment_methods m
+              WHERE m.id = $1
+                AND ${UNASSIGNED_ACCOUNT_OF} IS NULL
+                AND (m.initial_balance <> 0 OR EXISTS (
+                  SELECT 1 FROM transactions t
+                  WHERE t.payment_method_id = m.id
+                     OR t.destination_payment_method_id = m.id
+                ))`,
+      values: [id],
+    },
+    {
+      query: `UPDATE payment_methods
+              SET initial_balance = initial_balance +
+                (SELECT initial_balance FROM payment_methods WHERE id = $1)
+              WHERE id = ${UNASSIGNED_ACCOUNT_OF}`,
+      values: [id],
+    },
+    {
+      query: `UPDATE transactions SET payment_method_id = ${UNASSIGNED_ACCOUNT_OF}
+              WHERE payment_method_id = $1`,
+      values: [id],
+    },
+    {
+      query: `UPDATE transactions SET destination_payment_method_id = ${UNASSIGNED_ACCOUNT_OF}
+              WHERE destination_payment_method_id = $1`,
+      values: [id],
+    },
+    { query: "DELETE FROM payment_methods WHERE id = $1", values: [id] },
+  ]);
 }
 
 // Joins the category and payment method names in SQL so the UI never has to
@@ -200,15 +260,13 @@ export async function listTransactionsWithCategory(): Promise<TransactionWithCat
   );
 }
 
-// Returns the new row's id so the caller can attach tags to it.
-export async function insertTransaction(transaction: NewTransaction): Promise<number> {
-  const db = await getDb();
-  const result = await db.execute(
-    `INSERT INTO transactions
-       (amount, type, category_id, payment_method_id, destination_payment_method_id,
-        destination_amount, description, date, currency)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-    [
+function insertTransactionStatement(transaction: NewTransaction): BatchStatement {
+  return {
+    query: `INSERT INTO transactions
+              (amount, type, category_id, payment_method_id, destination_payment_method_id,
+               destination_amount, description, date, currency)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    values: [
       transaction.amount,
       transaction.type,
       transaction.categoryId,
@@ -219,29 +277,26 @@ export async function insertTransaction(transaction: NewTransaction): Promise<nu
       transaction.date,
       transaction.currency,
     ],
-  );
-
-  return result.lastInsertId as number;
+  };
 }
 
-export async function updateTransaction(
+function updateTransactionStatement(
   id: number,
   transaction: NewTransaction,
-): Promise<void> {
-  const db = await getDb();
-  await db.execute(
-    `UPDATE transactions
-     SET amount = $1,
-         type = $2,
-         category_id = $3,
-         payment_method_id = $4,
-         destination_payment_method_id = $5,
-         destination_amount = $6,
-         description = $7,
-         date = $8,
-         currency = $9
-     WHERE id = $10`,
-    [
+): BatchStatement {
+  return {
+    query: `UPDATE transactions
+            SET amount = $1,
+                type = $2,
+                category_id = $3,
+                payment_method_id = $4,
+                destination_payment_method_id = $5,
+                destination_amount = $6,
+                description = $7,
+                date = $8,
+                currency = $9
+            WHERE id = $10`,
+    values: [
       transaction.amount,
       transaction.type,
       transaction.categoryId,
@@ -253,12 +308,68 @@ export async function updateTransaction(
       transaction.currency,
       id,
     ],
-  );
+  };
 }
 
+export async function insertTransaction(transaction: NewTransaction): Promise<number> {
+  const db = await getDb();
+  const { query, values } = insertTransactionStatement(transaction);
+  const result = await db.execute(query, values);
+  return result.lastInsertId as number;
+}
+
+export async function updateTransaction(
+  id: number,
+  transaction: NewTransaction,
+): Promise<void> {
+  const db = await getDb();
+  const { query, values } = updateTransactionStatement(id, transaction);
+  await db.execute(query, values);
+}
+
+// The transaction and its tags as one write, so a failure partway never leaves
+// a new movement without the tags it was saved with.
+export async function insertTransactionWithTags(
+  transaction: NewTransaction,
+  tags: string[],
+): Promise<number> {
+  const db = await getDb();
+  const [inserted] = await db.batch([
+    insertTransactionStatement(transaction),
+    ...(await tagStatements(db, insertedIdOf(0), tags)),
+  ]);
+  return inserted.lastInsertId as number;
+}
+
+export async function updateTransactionWithTags(
+  id: number,
+  transaction: NewTransaction,
+  tags: string[],
+): Promise<void> {
+  const db = await getDb();
+  await db.batch([
+    updateTransactionStatement(id, transaction),
+    ...(await tagStatements(db, id, tags)),
+  ]);
+}
+
+// Takes with it what only existed because of the transaction. Attachments and
+// tag links go by cascade; the rest is done here, in the same write.
 export async function deleteTransaction(id: number): Promise<void> {
   const db = await getDb();
-  await db.execute("DELETE FROM transactions WHERE id = $1", [id]);
+  await db.batch([
+    // An expected movement confirmed into this transaction goes back to
+    // waiting. Left "confirmed", it disappeared from the ledger and from the
+    // projection with nothing left to reopen it from.
+    {
+      query: `UPDATE expected_movements
+              SET status = 'pending', transaction_id = NULL
+              WHERE transaction_id = $1 AND status = 'confirmed'`,
+      values: [id],
+    },
+    { query: "DELETE FROM transactions WHERE id = $1", values: [id] },
+    DELETE_UNUSED_TAGS,
+  ]);
 }
 
 // Metadata only; `getAttachmentContent` fetches the bytes when they are needed.
@@ -480,21 +591,6 @@ export async function deleteInstallmentPlan(id: number): Promise<void> {
   await db.execute("DELETE FROM installment_plans WHERE id = $1", [id]);
 }
 
-// Instalments are confirmed strictly in order, so the count is all that needs
-// storing. Guarded against going past the end of the plan.
-export async function advanceInstallmentPlan(
-  id: number,
-  confirmedCount: number,
-): Promise<void> {
-  const db = await getDb();
-  await db.execute(
-    `UPDATE installment_plans
-     SET confirmed_count = MIN($1, installment_count)
-     WHERE id = $2`,
-    [confirmedCount, id],
-  );
-}
-
 export async function listLoans(): Promise<LoanWithNames[]> {
   const db = await getDb();
   return db.select<LoanWithNames[]>(
@@ -575,18 +671,6 @@ export async function updateLoan(id: number, loan: NewLoan): Promise<void> {
 export async function deleteLoan(id: number): Promise<void> {
   const db = await getDb();
   await db.execute("DELETE FROM loans WHERE id = $1", [id]);
-}
-
-// Payments are confirmed strictly in order, so the count is all that needs
-// storing. Guarded against running past the end of the schedule.
-export async function advanceLoan(id: number, confirmedCount: number): Promise<void> {
-  const db = await getDb();
-  await db.execute(
-    `UPDATE loans
-     SET confirmed_count = $1
-     WHERE id = $2 AND $1 <= installment_count AND $1 >= 0`,
-    [confirmedCount, id],
-  );
 }
 
 export async function listRecurringTransactions(): Promise<
@@ -671,17 +755,6 @@ export async function deleteRecurringTransaction(id: number): Promise<void> {
   await db.execute("DELETE FROM recurring_transactions WHERE id = $1", [id]);
 }
 
-// Records how far a series has been dealt with. Called both when an occurrence
-// is accepted into the ledger and when it is dismissed, since either way the
-// user has decided about it and it must stop being proposed.
-export async function markRecurringConfirmed(id: number, date: string): Promise<void> {
-  const db = await getDb();
-  await db.execute(
-    "UPDATE recurring_transactions SET last_confirmed_date = $1 WHERE id = $2",
-    [date, id],
-  );
-}
-
 // Instalments and loan payments are settled strictly in order. A schedule only
 // stores how many are paid, so settling a later one would silently count every
 // earlier one as paid too, with no movement behind it. Checked against the row
@@ -741,9 +814,44 @@ async function getRecurringTransaction(id: number): Promise<RecurringTransaction
   return rows[0] ?? null;
 }
 
-// Records the payment as a real movement and advances the loan by one, in
-// that order, so a failure never leaves a loan claiming a payment that was
-// never written.
+// Moves a schedule on by one payment, but only from the position the caller
+// read. Schedules store a count, so a second click registering the same payment
+// would otherwise write it twice; this way it finds the count already moved on,
+// changes nothing, and the batch it belongs to — the transaction included — is
+// undone with it.
+function advanceScheduleStatement(
+  table: "loans" | "installment_plans",
+  id: number,
+  index: number,
+): BatchStatement {
+  return {
+    query: `UPDATE ${table}
+            SET confirmed_count = confirmed_count + 1
+            WHERE id = $1 AND confirmed_count = $2 AND confirmed_count < installment_count`,
+    values: [id, index],
+    expectChanges: 1,
+  };
+}
+
+// The same compare-and-set for a recurring series, which stores the last
+// occurrence decided on rather than a count. Called both when an occurrence is
+// accepted into the ledger and when it is dismissed, since either way the user
+// has decided about it and it must stop being proposed.
+function advanceSeriesStatement(
+  template: RecurringTransaction,
+  date: string,
+): BatchStatement {
+  return {
+    query: `UPDATE recurring_transactions
+            SET last_confirmed_date = $1
+            WHERE id = $2 AND last_confirmed_date IS $3`,
+    values: [date, template.id, template.last_confirmed_date],
+    expectChanges: 1,
+  };
+}
+
+// Records the payment as a real movement and advances the loan by one, as a
+// single write: neither can land without the other.
 export async function recordLoanPayment(
   id: number,
   index: number,
@@ -754,24 +862,28 @@ export async function recordLoanPayment(
   if (!loan) return;
   assertNextInSchedule("loan", loan, index);
 
-  // A payment on money I owe leaves my pocket; a payment on money owed to me
-  // arrives in it. Recording both as expenses would make being repaid look
-  // like a cost.
-  await insertTransaction({
-    amount,
-    type: loan.direction === "borrowed" ? "expense" : "income",
-    currency: loan.currency,
-    categoryId: loan.category_id,
-    paymentMethodId: loan.payment_method_id,
-    destinationPaymentMethodId: null,
-    destinationAmount: null,
-    description: `${loan.description} (${index + 1}/${loan.installment_count})`,
-    date,
-  });
-  await advanceLoan(id, index + 1);
+  const db = await getDb();
+  await db.batch([
+    advanceScheduleStatement("loans", id, index),
+    // A payment on money I owe leaves my pocket; a payment on money owed to me
+    // arrives in it. Recording both as expenses would make being repaid look
+    // like a cost.
+    insertTransactionStatement({
+      amount,
+      type: loan.direction === "borrowed" ? "expense" : "income",
+      currency: loan.currency,
+      categoryId: loan.category_id,
+      paymentMethodId: loan.payment_method_id,
+      destinationPaymentMethodId: null,
+      destinationAmount: null,
+      description: `${loan.description} (${index + 1}/${loan.installment_count})`,
+      date,
+    }),
+  ]);
 }
 
-// Records one instalment as paid: writes the movement and advances the plan.
+// Records one instalment as paid: writes the movement and advances the plan,
+// as a single write.
 export async function recordInstallment(
   id: number,
   index: number,
@@ -782,39 +894,45 @@ export async function recordInstallment(
   if (!plan) return;
   assertNextInSchedule("installment plan", plan, index);
 
-  await insertTransaction({
-    amount,
-    type: "expense",
-    currency: plan.currency,
-    categoryId: plan.category_id,
-    paymentMethodId: plan.payment_method_id,
-    destinationPaymentMethodId: null,
-    destinationAmount: null,
-    description: `${plan.description} (${index + 1}/${plan.installment_count})`,
-    date,
-  });
-  await advanceInstallmentPlan(id, index + 1);
+  const db = await getDb();
+  await db.batch([
+    advanceScheduleStatement("installment_plans", id, index),
+    insertTransactionStatement({
+      amount,
+      type: "expense",
+      currency: plan.currency,
+      categoryId: plan.category_id,
+      paymentMethodId: plan.payment_method_id,
+      destinationPaymentMethodId: null,
+      destinationAmount: null,
+      description: `${plan.description} (${index + 1}/${plan.installment_count})`,
+      date,
+    }),
+  ]);
 }
 
 // Turns one proposed occurrence into a real transaction and moves the series
-// past it, so it is never proposed twice.
+// past it, as a single write, so it is never proposed — or recorded — twice.
 export async function recordRecurringOccurrence(id: number, date: string): Promise<void> {
   const template = await getRecurringTransaction(id);
   if (!template) return;
   assertNextOccurrence(template, date);
 
-  await insertTransaction({
-    amount: template.amount,
-    type: template.type,
-    currency: template.currency,
-    categoryId: template.category_id,
-    paymentMethodId: template.payment_method_id,
-    destinationPaymentMethodId: null,
-    destinationAmount: null,
-    description: template.description,
-    date,
-  });
-  await markRecurringConfirmed(id, date);
+  const db = await getDb();
+  await db.batch([
+    advanceSeriesStatement(template, date),
+    insertTransactionStatement({
+      amount: template.amount,
+      type: template.type,
+      currency: template.currency,
+      categoryId: template.category_id,
+      paymentMethodId: template.payment_method_id,
+      destinationPaymentMethodId: null,
+      destinationAmount: null,
+      description: template.description,
+      date,
+    }),
+  ]);
 }
 
 // Decides against an occurrence without recording anything, moving the series
@@ -827,7 +945,8 @@ export async function dismissRecurringOccurrence(
   if (!template) return;
   assertNextOccurrence(template, date);
 
-  await markRecurringConfirmed(id, date);
+  const db = await getDb();
+  await db.batch([advanceSeriesStatement(template, date)]);
 }
 
 // Soonest first: the list is a queue of what is coming, and the thing that is
@@ -915,19 +1034,57 @@ export async function deleteExpectedMovement(id: number): Promise<void> {
   await db.execute("DELETE FROM expected_movements WHERE id = $1", [id]);
 }
 
-// Closes a movement out. Confirming carries the transaction it became; deciding
-// against it carries nothing, which is the whole difference between the two —
-// both stop it being proposed, only one of them says it happened.
-export async function closeExpectedMovement(
-  id: number,
-  status: "confirmed" | "dismissed",
-  transactionId: number | null,
-): Promise<void> {
+// Records the movement as having happened: writes the real transaction and
+// closes the movement with its id, as a single write. Only a pending movement
+// can be closed, so confirming twice, or confirming one already dismissed,
+// writes nothing.
+//
+// Dated the day it was due rather than today: the user is recording that the
+// thing they foresaw happened, and moving it to whenever they got around to
+// confirming would put it in the wrong month.
+export async function confirmExpectedMovement(id: number): Promise<void> {
   const db = await getDb();
-  await db.execute(
-    "UPDATE expected_movements SET status = $1, transaction_id = $2 WHERE id = $3",
-    [status, transactionId, id],
+  const [movement] = await db.select<ExpectedMovement[]>(
+    "SELECT * FROM expected_movements WHERE id = $1",
+    [id],
   );
+  if (!movement) return;
+
+  await db.batch([
+    insertTransactionStatement({
+      amount: movement.amount,
+      type: movement.type,
+      currency: movement.currency,
+      categoryId: movement.category_id,
+      paymentMethodId: movement.payment_method_id,
+      destinationPaymentMethodId: null,
+      destinationAmount: null,
+      description: movement.description,
+      date: movement.due_date,
+    }),
+    {
+      query: `UPDATE expected_movements
+              SET status = 'confirmed', transaction_id = $1
+              WHERE id = $2 AND status = 'pending'`,
+      values: [insertedIdOf(0), id],
+      expectChanges: 1,
+    },
+  ]);
+}
+
+// Decides against it. Nothing is recorded, which is the whole difference from
+// confirming — both stop it being proposed, only one of them says it happened.
+export async function dismissExpectedMovement(id: number): Promise<void> {
+  const db = await getDb();
+  await db.batch([
+    {
+      query: `UPDATE expected_movements
+              SET status = 'dismissed', transaction_id = NULL
+              WHERE id = $1 AND status = 'pending'`,
+      values: [id],
+      expectChanges: 1,
+    },
+  ]);
 }
 
 export async function listBudgets(): Promise<BudgetWithCategory[]> {
@@ -979,43 +1136,79 @@ export async function listTags(): Promise<Tag[]> {
   return db.select<Tag[]>("SELECT * FROM tags ORDER BY name");
 }
 
-// Replaces the tags on a transaction with exactly this set. Names are matched
-// case-insensitively (the column is COLLATE NOCASE), so "Viaje" and "viaje"
-// resolve to the same tag rather than quietly creating a near-duplicate.
-export async function setTransactionTags(
-  transactionId: number,
+// A tag left on no transaction would keep being suggested forever, which turns
+// a typo into a permanent entry in the vocabulary.
+const DELETE_UNUSED_TAGS: BatchStatement = {
+  query: "DELETE FROM tags WHERE id NOT IN (SELECT tag_id FROM transaction_tags)",
+};
+
+// The statements that replace the tags on a transaction with exactly this set.
+//
+// Names are matched case-insensitively, so "Viaje" and "viaje" resolve to the
+// same tag rather than quietly creating a near-duplicate. The match is made
+// here rather than left to the column's COLLATE NOCASE, which folds ASCII only
+// and let "Ñandú" and "ñandú" through as two tags. The existing tags are read
+// before the batch runs; a tag deleted in between makes the batch fail whole
+// on its foreign key, rather than write a half-tagged transaction.
+async function tagStatements(
+  db: SqlConnection,
+  transactionId: number | ReturnType<typeof insertedIdOf>,
   names: string[],
-): Promise<void> {
-  const db = await getDb();
+): Promise<BatchStatement[]> {
+  const fold = (name: string) => name.toLocaleLowerCase("es");
 
   const wanted = Array.from(
     new Map(
       names
         .map((name) => name.trim())
         .filter((name) => name !== "")
-        .map((name) => [name.toLocaleLowerCase("es"), name]),
+        .map((name) => [fold(name), name]),
     ).values(),
   );
-
-  await db.execute("DELETE FROM transaction_tags WHERE transaction_id = $1", [
-    transactionId,
-  ]);
-
-  for (const name of wanted) {
-    await db.execute("INSERT OR IGNORE INTO tags (name) VALUES ($1)", [name]);
-    await db.execute(
-      `INSERT OR IGNORE INTO transaction_tags (transaction_id, tag_id)
-       VALUES ($1, (SELECT id FROM tags WHERE name = $2))`,
-      [transactionId, name],
-    );
-  }
-
-  // A tag left on no transaction would keep being suggested forever, which
-  // turns a typo into a permanent entry in the vocabulary.
-  await db.execute(
-    `DELETE FROM tags
-     WHERE id NOT IN (SELECT tag_id FROM transaction_tags)`,
+  const existing = new Map(
+    (await db.select<Tag[]>("SELECT id, name FROM tags")).map((tag) => [
+      fold(tag.name),
+      tag.id,
+    ]),
   );
+
+  return [
+    {
+      query: "DELETE FROM transaction_tags WHERE transaction_id = $1",
+      values: [transactionId],
+    },
+    ...wanted.flatMap((name): BatchStatement[] => {
+      const tagId = existing.get(fold(name));
+      if (tagId !== undefined) {
+        return [
+          {
+            query: `INSERT OR IGNORE INTO transaction_tags (transaction_id, tag_id)
+                    VALUES ($1, $2)`,
+            values: [transactionId, tagId],
+          },
+        ];
+      }
+      return [
+        { query: "INSERT OR IGNORE INTO tags (name) VALUES ($1)", values: [name] },
+        {
+          query: `INSERT OR IGNORE INTO transaction_tags (transaction_id, tag_id)
+                  VALUES ($1, (SELECT id FROM tags WHERE name = $2))`,
+          values: [transactionId, name],
+        },
+      ];
+    }),
+    DELETE_UNUSED_TAGS,
+  ];
+}
+
+// Replaces the tags on a transaction with exactly this set, as one write: a
+// failure partway leaves the old set in place rather than half of the new one.
+export async function setTransactionTags(
+  transactionId: number,
+  names: string[],
+): Promise<void> {
+  const db = await getDb();
+  await db.batch(await tagStatements(db, transactionId, names));
 }
 
 export async function listCategoryRules(): Promise<CategoryRuleWithCategory[]> {
@@ -1060,17 +1253,19 @@ export async function deleteCategoryRule(id: number): Promise<void> {
   await db.execute("DELETE FROM category_rules WHERE id = $1", [id]);
 }
 
-// Inserts many rows in sequence. Every row has already been validated by the
-// import planner, so a mid-way failure is not expected; if one does happen the
-// rows before it stay written, which is preferable to silently discarding a
-// long import that was almost entirely fine.
+// Inserts many rows in sequence, each one whole with its tags. Every row has
+// already been validated by the import planner, so a mid-way failure is not
+// expected; if one does happen the rows before it stay written, which is
+// preferable to silently discarding a long import that was almost entirely
+// fine — and re-importing the file skips them as duplicates.
 export async function insertTransactions(
   entries: { transaction: NewTransaction; tags: string[] }[],
 ): Promise<void> {
   for (const entry of entries) {
-    const id = await insertTransaction(entry.transaction);
     if (entry.tags.length > 0) {
-      await setTransactionTags(id, entry.tags);
+      await insertTransactionWithTags(entry.transaction, entry.tags);
+    } else {
+      await insertTransaction(entry.transaction);
     }
   }
 }

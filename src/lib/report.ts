@@ -55,7 +55,10 @@ function monthKeysFor(
 
   if (first === undefined || last === undefined) return [];
 
-  return getMonthKeysBetween(first.slice(0, 7), last.slice(0, 7));
+  // Every month, uncapped. The cap exists to keep the on-screen chart readable;
+  // a printed table has room for them all, and trimming it made the monthly
+  // rows stop adding up to the totals printed above them.
+  return getMonthKeysBetween(first.slice(0, 7), last.slice(0, 7), Infinity);
 }
 
 // Assembles everything the printed report shows, from the same filters the user

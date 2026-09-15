@@ -9,7 +9,8 @@ import type {
 } from "@/db/schema";
 import { TRANSACTION_TYPE_LABELS } from "@/lib/labels";
 import { normalizeForSearch as normalize } from "@/lib/text";
-import { matchCategoryId } from "@/lib/categoryRules";
+import { matchCategoryIdForType } from "@/lib/categoryRules";
+import { parseFlexibleAmount, parseFlexibleDate } from "@/lib/importMapping";
 import { splitTagNames } from "@/lib/text";
 
 export const CSV_HEADERS = [
@@ -173,28 +174,6 @@ function parseType(value: string): TransactionType | null {
   return null;
 }
 
-function parseNumber(value: string): number | null {
-  const trimmed = value.trim();
-  if (trimmed === "") return null;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-
-// The shape check alone would wave through "2026-13-99" and "2026-02-30", so
-// the parts are rebuilt into a Date and compared back.
-function isValidIsoDate(value: string): boolean {
-  if (!ISO_DATE.test(value)) return false;
-
-  const [year, month, day] = value.split("-").map(Number);
-  const date = new Date(year, month - 1, day);
-
-  return (
-    date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day
-  );
-}
-
 export interface ImportSkip {
   line: number;
   reason: string;
@@ -271,17 +250,21 @@ export function buildImportPlan(rows: string[][], context: ImportContext): Impor
     context.accounts.map((account) => [normalize(account.name), account]),
   );
 
-  const seen = new Set(
-    context.existing.map((transaction) =>
-      duplicateKey(
-        transaction.date,
-        transaction.type,
-        transaction.amount,
-        transaction.currency,
-        transaction.description ?? "",
-      ),
-    ),
-  );
+  // How many of each movement the database already holds. A row is skipped
+  // only while the file has not brought more of it than that, so importing the
+  // same file twice adds nothing, while two identical fares on one day both
+  // make it in.
+  const alreadyHeld = new Map<string, number>();
+  for (const transaction of context.existing) {
+    const key = duplicateKey(
+      transaction.date,
+      transaction.type,
+      transaction.amount,
+      transaction.currency,
+      transaction.description ?? "",
+    );
+    alreadyHeld.set(key, (alreadyHeld.get(key) ?? 0) + 1);
+  }
 
   for (let index = 1; index < rows.length; index++) {
     const row = rows[index];
@@ -289,9 +272,16 @@ export function buildImportPlan(rows: string[][], context: ImportContext): Impor
     const line = index + 1;
     const cell = (name: string) => (row[column(name)] ?? "").trim();
 
-    const date = cell("fecha");
-    if (!isValidIsoDate(date)) {
-      skipped.push({ line, reason: `Fecha inválida: "${date}" (se espera AAAA-MM-DD)` });
+    // Dates and amounts are read the way a bank statement is: the app writes
+    // "2026-08-01" and "1234.56", but the same file saved again by Excel in an
+    // Argentine locale says "1/8/2026" and "1234,56".
+    const rawDate = cell("fecha");
+    const date = parseFlexibleDate(rawDate);
+    if (date === null) {
+      skipped.push({
+        line,
+        reason: `Fecha inválida: "${rawDate}" (se espera AAAA-MM-DD o DD/MM/AAAA)`,
+      });
       continue;
     }
 
@@ -301,7 +291,7 @@ export function buildImportPlan(rows: string[][], context: ImportContext): Impor
       continue;
     }
 
-    const amount = parseNumber(cell("monto"));
+    const amount = parseFlexibleAmount(cell("monto"));
     if (amount === null || amount <= 0) {
       skipped.push({ line, reason: `Monto inválido: "${cell("monto")}"` });
       continue;
@@ -345,7 +335,7 @@ export function buildImportPlan(rows: string[][], context: ImportContext): Impor
       destinationId = destination.id;
       // An omitted destination amount means the transfer did not change
       // currency, so the same figure lands on the other side.
-      destinationAmount = parseNumber(cell("monto_destino")) ?? amount;
+      destinationAmount = parseFlexibleAmount(cell("monto_destino")) ?? amount;
     } else {
       const categoryName = cell("categoria");
       if (categoryName !== "") {
@@ -361,27 +351,22 @@ export function buildImportPlan(rows: string[][], context: ImportContext): Impor
         }
         categoryId = category.id;
       } else {
-        // A rule names one category, which is of one kind. Applying an expense
-        // rule to an income row would file the money under a category that
-        // cannot hold it, so a mismatched rule is simply not applied.
-        const suggested = matchCategoryId(description, context.categoryRules ?? []);
-        const suggestedCategory = context.categories.find(
-          (category) => category.id === suggested,
+        categoryId = matchCategoryIdForType(
+          description,
+          context.categoryRules ?? [],
+          context.categories,
+          type,
         );
-        categoryId =
-          suggestedCategory !== undefined && suggestedCategory.type === type
-            ? suggestedCategory.id
-            : null;
       }
     }
 
     const key = duplicateKey(date, type, amount, currency, description);
-    if (seen.has(key)) {
+    const held = alreadyHeld.get(key) ?? 0;
+    if (held > 0) {
+      alreadyHeld.set(key, held - 1);
       duplicates += 1;
       continue;
     }
-    // Also guards against the same row appearing twice within one file.
-    seen.add(key);
 
     const tagColumn = column(TAGS_HEADER);
     const tags =

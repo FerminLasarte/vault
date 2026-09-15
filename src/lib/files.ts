@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { documentDir, join } from "@tauri-apps/api/path";
 import { open, save } from "@tauri-apps/plugin-dialog";
+import { fileNameFromPath } from "@/lib/paths";
 
 // The native pickers return the path the user chose; the actual reading and
 // writing happens in Rust (see src-tauri/src/lib.rs), which keeps the webview
@@ -20,9 +21,13 @@ const STATEMENT_FILTER = [
 // machine — the one thing a local-first app cannot do for itself. Falls back to
 // a bare file name if the folder cannot be resolved, which only loses the
 // suggestion, not the save.
+//
+// Only the name is kept: an attachment picked on Windows before names were cut
+// down stored its whole original path, and joining that would suggest the
+// original folder instead of Documents.
 async function suggestPath(fileName: string): Promise<string> {
   try {
-    return await join(await documentDir(), fileName);
+    return await join(await documentDir(), fileNameFromPath(fileName));
   } catch {
     return fileName;
   }
@@ -108,7 +113,7 @@ export async function pickAttachment(): Promise<PickedAttachment | null> {
   if (path === null || typeof path !== "string") return null;
 
   const contentBase64 = await invoke<string>("read_file_base64", { path });
-  const fileName = path.split("/").pop() ?? "comprobante";
+  const fileName = fileNameFromPath(path) || "comprobante";
   const extension = fileName.split(".").pop()?.toLowerCase() ?? "";
 
   return {
@@ -161,7 +166,7 @@ export async function openStatementFile(): Promise<PickedStatement | null> {
   });
   if (path === null || typeof path !== "string") return null;
 
-  const fileName = path.split("/").pop() ?? path;
+  const fileName = fileNameFromPath(path);
 
   if (/\.xlsx?$/i.test(path)) {
     const base64 = await invoke<string>("read_file_base64", { path });

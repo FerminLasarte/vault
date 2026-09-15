@@ -27,7 +27,7 @@ import type {
 import { TRANSACTION_TYPE_LABELS } from "@/lib/labels";
 import { CURRENCY_LABELS } from "@/lib/currency";
 import { todayIsoDate } from "@/lib/format";
-import { matchCategoryId } from "@/lib/categoryRules";
+import { matchCategoryIdForType } from "@/lib/categoryRules";
 import { splitTagNames } from "@/lib/text";
 import { cn } from "@/lib/utils";
 import { toSelectValue } from "@/lib/forms";
@@ -299,19 +299,22 @@ export function TransactionForm({
     setValue("destinationAmount", selectedAmount, { shouldValidate: false });
   }, [isSameCurrencyTransfer, selectedAmount, setValue]);
 
-  // Fill in the category from the rules as the description is typed.
+  // Fill in the category from the rules as the description is typed. Only rules
+  // of the form's own kind apply: an expense rule while the form is on income
+  // is left alone rather than silently switching the type.
   useEffect(() => {
-    if (isTransfer || categoryTouchedRef.current) return;
+    if (selectedType === "transfer" || categoryTouchedRef.current) return;
 
-    const matched = matchCategoryId(typedDescription ?? "", categoryRules);
+    const matched = matchCategoryIdForType(
+      typedDescription ?? "",
+      categoryRules,
+      categories,
+      selectedType,
+    );
     if (matched === null) return;
 
-    // A rule can point at a category of the other kind (an expense rule while
-    // the form is on income); leaving it alone beats silently switching type.
-    if (!filteredCategories.some((category) => category.id === matched)) return;
-
     setValue("categoryId", matched, { shouldValidate: false });
-  }, [typedDescription, categoryRules, isTransfer, filteredCategories, setValue]);
+  }, [typedDescription, categoryRules, categories, selectedType, setValue]);
 
   const categorySelectItems = useMemo(
     () =>
