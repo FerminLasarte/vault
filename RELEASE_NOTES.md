@@ -7,36 +7,61 @@ the release page afterwards never reach anyone who already has the app.
 
 ## Novedades
 
-- **Las explicaciones al pasar el cursor ahora las dibuja la app.**
+- **Una invitación a donar, cada tanto.**
 
-  Hasta acá eran las del sistema: tardaban un segundo en aparecer, salían
-  siempre en el mismo lugar sin importar dónde estuviera el cursor, se
-  desvanecían solas a los pocos segundos y no seguían el tema claro u oscuro.
-  Ahora aparecen al instante, siguen al cursor y se quedan mientras estés encima.
+  Vault es gratis y sin publicidad, y lo va a seguir siendo. De vez en cuando, al
+  abrirla, aparece un aviso chico en la esquina para donar por Mercado Pago, con
+  el link o copiando el alias. Donar es totalmente opcional.
 
-  Alcanza al panel lateral, las etiquetas, el diálogo de categorías, la barra de
-  resumen y los botones de acción.
+  Nunca aparece en las primeras dos semanas, como mucho una vez cada dos meses, y
+  no tapa nada: se cierra con Esc o con la X. «No mostrar más» lo apaga para
+  siempre. Nada de esto sale de tu equipo.
+
+- **El patrimonio neto cuenta los préstamos.** Resta el capital que todavía
+  debés y suma el que te deben, sin contar intereses que todavía no corrieron.
+
+- **Cada cierre se guarda con el nombre de su mes.** En macOS, el PDF se ofrece
+  como «Vault - Cierre de agosto de 2026» en vez de «Vault».
+
+- **Borrar una cuenta avisa qué más se mueve.** Sus movimientos y también sus
+  recurrentes, cuotas, préstamos y previstos pasan a «Sin asignar», y el diálogo
+  dice cuántos antes de confirmar.
 
 ## Arreglos
 
-- **Las cifras de «Ya comprometido» y «Previsto» ya no quedan pegadas al borde.**
-  Los meses arrancaban al ras de la tarjeta, desalineados del título que tenían
-  justo arriba.
+- **Tus datos, más protegidos.** Guardar la copia de seguridad encima del
+  archivo de la base en uso ya no la borra, y la copia incluye siempre lo último
+  que cargaste. Guardar dos veces seguidas ya no duplica un movimiento.
 
-- **En tema oscuro, las cifras del gráfico de ingresos vs. gastos ya se leen.**
-  Al pasar el cursor por un mes, el globo mostraba los importes en negro sobre
-  fondo oscuro: estaban ahí, pero no se veían. Los puntos de la leyenda tenían el
-  mismo problema y ahora salen en su color.
+- **Compromisos.** Registrar una recurrente atrasada que no es la más vieja ya no
+  hace desaparecer las anteriores. Un compromiso sin cuenta registra sus
+  movimientos en «Sin asignar» en vez de dejarlos fuera de todo saldo.
+  «Descartar» ahora se puede deshacer.
 
-- **El gráfico de ingresos vs. gastos ya no agrega meses vacíos al final.** Sin
-  cuotas, préstamos ni recurrentes cargados, el eje se estiraba igual tres meses
-  hacia adelante y aparecía la aclaración sobre los meses claros, explicando unas
-  barras que no estaban.
+- **Cotizaciones.** Una cotización corregida a mano ya no se pisa al volver a
+  abrir la app, a la noche ya no queda con fecha de mañana, y cambiar el tipo de
+  dólar trae la cotización una sola vez.
 
-- **El contador de pendientes y el aviso sobre un mismo presupuesto ya no pueden
-  discrepar.** El contador medía el presupuesto contra el reloj de la máquina en
-  lugar de la fecha con la que se calcula todo lo demás, así que al cambiar de
-  mes podía estar mirando un período distinto al del aviso.
+- **Importar.** Los movimientos repetidos de verdad ya no se descartan como
+  duplicados, el CSV de Vault se puede volver a importar después de abrirlo con
+  Excel, y el resumen bancario aplica solo reglas del tipo que corresponde.
+
+- **Categorías y reglas.** Al editar un movimiento, una regla ya no le cambia la
+  categoría que tenía guardada. Cada categoría nueva recibe un color distinto.
+
+- **Cierres e informes.** Un mes que solo tuvo transferencias ya no rompe
+  Cierres, y el informe impreso ya no se corta en los últimos 12 meses.
+
+- **Pantallas.** Una transferencia entre pesos y dólares muestra su importe en
+  dos líneas, así las acciones de cada fila entran en la ventana. El menú de la
+  app funciona desde cualquier pantalla. Borrar siempre pide confirmación.
+
+- **Textos.** Todo en castellano rioplatense, con los montos en formato
+  argentino y los errores del sistema traducidos. «1 transacción importada» ya no
+  sale en plural.
+
+- **Más rápida.** Guardar ya no vuelve a leer todos tus datos, y «hoy» se
+  actualiza si dejás la app abierta de un día para otro.
 
 ## Instalación
 
