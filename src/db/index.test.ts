@@ -345,6 +345,27 @@ describe("exchange rates", () => {
     expect((await listExchangeRates("bolsa"))[0].sell).toBe(9999);
   });
 
+  it("does not let today's download overwrite a manual correction either", async () => {
+    // The single-row path is the one the app runs on every launch: the manual
+    // figure is stored under today's date, and the next fetch brings the same
+    // date back.
+    await upsertExchangeRate(aRate({ sell: 1500, source: "manual" }));
+
+    await upsertExchangeRate(aRate({ sell: 1100 }));
+
+    const [stored] = await listExchangeRates("bolsa");
+    expect(stored.sell).toBe(1500);
+    expect(stored.source).toBe("manual");
+  });
+
+  it("lets a manual correction replace a downloaded quote", async () => {
+    await upsertExchangeRate(aRate({ sell: 1100 }));
+
+    await upsertExchangeRate(aRate({ sell: 1500, source: "manual" }));
+
+    expect((await listExchangeRates("bolsa"))[0].sell).toBe(1500);
+  });
+
   it("writes a series larger than one parameter batch", async () => {
     // The batching exists because SQLite caps bound parameters per statement;
     // a series of a few thousand days is the normal case, not an edge one.

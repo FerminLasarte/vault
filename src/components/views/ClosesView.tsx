@@ -51,19 +51,28 @@ export function ClosesView() {
       trend: buildMonthlyTrend(filterByCurrency(transactions, currency), monthKeys),
     }));
 
-    return monthKeys.map((monthKey, index) => ({
-      monthKey,
-      totals: byCurrency
-        .map(({ currency, trend }) => ({
-          currency,
-          income: trend[index].income,
-          expenses: trend[index].expenses,
-          balance: trend[index].income - trend[index].expenses,
+    return (
+      monthKeys
+        .map((monthKey, index) => ({
+          monthKey,
+          totals: byCurrency
+            .map(({ currency, trend }) => ({
+              currency,
+              income: trend[index].income,
+              expenses: trend[index].expenses,
+              balance: trend[index].income - trend[index].expenses,
+            }))
+            // A currency that did not move that month says nothing by being
+            // listed as three zeroes.
+            .filter(
+              (entry): entry is MonthTotals => entry.income > 0 || entry.expenses > 0,
+            ),
         }))
-        // A currency that did not move that month says nothing by being listed
-        // as three zeroes.
-        .filter((entry): entry is MonthTotals => entry.income > 0 || entry.expenses > 0),
-    }));
+        // A month can still end up with no figures at all — an expense of zero
+        // counts as a movement but adds nothing — and a row has to lead with
+        // one currency, so such a month is left out rather than rendered.
+        .filter((month) => month.totals.length > 0)
+    );
   }, [transactions, monthKeys]);
 
   // Only the month actually being printed is built in full, and only once it is

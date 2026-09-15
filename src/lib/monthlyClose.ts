@@ -1,4 +1,4 @@
-import type { TransactionWithCategory } from "@/db/schema";
+import type { Transaction, TransactionWithCategory } from "@/db/schema";
 import {
   calculateSummary,
   currentMonthKey,
@@ -144,6 +144,7 @@ function breakdownFor(
   expenses: CategoryBreakdownEntry[];
   income: CategoryBreakdownEntry[];
   count: number;
+  hasIncomeOrExpense: boolean;
 } {
   const rows = filterByMonth(transactions, monthKey);
 
@@ -152,7 +153,17 @@ function breakdownFor(
     expenses: groupByCategory(rows, "expense"),
     income: groupByCategory(rows, "income"),
     count: rows.length,
+    hasIncomeOrExpense: rows.some(isIncomeOrExpense),
   };
+}
+
+// What makes a month worth a close. A transfer only moves money between two of
+// the user's own accounts — nothing is earned or spent — so a month holding
+// nothing but transfers has no income, no expenses and nothing to compare. Every
+// question of "does this month have a close" goes through here, so the list,
+// the document and the notification cannot disagree about it.
+function isIncomeOrExpense(transaction: Pick<Transaction, "type">): boolean {
+  return transaction.type === "income" || transaction.type === "expense";
 }
 
 function closeForCurrency(
@@ -167,7 +178,7 @@ function closeForCurrency(
 
   // A currency that did not move this month gets no block at all, rather than a
   // page of zeroes explaining that nothing happened in it.
-  if (month.count === 0) return null;
+  if (!month.hasIncomeOrExpense) return null;
 
   // `getRecentMonthKeys` returns ascending keys ending at the reference, so the
   // first of two is last month and the first of thirteen is this month a year
@@ -180,7 +191,7 @@ function closeForCurrency(
     const against = breakdownFor(inCurrency, againstKey);
     // Nothing on record for that month: there is no comparison to draw, and
     // one against zero would read as "everything is new".
-    if (against.count === 0) return null;
+    if (!against.hasIncomeOrExpense) return null;
 
     return {
       monthKey: againstKey,
@@ -235,7 +246,7 @@ export function lastClosedMonthKey(today: Date = new Date()): string {
 // stops short of it: a close that changes under the reader is not a close. So
 // is any month with nothing in it — there is no report to offer.
 export function closedMonthKeys(
-  transactions: TransactionWithCategory[],
+  transactions: Transaction[],
   today: Date = new Date(),
 ): string[] {
   const current = currentMonthKey(today);
@@ -243,7 +254,7 @@ export function closedMonthKeys(
 
   for (const transaction of transactions) {
     const monthKey = transaction.date.slice(0, 7);
-    if (monthKey < current) months.add(monthKey);
+    if (monthKey < current && isIncomeOrExpense(transaction)) months.add(monthKey);
   }
 
   return Array.from(months).sort((a, b) => b.localeCompare(a));
@@ -252,9 +263,6 @@ export function closedMonthKeys(
 // Whether a month is worth announcing: it has to have finished, and it has to
 // have something in it. Announcing an empty month would be telling the user
 // their report on nothing is ready.
-export function hasClose(
-  transactions: TransactionWithCategory[],
-  monthKey: string,
-): boolean {
-  return filterByMonth(transactions, monthKey).length > 0;
+export function hasClose(transactions: Transaction[], monthKey: string): boolean {
+  return filterByMonth(transactions, monthKey).some(isIncomeOrExpense);
 }

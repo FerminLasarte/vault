@@ -1,4 +1,5 @@
 import type { ExchangeRate } from "@/db/schema";
+import { toIsoDate, todayIsoDate } from "@/lib/format";
 
 // The dollar rates dolarapi.com publishes, all of them real prices for the same
 // day. Which one values a movement honestly depends on how the movement
@@ -88,6 +89,18 @@ function isRatePayload(value: unknown): value is DolarApiResponse {
   return isValidRate(candidate.compra) && isValidRate(candidate.venta);
 }
 
+// The local calendar day of a provider timestamp, or null when there is none
+// to read. A bare "YYYY-MM-DD" already is a calendar day and is taken as it
+// is: `new Date` would read it as midnight UTC, which is the previous evening
+// in Argentina.
+function localDayOf(timestamp: string | undefined): string | null {
+  if (timestamp === undefined) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(timestamp)) return timestamp;
+
+  const instant = new Date(timestamp);
+  return Number.isNaN(instant.getTime()) ? null : toIsoDate(instant);
+}
+
 // Fetches the current quote for one rate. Throws on any network, timeout or
 // shape problem; callers are expected to fall back to the last cached quote,
 // since being offline must never break the app.
@@ -106,9 +119,12 @@ export async function fetchRate(type: RateType): Promise<ExchangeRate> {
     throw new Error("Exchange rate response did not contain usable figures");
   }
 
-  // The API timestamps the quote itself; falling back to today keeps the row
-  // keyable even if that field ever goes missing.
-  const date = (payload.fechaActualizacion ?? "").slice(0, 10) || todayKey();
+  // The API timestamps the quote itself, in UTC. Read as the local calendar day
+  // — the one every other date in the app uses — rather than sliced: from 21:00
+  // in Argentina the UTC date is already tomorrow, and a row keyed to tomorrow
+  // wins over today's manual correction. Falling back to today keeps the row
+  // keyable if the field is ever missing or unreadable.
+  const date = localDayOf(payload.fechaActualizacion) ?? todayIsoDate();
 
   return {
     date,
@@ -118,10 +134,6 @@ export async function fetchRate(type: RateType): Promise<ExchangeRate> {
     source: rateSourceFor(type),
     fetched_at: new Date().toISOString(),
   };
-}
-
-function todayKey(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 interface DolarApiHistoryEntry {

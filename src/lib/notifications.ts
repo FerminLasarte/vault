@@ -1,10 +1,10 @@
-import { calculateBudgetProgress, budgetPeriodKey, filterByMonth } from "@/lib/finance";
+import { calculateBudgetProgress, budgetPeriodKey } from "@/lib/finance";
 import { collectPendingExpected } from "@/lib/expected";
 import { collectPendingInstallments } from "@/lib/pendingInstallments";
 import { collectPendingLoanPayments } from "@/lib/pendingLoans";
 import { collectPendingRecurrences } from "@/lib/pendingRecurring";
 import { formatCurrency, formatDate, formatMonthLabel, parseIsoDate } from "@/lib/format";
-import { lastClosedMonthKey } from "@/lib/monthlyClose";
+import { hasClose, lastClosedMonthKey } from "@/lib/monthlyClose";
 import type {
   BudgetWithCategory,
   ExpectedMovementWithNames,
@@ -53,7 +53,7 @@ export function pendingNotifications(
   // the month, so `decideNotifications` announces each one exactly once and
   // never again — no separate "already told them" bookkeeping needed here.
   const closedMonth = lastClosedMonthKey(parseIsoDate(today));
-  if (filterByMonth(sources.transactions, closedMonth).length > 0) {
+  if (hasClose(sources.transactions, closedMonth)) {
     notifications.push({
       id: `monthly-close:${closedMonth}`,
       title: "Tu cierre de mes está listo",

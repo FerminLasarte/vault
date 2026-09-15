@@ -76,8 +76,46 @@ function renderView(transactions: TransactionWithCategory[]) {
     removeTransaction: vi.fn(),
   } as unknown as AppData;
 
-  return render(<TransactionsView request={null} tab={null} />);
+  return render(
+    <TransactionsView request={null} tab={null} onRequestHandled={vi.fn()} />,
+  );
 }
+
+describe("TransactionsView and the Archivo menu", () => {
+  // "Nueva transacción" chosen from another screen switches to this view and
+  // hands it the request in the same render, so the view mounts with it
+  // already pending. It used to count that request as handled on mount and
+  // never open the dialog.
+  it("opens the dialog for a request that was pending when it mounted", () => {
+    renderView([]);
+    const onRequestHandled = vi.fn();
+
+    render(
+      <TransactionsView
+        request={{ action: "new-transaction", seq: 1 }}
+        tab={null}
+        onRequestHandled={onRequestHandled}
+      />,
+    );
+
+    expect(screen.getByRole("dialog")).toHaveTextContent("Nueva transacción");
+    expect(onRequestHandled).toHaveBeenCalledWith(1);
+  });
+
+  it("ignores an action meant for another view", () => {
+    renderView([]);
+
+    render(
+      <TransactionsView
+        request={{ action: "backup", seq: 1 }}
+        tab={null}
+        onRequestHandled={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
 
 describe("TransactionsView", () => {
   it("says so plainly when there is nothing to show", () => {

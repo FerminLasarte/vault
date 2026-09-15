@@ -48,4 +48,7 @@ export interface ViewProps {
   // Which tab the user asked for, for the views that have them. Null until a
   // menu entry names one.
   tab: TabRequest | null;
+  // Called by a view once it has acted on `request`, so App can clear it and a
+  // later visit to the view does not run it again.
+  onRequestHandled: (seq: number) => void;
 }

@@ -57,6 +57,43 @@ describe("rate types", () => {
   });
 });
 
+describe("fetchRate and the calendar day", () => {
+  // dolarapi stamps quotes in UTC. From 21:00 in Argentina that is already the
+  // next day, so slicing the timestamp keyed the quote to tomorrow — and the
+  // latest row is picked by date, so it then beat today's manual correction.
+  const LATE_EVENING = "2026-09-15T02:30:00.000Z"; // 23:30 on the 14th in Buenos Aires
+
+  it("keys the quote to the local day it was published on", async () => {
+    vi.stubEnv("TZ", "America/Argentina/Buenos_Aires");
+    try {
+      // Guards the test itself: if the zone did not take, it proves nothing.
+      expect(new Date(LATE_EVENING).getDate()).toBe(14);
+      mockFetch({ compra: 1000, venta: 1100, fechaActualizacion: LATE_EVENING });
+
+      const rate = await fetchRate("bolsa");
+
+      expect(rate.date).toBe("2026-09-14");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("falls back to the local day when the quote carries no timestamp", async () => {
+    vi.stubEnv("TZ", "America/Argentina/Buenos_Aires");
+    vi.useFakeTimers({ now: new Date(LATE_EVENING), toFake: ["Date"] });
+    try {
+      mockFetch({ compra: 1000, venta: 1100 });
+
+      const rate = await fetchRate("bolsa");
+
+      expect(rate.date).toBe("2026-09-14");
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllEnvs();
+    }
+  });
+});
+
 describe("fetchRate", () => {
   it("requests the rate that was asked for", async () => {
     const spy = mockFetch({

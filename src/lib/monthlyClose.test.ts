@@ -281,6 +281,34 @@ describe("lastClosedMonthKey", () => {
   });
 });
 
+describe("buildMonthlyClose with transfers", () => {
+  const transfer = (overrides: Partial<TransactionWithCategory>) =>
+    tx({
+      type: "transfer",
+      category_id: null,
+      destination_payment_method_id: 2,
+      ...overrides,
+    });
+
+  it("gives no block to a currency that only moved between accounts", () => {
+    const close = buildMonthlyClose(
+      [tx({ date: "2026-08-10" }), transfer({ date: "2026-08-12", currency: "USD" })],
+      "2026-08",
+    );
+
+    expect(close.currencies.map((block) => block.currency)).toEqual(["ARS"]);
+  });
+
+  it("draws no comparison against a month that only moved between accounts", () => {
+    const close = buildMonthlyClose(
+      [tx({ date: "2026-08-10" }), transfer({ date: "2026-07-12" })],
+      "2026-08",
+    );
+
+    expect(blockFor(close, "ARS").previousMonth).toBeNull();
+  });
+});
+
 describe("hasClose", () => {
   it("is true for a month with movements", () => {
     expect(hasClose([tx({ date: "2026-07-10" })], "2026-07")).toBe(true);
@@ -294,6 +322,13 @@ describe("hasClose", () => {
   it("counts a movement in any currency", () => {
     // The close covers all of them, so any one of them makes it worth offering.
     expect(hasClose([tx({ date: "2026-07-10", currency: "USD" })], "2026-07")).toBe(true);
+  });
+
+  it("is false for a month with only transfers", () => {
+    // Moving money between two accounts earns nothing and spends nothing, so a
+    // close of that month would be a report of zeroes.
+    const history = [tx({ date: "2026-07-10", type: "transfer", category_id: null })];
+    expect(hasClose(history, "2026-07")).toBe(false);
   });
 });
 
@@ -345,5 +380,14 @@ describe("closedMonthKeys", () => {
 
   it("is empty when nothing has closed yet", () => {
     expect(closedMonthKeys([tx({ date: "2026-08-02" })], TODAY)).toEqual([]);
+  });
+
+  it("leaves out a month with only transfers", () => {
+    // Listed, it had no income or expense to show and Cierres crashed on it.
+    const history = [
+      tx({ date: "2026-07-10" }),
+      tx({ date: "2026-06-10", type: "transfer", category_id: null }),
+    ];
+    expect(closedMonthKeys(history, TODAY)).toEqual(["2026-07"]);
   });
 });

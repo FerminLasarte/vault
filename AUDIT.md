@@ -42,14 +42,14 @@ earlier decision and are not listed.
 | S-01 | Backup may be stale or internally inconsistent (WAL)               | suspicion   | medium   | 1     | [x]  |
 | B-02 | Confirming a non-oldest occurrence silently drops the earlier ones | bug         | high     | 1     | [x]  |
 | I-01 | No guard against editing an already-shipped migration              | improvement | medium   | 1     | [x]  |
-| B-03 | Cierres crashes on a closed month with only transfers              | bug         | high     | 2     | [ ]  |
-| B-04 | Native menu actions do nothing when fired from another view        | bug         | high     | 2     | [ ]  |
-| B-05 | A manual exchange-rate correction is overwritten on relaunch       | bug         | medium   | 2     | [ ]  |
-| B-06 | Every failed mutation shows two error toasts                       | bug         | medium   | 2     | [ ]  |
-| B-07 | A failed reload is reported as a failed mutation                   | bug         | low      | 2     | [ ]  |
-| B-08 | Changing the dollar type fetches the rate twice                    | bug         | low      | 2     | [ ]  |
-| S-02 | A late response for the previous dollar type can win               | suspicion   | low      | 2     | [ ]  |
-| S-03 | Fetched rates may be keyed to tomorrow's date (UTC)                | suspicion   | low      | 2     | [ ]  |
+| B-03 | Cierres crashes on a closed month with only transfers              | bug         | high     | 2     | [x]  |
+| B-04 | Native menu actions do nothing when fired from another view        | bug         | high     | 2     | [x]  |
+| B-05 | A manual exchange-rate correction is overwritten on relaunch       | bug         | medium   | 2     | [x]  |
+| B-06 | Every failed mutation shows two error toasts                       | bug         | medium   | 2     | [x]  |
+| B-07 | A failed reload is reported as a failed mutation                   | bug         | low      | 2     | [x]  |
+| B-08 | Changing the dollar type fetches the rate twice                    | bug         | low      | 2     | [x]  |
+| S-02 | A late response for the previous dollar type can win               | suspicion   | low      | 2     | [x]  |
+| S-03 | Fetched rates may be keyed to tomorrow's date (UTC)                | suspicion   | low      | 2     | [x]  |
 | B-09 | Multi-statement writes are not atomic; double submit duplicates    | bug         | medium   | 3     | [ ]  |
 | B-10 | Statement importer applies rules of the wrong category type        | bug         | medium   | 3     | [ ]  |
 | B-11 | Savings goal due in under a month always shows "not on track"      | bug         | medium   | 3     | [ ]  |
@@ -219,7 +219,7 @@ earlier decision and are not listed.
   used by `closedMonthKeys`, `hasClose`, `closeForCurrency` and the
   notification; and `ClosesView` skips rows with no totals as a safety net.
   Add a test with a transfers-only month.
-- [ ] Done
+- [x] Done
 
 ### B-04 · Native menu actions do nothing when fired from another view
 
@@ -244,7 +244,7 @@ earlier decision and are not listed.
   request on mount, or have `App` clear `request` once consumed (an
   `onRequestHandled()` callback). Add a test that mounts a view with a
   pending request.
-- [ ] Done
+- [x] Done
 
 ### B-05 · A manual exchange-rate correction is overwritten on relaunch
 
@@ -266,7 +266,7 @@ earlier decision and are not listed.
   conversion that day uses another rate.
 - **Proposal:** add `WHERE exchange_rates.source <> 'manual' OR
 excluded.source = 'manual'` to the single upsert, plus a test for that path.
-- [ ] Done
+- [x] Done
 
 ### B-06 · Every failed mutation shows two error toasts
 
@@ -287,7 +287,7 @@ excluded.source = 'manual'` to the single upsert, plus a test for that path.
 - **Proposal:** `runMutation` stops rethrowing and returns `Promise<boolean>`;
   dialogs close only on `true`. If rethrowing is kept, mark the error as
   already reported and have the global handler ignore it.
-- [ ] Done
+- [x] Done
 
 ### B-07 · A failed reload is reported as a failed mutation
 
@@ -298,7 +298,7 @@ excluded.source = 'manual'` to the single upsert, plus a test for that path.
   agregar la transacción", retries, and creates a duplicate.
 - **Proposal:** catch `refresh` separately: success toast for the mutation, and
   a distinct "No se pudieron recargar los datos". Do it together with B-06.
-- [ ] Done
+- [x] Done
 
 ### B-08 · Changing the dollar type fetches the rate twice
 
@@ -310,7 +310,7 @@ excluded.source = 'manual'` to the single upsert, plus a test for that path.
   effect at `:471` and fetches and upserts a second time.
 - **Proposal:** drop the fetch from `setRateType`, or make the effect depend
   only on `isLoading` and read the type from a ref.
-- [ ] Done
+- [x] Done
 
 ### S-02 · A late response for the previous dollar type can win
 
@@ -324,7 +324,7 @@ excluded.source = 'manual'` to the single upsert, plus a test for that path.
 - **How to confirm:** switch types several times with network throttling.
 - **Proposal:** ignore the response when `rate.rate_type` differs from the
   current type (kept in a ref). Do it together with B-08.
-- [ ] Done
+- [x] Done
 
 ### S-03 · Fetched rates may be keyed to tomorrow's date (UTC)
 
@@ -340,7 +340,7 @@ excluded.source = 'manual'` to the single upsert, plus a test for that path.
 - **How to confirm:** inspect a real dolarapi payload (does it end in `Z`?).
 - **Proposal:** derive the local date: `toIsoDate(new Date(fechaActualizacion))`
   and use the local `todayIsoDate` as fallback.
-- [ ] Done
+- [x] Done
 
 ---
 
