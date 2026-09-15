@@ -18,7 +18,7 @@ import {
 import { formatCurrency } from "@/lib/format";
 import { outstandingByCurrency } from "@/lib/installments";
 import { PAYMENT_METHOD_TYPE_LABELS } from "@/lib/labels";
-import { accountGoalsNotice } from "@/lib/deletionNotice";
+import { accountCommitmentsNotice, accountGoalsNotice } from "@/lib/deletionNotice";
 import { cn } from "@/lib/utils";
 import type { NewPaymentMethod, PaymentMethod } from "@/db";
 
@@ -26,7 +26,10 @@ export function AccountsView() {
   const {
     paymentMethods,
     transactions,
+    recurring,
     installmentPlans,
+    loans,
+    expectedMovements,
     savingsGoals,
     exchangeRate,
     isLoading,
@@ -75,9 +78,9 @@ export function AccountsView() {
   const [pendingDeletion, setPendingDeletion] = useState<PaymentMethod | null>(null);
 
   // What deleting the account will do with what hangs off it, in figures: the
-  // movements and the opening balance move to "Sin asignar" rather than
-  // disappearing (see deletePaymentMethod), and a savings goal that follows its
-  // balance is left following nothing.
+  // movements, the opening balance and the commitments move to "Sin asignar"
+  // rather than disappearing (see deletePaymentMethod), and a savings goal that
+  // follows its balance is left following nothing.
   const deletionNotice = useMemo(() => {
     if (pendingDeletion === null) return "";
     const movements = transactions.filter(
@@ -96,15 +99,28 @@ export function AccountsView() {
             ? `No tiene movimientos; su saldo inicial pasa a ${unassigned}.`
             : "No tiene movimientos registrados.";
 
-    const goals = accountGoalsNotice(
-      savingsGoals.filter(
-        (goal) =>
-          goal.tracking_mode === "account" &&
-          goal.payment_method_id === pendingDeletion.id,
-      ).length,
+    const usesIt = (row: { payment_method_id: number | null }) =>
+      row.payment_method_id === pendingDeletion.id;
+    const commitments = accountCommitmentsNotice(
+      [recurring, installmentPlans, loans, expectedMovements]
+        .map((rows) => rows.filter(usesIt).length)
+        .reduce((sum, count) => sum + count, 0),
+      pendingDeletion.currency,
     );
-    return goals === null ? history : `${history} ${goals}`;
-  }, [pendingDeletion, transactions, savingsGoals]);
+    const goals = accountGoalsNotice(
+      savingsGoals.filter((goal) => goal.tracking_mode === "account" && usesIt(goal))
+        .length,
+    );
+    return [history, commitments, goals].filter((part) => part !== null).join(" ");
+  }, [
+    pendingDeletion,
+    transactions,
+    recurring,
+    installmentPlans,
+    loans,
+    expectedMovements,
+    savingsGoals,
+  ]);
 
   function openCreateDialog() {
     setEditing(null);

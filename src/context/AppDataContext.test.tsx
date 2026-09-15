@@ -402,6 +402,25 @@ describe("what a write reloads", () => {
     expect(db.listLoans).not.toHaveBeenCalled();
   });
 
+  // A commitment with no account files its movement under «Sin asignar», which
+  // the write creates if it did not exist; left unread, the new account and
+  // its balance would stay off screen until the next launch.
+  it("reads back the accounts after any commitment is registered", async () => {
+    const data = await mountAndForgetTheLoad();
+
+    await act(async () => {
+      await data.current.confirmInstallment(1, 0, "2026-09-01", 100);
+      await data.current.confirmLoanPayment(1, 0, "2026-09-01", 100);
+      await data.current.confirmRecurring(1, "2026-09-08");
+      await data.current.confirmExpected(1);
+      await data.current.registerAll([
+        { kind: "loan", id: 1, index: 0, date: "2026-08-01", amount: 100 },
+      ]);
+    });
+
+    expect(db.listPaymentMethods).toHaveBeenCalledTimes(5);
+  });
+
   it("reads back the expected movements when a transaction is deleted", async () => {
     // Deleting the transaction a movement was confirmed into reopens it.
     const data = await mountAndForgetTheLoad();
