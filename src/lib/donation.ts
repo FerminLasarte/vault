@@ -7,5 +7,5 @@
 //
 // The link is also listed, exactly, in src-tauri/capabilities/default.json:
 // Tauri refuses to open any URL the capability does not name.
-export const DONATION_LINK = "https://mpago.la/PENDIENTE";
+export const DONATION_LINK = "https://link.mercadopago.com.ar/ferminlasarte";
 export const DONATION_ALIAS = "fermin.lasarte.mp";
