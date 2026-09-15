@@ -1,34 +1,26 @@
 import { useEffect, useRef } from "react";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { HeartIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DONATION_PROMPT, getSetting, setSetting } from "@/db";
 import { useAppData } from "@/hooks/useAppData";
-import { DONATION_ALIAS, DONATION_LINK } from "@/lib/donation";
-import {
-  launchDonationPrompt,
-  parseDonationPromptState,
-  stopDonationPrompt,
-  type DonationPromptState,
-} from "@/lib/donationPrompt";
+import { useDonation } from "@/hooks/useDonation";
+import { launchDonationPrompt, parseDonationPromptState } from "@/lib/donationPrompt";
 
 const NOTICE_ID = "donation-prompt";
-
-function persist(state: DonationPromptState): Promise<void> {
-  return setSetting(DONATION_PROMPT, JSON.stringify(state));
-}
 
 // Every so often, at launch, a small invitation to donate. A toast in the
 // corner rather than a dialog: it never blocks the app, and ignoring it is as
 // good as answering it. When to ask is decided in src/lib/donationPrompt.ts;
 // this only reads the stored state once per launch, stores the next one, and
-// shows the notice if it is due.
+// shows the notice if it is due. What each button does is shared with the card
+// in Ajustes (src/hooks/useDonation.ts).
 //
 // Waits for the initial load, so it neither lands on a screen that is still
 // filling in nor counts a launch whose database never opened.
 export function DonationPrompt() {
   const { isLoading } = useAppData();
+  const { donate, copyAlias, stopAsking } = useDonation();
 
   // StrictMode runs effects twice in development; this keeps that from
   // counting one launch as two.
@@ -40,13 +32,9 @@ export function DonationPrompt() {
     void (async () => {
       const stored = parseDonationPromptState(await getSetting(DONATION_PROMPT));
       const { state, show } = launchDonationPrompt(stored);
-      await persist(state);
+      await setSetting(DONATION_PROMPT, JSON.stringify(state));
       if (!show) return;
 
-      const stop = () =>
-        persist(stopDonationPrompt(state)).catch((error: unknown) => {
-          console.error("Failed to stop the donation prompt:", error);
-        });
       const close = () => toast.dismiss(NOTICE_ID);
 
       toast.custom(
@@ -55,33 +43,13 @@ export function DonationPrompt() {
             onClose={close}
             onStop={() => {
               close();
-              void stop();
+              void stopAsking();
             }}
             onDonate={async () => {
-              try {
-                await openUrl(DONATION_LINK);
-              } catch {
-                toast.error("No se pudo abrir el navegador");
-                return;
-              }
-              close();
-              void stop();
+              if (await donate()) close();
             }}
             onCopyAlias={async () => {
-              try {
-                await navigator.clipboard.writeText(DONATION_ALIAS);
-              } catch {
-                toast.error("No se pudo copiar el alias");
-                return;
-              }
-              // Copying the alias is the other way to donate, so it counts as
-              // "Donar": asking again someone who just transferred would nag.
-              close();
-              void stop();
-              toast.success(`Alias copiado: ${DONATION_ALIAS}`, {
-                description:
-                  "Pegalo al transferir desde Mercado Pago o tu banco. ¡Gracias!",
-              });
+              if (await copyAlias()) close();
             }}
           />
         ),
@@ -92,7 +60,7 @@ export function DonationPrompt() {
       // show it costs them nothing.
       console.error("Failed to update the donation prompt:", error);
     });
-  }, [isLoading]);
+  }, [isLoading, donate, copyAlias, stopAsking]);
 
   return null;
 }
