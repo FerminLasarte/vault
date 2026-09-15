@@ -618,8 +618,12 @@ describe("loans", () => {
 
     await deletePaymentMethod(account.id);
 
+    // Moved, like the account's movements, rather than left with no account.
     const [loan] = await listLoans();
-    expect(loan.payment_method_id).toBeNull();
+    const [unassigned] = await db.select<PaymentMethod[]>(
+      "SELECT * FROM payment_methods WHERE name = 'Sin asignar (ARS)'",
+    );
+    expect(loan.payment_method_id).toBe(unassigned.id);
   });
 });
 
@@ -1234,12 +1238,209 @@ describe("deleting an account", () => {
     expect(await placeholder("ARS")).toHaveLength(0);
   });
 
+  // A commitment keeps its account and hands it to every movement it
+  // registers. With the account gone it keeps NULL instead, and each movement
+  // it registers lands in no account and counts towards no balance — the state
+  // migration 13 once had to repair.
+  it("moves the account's commitments to the unassigned account", async () => {
+    const card = await anAccount("Tarjeta");
+    const shared = { categoryId: null, paymentMethodId: card.id, currency: "ARS" };
+    await insertRecurringTransaction({
+      ...shared,
+      description: "Alquiler",
+      amount: 500,
+      type: "expense",
+      frequency: "monthly",
+      startDate: "2026-08-08",
+      isActive: true,
+    });
+    await insertInstallmentPlan({
+      ...shared,
+      description: "Heladera",
+      totalAmount: 1200,
+      installmentCount: 12,
+      firstDueDate: "2026-07-10",
+      cashPrice: null,
+    });
+    await insertLoan({
+      ...shared,
+      direction: "borrowed",
+      counterparty: "Banco",
+      description: "Préstamo personal",
+      principal: 1200,
+      annualRate: 0,
+      installmentCount: 12,
+      firstDueDate: "2026-07-10",
+    });
+    await insertExpectedMovement({
+      ...shared,
+      description: "VTV",
+      amount: 80_000,
+      type: "expense",
+      dueDate: "2026-10-01",
+    });
+
+    // Only its commitments point at it: no movement, no opening balance.
+    await deletePaymentMethod(card.id);
+
+    const [series] = await listRecurringTransactions();
+    const [plan] = await listInstallmentPlans();
+    const [loan] = await listLoans();
+    const [expected] = await listExpectedMovements();
+    const [unassigned] = await placeholder();
+    expect([series, plan, loan, expected].map((row) => row.payment_method_id)).toEqual(
+      Array(4).fill(unassigned?.id),
+    );
+
+    await recordRecurringOccurrence(series.id, "2026-08-08");
+    await recordInstallment(plan.id, 0, "2026-07-10", 100);
+    await recordLoanPayment(loan.id, 0, "2026-07-10", 100);
+    await confirmExpectedMovement(expected.id);
+
+    const transactions = await listTransactionsWithCategory();
+    expect(transactions).toHaveLength(4);
+    expect(transactions.map((row) => row.payment_method_id)).toEqual(
+      Array(4).fill(unassigned?.id),
+    );
+  });
+
   it("leaves nothing behind for an account with no history", async () => {
     const empty = await anAccount("Vacía");
 
     await deletePaymentMethod(empty.id);
 
     expect(await placeholder()).toHaveLength(0);
+  });
+});
+
+describe("registering a commitment with no account", () => {
+  // Every commitment dialog starts on "Sin cuenta" and lets it be saved that
+  // way. The movement it registers still happened in some account, and left in
+  // none it would count towards no balance; «Sin asignar» keeps it in the
+  // totals until the user files it properly.
+
+  const noAccount = { categoryId: null, paymentMethodId: null, currency: "ARS" };
+
+  async function unassigned(currency = "ARS") {
+    return db.select<PaymentMethod[]>("SELECT * FROM payment_methods WHERE name = $1", [
+      `Sin asignar (${currency})`,
+    ]);
+  }
+
+  async function oneOfEach() {
+    await insertRecurringTransaction({
+      ...noAccount,
+      description: "Alquiler",
+      amount: 500,
+      type: "expense",
+      frequency: "monthly",
+      startDate: "2026-08-08",
+      isActive: true,
+    });
+    await insertInstallmentPlan({
+      ...noAccount,
+      description: "Heladera",
+      totalAmount: 1200,
+      installmentCount: 12,
+      firstDueDate: "2026-07-10",
+      cashPrice: null,
+    });
+    await insertLoan({
+      ...noAccount,
+      direction: "borrowed",
+      counterparty: "Banco",
+      description: "Préstamo personal",
+      principal: 1200,
+      annualRate: 0,
+      installmentCount: 12,
+      firstDueDate: "2026-07-10",
+    });
+    const [series] = await listRecurringTransactions();
+    const [plan] = await listInstallmentPlans();
+    const [loan] = await listLoans();
+    return { series, plan, loan };
+  }
+
+  it("files each movement under the unassigned account", async () => {
+    const { series, plan, loan } = await oneOfEach();
+    await insertExpectedMovement({
+      ...noAccount,
+      description: "VTV",
+      amount: 80_000,
+      type: "expense",
+      dueDate: "2026-10-01",
+    });
+    const [expected] = await listExpectedMovements();
+
+    await recordRecurringOccurrence(series.id, "2026-08-08");
+    await recordInstallment(plan.id, 0, "2026-07-10", 100);
+    await recordLoanPayment(loan.id, 0, "2026-07-10", 100);
+    await confirmExpectedMovement(expected.id);
+
+    const [placeholder] = await unassigned();
+    const transactions = await listTransactionsWithCategory();
+    expect(transactions).toHaveLength(4);
+    expect(transactions.map((row) => row.payment_method_id)).toEqual(
+      Array(4).fill(placeholder?.id),
+    );
+  });
+
+  it("does the same for «Registrar todas», with one unassigned account", async () => {
+    const { series, plan, loan } = await oneOfEach();
+
+    await recordSteps([
+      { kind: "recurring", id: series.id, date: "2026-08-08" },
+      { kind: "installment", id: plan.id, index: 0, date: "2026-07-10", amount: 100 },
+      { kind: "installment", id: plan.id, index: 1, date: "2026-08-10", amount: 100 },
+      { kind: "loan", id: loan.id, index: 0, date: "2026-07-10", amount: 100 },
+    ]);
+
+    const placeholders = await unassigned();
+    expect(placeholders).toHaveLength(1);
+    const transactions = await listTransactionsWithCategory();
+    expect(transactions.map((row) => row.payment_method_id)).toEqual(
+      Array(4).fill(placeholders[0].id),
+    );
+  });
+
+  it("files a dollar movement under the dollar unassigned account", async () => {
+    await insertRecurringTransaction({
+      ...noAccount,
+      currency: "USD",
+      description: "Suscripción",
+      amount: 10,
+      type: "expense",
+      frequency: "monthly",
+      startDate: "2026-08-08",
+      isActive: true,
+    });
+    const [series] = await listRecurringTransactions();
+
+    await recordRecurringOccurrence(series.id, "2026-08-08");
+
+    const [dollars] = await unassigned("USD");
+    expect((await listTransactionsWithCategory())[0].payment_method_id).toBe(dollars?.id);
+    expect(await unassigned("ARS")).toHaveLength(0);
+  });
+
+  it("leaves a commitment's own account alone", async () => {
+    const card = await anAccount("Tarjeta");
+    await insertRecurringTransaction({
+      ...noAccount,
+      paymentMethodId: card.id,
+      description: "Alquiler",
+      amount: 500,
+      type: "expense",
+      frequency: "monthly",
+      startDate: "2026-08-08",
+      isActive: true,
+    });
+    const [series] = await listRecurringTransactions();
+
+    await recordRecurringOccurrence(series.id, "2026-08-08");
+
+    expect((await listTransactionsWithCategory())[0].payment_method_id).toBe(card.id);
+    expect(await unassigned()).toHaveLength(0);
   });
 });
 

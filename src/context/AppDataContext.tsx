@@ -145,6 +145,14 @@ const STEP_DOMAIN = {
   recurring: "recurring",
 } as const satisfies Record<CommitmentStep["kind"], Domain>;
 
+// What registering any commitment writes to besides the commitment itself: the
+// ledger, and the accounts, since a commitment with no account files its
+// movement under a «Sin asignar» account the write may have just created.
+const LEDGER_FROM_COMMITMENT = [
+  "transactions",
+  "paymentMethods",
+] as const satisfies readonly Domain[];
+
 // For a write whose effects reach every list: the lists show category and
 // account names through joins, so editing or deleting one touches them all.
 // The exchange rates are not a domain: no write here changes them.
@@ -841,7 +849,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       confirmLoanPayment: (id, index, date, amount) =>
         runMutation(
           () => recordLoanPayment(id, index, date, amount),
-          ["loans", "transactions"],
+          ["loans", ...LEDGER_FROM_COMMITMENT],
           "Cuota registrada",
           "No se pudo registrar la cuota",
           { offerUndo: true },
@@ -871,7 +879,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       confirmInstallment: (id, index, date, amount) =>
         runMutation(
           () => recordInstallment(id, index, date, amount),
-          ["installments", "transactions"],
+          ["installments", ...LEDGER_FROM_COMMITMENT],
           "Cuota registrada",
           "No se pudo registrar la cuota",
           { offerUndo: true },
@@ -901,7 +909,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       confirmRecurring: (id, date) =>
         runMutation(
           () => recordRecurringOccurrence(id, date),
-          ["recurring", "transactions"],
+          ["recurring", ...LEDGER_FROM_COMMITMENT],
           "Movimiento registrado",
           "No se pudo registrar el movimiento",
           { offerUndo: true },
@@ -920,7 +928,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         const count = steps.length;
         return runMutation(
           () => recordSteps(steps),
-          ["transactions", ...new Set(steps.map((step) => STEP_DOMAIN[step.kind]))],
+          [
+            ...LEDGER_FROM_COMMITMENT,
+            ...new Set(steps.map((step) => STEP_DOMAIN[step.kind])),
+          ],
           movements
             ? count === 1
               ? "1 movimiento registrado"
@@ -975,7 +986,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       confirmExpected: (id) =>
         runMutation(
           () => confirmExpectedMovement(id),
-          ["expected", "transactions"],
+          ["expected", ...LEDGER_FROM_COMMITMENT],
           "Movimiento registrado",
           "No se pudo registrar el movimiento",
           { offerUndo: true },

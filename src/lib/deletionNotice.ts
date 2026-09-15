@@ -24,6 +24,17 @@ export function categoryDeletionNotice(
   return `También ${verb} ${parts.join(" y ")}.`;
 }
 
+// The sentence about the commitments that use an account, or null when none
+// does. They move to «Sin asignar» with its movements, so what they register
+// later still counts towards a balance.
+export function accountCommitmentsNotice(count: number, currency: string): string | null {
+  if (count === 0) return null;
+  const unassigned = `«Sin asignar (${currency})»`;
+  return count === 1
+    ? `Su compromiso (recurrente, compra en cuotas, préstamo o previsto) pasa a ${unassigned}; lo que registres con él va a esa cuenta.`
+    : `Sus ${count} compromisos (recurrentes, compras en cuotas, préstamos o previstos) pasan a ${unassigned}; lo que registres con ellos va a esa cuenta.`;
+}
+
 // The sentence about the savings goals that follow an account's balance, or
 // null when none does. They are kept, but with no account behind them they
 // stop showing what was saved.

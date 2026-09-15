@@ -196,7 +196,11 @@ const UNASSIGNED_ACCOUNT_OF = `(
 // account — which is created if there is none yet, so the total the user holds
 // does not change. Detaching them instead left movements that counted towards
 // no balance (the state migration 13 had to repair) and quietly took the
-// account's money out of the total.
+// account's money out of the total. Its recurring movements, instalment plans,
+// loans and expected movements move there too, for the same reason: left with
+// no account, each movement they registered afterwards landed in none. Savings
+// goals are the exception — they follow a real account's balance, and are left
+// with none for the user to choose another.
 export async function deletePaymentMethod(id: number): Promise<void> {
   const db = await getDb();
   await db.batch([
@@ -206,13 +210,27 @@ export async function deletePaymentMethod(id: number): Promise<void> {
               FROM payment_methods m
               WHERE m.id = $1
                 AND ${UNASSIGNED_ACCOUNT_OF} IS NULL
-                AND (m.initial_balance <> 0 OR EXISTS (
-                  SELECT 1 FROM transactions t
-                  WHERE t.payment_method_id = m.id
-                     OR t.destination_payment_method_id = m.id
-                ))`,
+                AND (m.initial_balance <> 0
+                  OR EXISTS (
+                    SELECT 1 FROM transactions t
+                    WHERE t.payment_method_id = m.id
+                       OR t.destination_payment_method_id = m.id)
+                  OR EXISTS (
+                    SELECT 1 FROM recurring_transactions WHERE payment_method_id = m.id)
+                  OR EXISTS (
+                    SELECT 1 FROM installment_plans WHERE payment_method_id = m.id)
+                  OR EXISTS (SELECT 1 FROM loans WHERE payment_method_id = m.id)
+                  OR EXISTS (
+                    SELECT 1 FROM expected_movements WHERE payment_method_id = m.id))`,
       values: [id],
     },
+    ...["recurring_transactions", "installment_plans", "loans", "expected_movements"].map(
+      (table) => ({
+        query: `UPDATE ${table} SET payment_method_id = ${UNASSIGNED_ACCOUNT_OF}
+                WHERE payment_method_id = $1`,
+        values: [id],
+      }),
+    ),
     {
       query: `UPDATE payment_methods
               SET initial_balance = initial_balance +
@@ -258,6 +276,44 @@ export async function listTransactionsWithCategory(): Promise<TransactionWithCat
      LEFT JOIN payment_methods d ON d.id = t.destination_payment_method_id
      ORDER BY t.date DESC, t.id DESC`,
   );
+}
+
+// The "Sin asignar" account of the currency in parameter `currency`; NULL when
+// there is none yet.
+function unassignedAccountIn(currency: string): string {
+  return `(
+    SELECT id FROM payment_methods
+    WHERE currency = ${currency} AND name = 'Sin asignar (' || ${currency} || ')'
+    ORDER BY id LIMIT 1
+  )`;
+}
+
+// A movement registered from a commitment. A commitment may have no account —
+// every commitment dialog starts on "Sin cuenta", and deleting an account used
+// to leave its commitments with none — but the movement still happened in some
+// account, and left in none it would count towards no balance, the state
+// migration 13 once had to repair. It goes to the "Sin asignar" account of its
+// currency instead, created if there is none yet. The insert is always the
+// last statement returned.
+function commitmentTransactionStatements(transaction: NewTransaction): BatchStatement[] {
+  const insert = insertTransactionStatement(transaction);
+  if (transaction.paymentMethodId !== null) return [insert];
+  return [
+    {
+      query: `INSERT INTO payment_methods (name, type, currency, initial_balance)
+              SELECT 'Sin asignar (' || $1 || ')', 'other', $1, 0
+              WHERE ${unassignedAccountIn("$1")} IS NULL`,
+      values: [transaction.currency],
+    },
+    {
+      query: `INSERT INTO transactions
+                (amount, type, category_id, payment_method_id, destination_payment_method_id,
+                 destination_amount, description, date, currency)
+              VALUES ($1, $2, $3, COALESCE($4, ${unassignedAccountIn("$9")}),
+                      $5, $6, $7, $8, $9)`,
+      values: insert.values,
+    },
+  ];
 }
 
 function insertTransactionStatement(transaction: NewTransaction): BatchStatement {
@@ -993,10 +1049,11 @@ export async function recordLoanPayment(
   assertNextInSchedule("loan", loan, index);
 
   const db = await getDb();
-  const [, inserted] = await db.batch([
+  const results = await db.batch([
     advanceScheduleStatement("loans", id, index),
-    insertTransactionStatement(loanPaymentTransaction(loan, index, date, amount)),
+    ...commitmentTransactionStatements(loanPaymentTransaction(loan, index, date, amount)),
   ]);
+  const inserted = results[results.length - 1];
   return undoing(
     undoScheduleStatements("loans", id, index, inserted.lastInsertId as number),
   );
@@ -1015,10 +1072,11 @@ export async function recordInstallment(
   assertNextInSchedule("installment plan", plan, index);
 
   const db = await getDb();
-  const [, inserted] = await db.batch([
+  const results = await db.batch([
     advanceScheduleStatement("installment_plans", id, index),
-    insertTransactionStatement(installmentTransaction(plan, index, date, amount)),
+    ...commitmentTransactionStatements(installmentTransaction(plan, index, date, amount)),
   ]);
+  const inserted = results[results.length - 1];
   return undoing(
     undoScheduleStatements(
       "installment_plans",
@@ -1041,10 +1099,11 @@ export async function recordRecurringOccurrence(
   assertNextOccurrence(template, date);
 
   const db = await getDb();
-  const [, inserted] = await db.batch([
+  const results = await db.batch([
     advanceSeriesStatement(template.id, template.last_confirmed_date, date),
-    insertTransactionStatement(occurrenceTransaction(template, date)),
+    ...commitmentTransactionStatements(occurrenceTransaction(template, date)),
   ]);
+  const inserted = results[results.length - 1];
   return undoing(
     undoSeriesStatements(
       template.id,
@@ -1112,17 +1171,17 @@ export async function recordSteps(steps: CommitmentStep[]): Promise<Undo> {
         assertNextInSchedule("loan", loan, step.index);
         loans.set(step.id, { ...loan, confirmed_count: loan.confirmed_count + 1 });
 
-        statements.push(advanceScheduleStatement("loans", step.id, step.index));
-        planned.push({
-          insertAt: statements.length,
-          undo: (transactionId) =>
-            undoScheduleStatements("loans", step.id, step.index, transactionId),
-        });
         statements.push(
-          insertTransactionStatement(
+          advanceScheduleStatement("loans", step.id, step.index),
+          ...commitmentTransactionStatements(
             loanPaymentTransaction(loan, step.index, step.date, step.amount),
           ),
         );
+        planned.push({
+          insertAt: statements.length - 1,
+          undo: (transactionId) =>
+            undoScheduleStatements("loans", step.id, step.index, transactionId),
+        });
         break;
       }
       case "installment": {
@@ -1133,9 +1192,12 @@ export async function recordSteps(steps: CommitmentStep[]): Promise<Undo> {
 
         statements.push(
           advanceScheduleStatement("installment_plans", step.id, step.index),
+          ...commitmentTransactionStatements(
+            installmentTransaction(plan, step.index, step.date, step.amount),
+          ),
         );
         planned.push({
-          insertAt: statements.length,
+          insertAt: statements.length - 1,
           undo: (transactionId) =>
             undoScheduleStatements(
               "installment_plans",
@@ -1144,11 +1206,6 @@ export async function recordSteps(steps: CommitmentStep[]): Promise<Undo> {
               transactionId,
             ),
         });
-        statements.push(
-          insertTransactionStatement(
-            installmentTransaction(plan, step.index, step.date, step.amount),
-          ),
-        );
         break;
       }
       case "recurring": {
@@ -1159,15 +1216,15 @@ export async function recordSteps(steps: CommitmentStep[]): Promise<Undo> {
         const from = template.last_confirmed_date;
         series.set(step.id, { ...template, last_confirmed_date: step.date });
 
-        statements.push(advanceSeriesStatement(step.id, from, step.date));
+        statements.push(
+          advanceSeriesStatement(step.id, from, step.date),
+          ...commitmentTransactionStatements(occurrenceTransaction(template, step.date)),
+        );
         planned.push({
-          insertAt: statements.length,
+          insertAt: statements.length - 1,
           undo: (transactionId) =>
             undoSeriesStatements(step.id, from, step.date, transactionId),
         });
-        statements.push(
-          insertTransactionStatement(occurrenceTransaction(template, step.date)),
-        );
         break;
       }
     }
@@ -1290,27 +1347,33 @@ export async function confirmExpectedMovement(id: number): Promise<Undo | null> 
   );
   if (!movement) return null;
 
-  const [inserted] = await db.batch([
-    insertTransactionStatement({
-      amount: movement.amount,
-      type: movement.type,
-      currency: movement.currency,
-      categoryId: movement.category_id,
-      paymentMethodId: movement.payment_method_id,
-      destinationPaymentMethodId: null,
-      destinationAmount: null,
-      description: movement.description,
-      date: movement.due_date,
-    }),
+  const insert = commitmentTransactionStatements({
+    amount: movement.amount,
+    type: movement.type,
+    currency: movement.currency,
+    categoryId: movement.category_id,
+    paymentMethodId: movement.payment_method_id,
+    destinationPaymentMethodId: null,
+    destinationAmount: null,
+    description: movement.description,
+    date: movement.due_date,
+  });
+  const insertAt = insert.length - 1;
+  const results = await db.batch([
+    ...insert,
     {
       query: `UPDATE expected_movements
               SET status = 'confirmed', transaction_id = $1
               WHERE id = $2 AND status = 'pending'`,
-      values: [insertedIdOf(0), id],
+      values: [insertedIdOf(insertAt), id],
       expectChanges: 1,
     },
   ]);
-  return reopenExpectedMovement(id, "confirmed", inserted.lastInsertId as number);
+  return reopenExpectedMovement(
+    id,
+    "confirmed",
+    results[insertAt].lastInsertId as number,
+  );
 }
 
 // Decides against it. Nothing is recorded, which is the whole difference from
