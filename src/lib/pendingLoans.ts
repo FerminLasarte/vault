@@ -4,6 +4,9 @@ import type { LoanPayment } from "@/lib/loans";
 
 export interface PendingLoanPayment extends LoanPayment {
   loan: LoanWithNames;
+  // The number of the payment that has to be registered before this one, or
+  // null when this is the next one due; see PendingPlanInstallment.
+  waitingFor: number | null;
 }
 
 // Every loan payment awaiting confirmation across all loans, oldest first —
@@ -17,7 +20,12 @@ export function collectPendingLoanPayments(
 
   for (const loan of loans) {
     for (const payment of pendingLoanPayments(loan, today)) {
-      pending.push({ loan, ...payment });
+      const isNext = payment.index === loan.confirmed_count;
+      pending.push({
+        loan,
+        ...payment,
+        waitingFor: isNext ? null : loan.confirmed_count + 1,
+      });
     }
   }
 

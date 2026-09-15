@@ -25,6 +25,9 @@ tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-sql = { version = "2.4.0", features = ["sqlite"] }
+# The same sqlx the SQL plugin is built on, so the backup can run on the
+# plugin's own connection pool rather than opening a second connection.
+sqlx = { version = "0.8", default-features = false, features = ["sqlite"] }
 tauri-plugin-dialog = "2.7.2"
 base64 = "0.23.1"
 tauri-plugin-window-state = "2.4.1"

@@ -7,6 +7,11 @@ export interface PendingPlanInstallment {
   number: number;
   date: string;
   amount: number;
+  // The number of the instalment that has to be registered before this one, or
+  // null when this is the next one due. Only the next one can be registered:
+  // the plan stores how many are paid, so skipping ahead would count the
+  // skipped ones as paid.
+  waitingFor: number | null;
 }
 
 // Every instalment awaiting confirmation across all plans, oldest first.
@@ -18,7 +23,12 @@ export function collectPendingInstallments(
 
   for (const plan of plans) {
     for (const entry of pendingInstallments(plan, today)) {
-      pending.push({ plan, ...entry });
+      const isNext = entry.index === plan.confirmed_count;
+      pending.push({
+        plan,
+        ...entry,
+        waitingFor: isNext ? null : plan.confirmed_count + 1,
+      });
     }
   }
 

@@ -248,6 +248,11 @@ export function LoansSection() {
                       size="icon-sm"
                       label="Registrar cuota"
                       disabled={isMutating}
+                      disabledReason={
+                        entry.waitingFor === null
+                          ? null
+                          : `Primero registrá la cuota ${entry.waitingFor}`
+                      }
                       onClick={() =>
                         void confirmLoanPayment(
                           entry.loan.id,
