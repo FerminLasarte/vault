@@ -29,6 +29,16 @@ That Spanish is **Argentine**, the audience the app is built for:
 - Address the user with **voseo**, never tuteo: "Seleccioná", "Elegí", "Ingresá", "querés", "tenés" — not "Selecciona", "Elige", "Introduce", "quieres", "tienes". This covers every string the user can see: labels, placeholders, validation messages, toasts, `aria-label`s, native menu items and error messages returned from Rust.
 - Format amounts, percentages and dates with the **`es-AR`** locale through the helpers in `src/lib/format.ts`, never with an ad hoc `Intl` or `toLocaleString` call.
 
+## Code quality
+
+Every change prioritizes **good programming practices, modular code and efficient code**:
+
+- Keep domain logic pure and in `src/lib`, with its own tests. Components compose it, `src/db` only persists, and Rust does only what the webview cannot.
+- One concern per module. Reuse existing helpers, hooks and shadcn/ui primitives before adding new ones, and never duplicate a rule across screens.
+- Derive rather than store what can be computed, memoize work that walks rows, and avoid repeated passes or rebuilding formatters on every render.
+- Logic bugs get a failing test first, then the fix.
+- Prefer small, readable code over clever code or speculative abstractions.
+
 ## UI/UX principles
 
 The primary design directive for this project is a **minimalist, elegant, high-end** interface, in the spirit of Notion's clean, content-first UI. When building or reviewing UI:
