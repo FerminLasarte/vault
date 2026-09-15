@@ -4,16 +4,7 @@ import { ListCard } from "@/components/ListCard";
 import { SectionIntro } from "@/components/SectionIntro";
 import { ActionButton } from "@/components/ActionButton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { CategoryDialog } from "@/components/CategoryDialog";
 import { CategoryRulesCard } from "@/components/CategoryRulesCard";
@@ -25,6 +16,7 @@ import type { CategoryTab } from "@/lib/navigation";
 import type { ViewProps } from "@/lib/menu";
 import { useAppData } from "@/hooks/useAppData";
 import { CATEGORY_TYPE_LABELS } from "@/lib/labels";
+import { categoryDeletionNotice } from "@/lib/deletionNotice";
 import type { Category, CategoryType, NewCategory } from "@/db";
 
 const GROUPS: { type: CategoryType; title: string }[] = [
@@ -39,8 +31,16 @@ export function CategoriesView({ tab }: ViewProps) {
     DEFAULT_CATEGORY_TAB,
   );
 
-  const { categories, isLoading, isMutating, addCategory, editCategory, removeCategory } =
-    useAppData();
+  const {
+    categories,
+    budgets,
+    categoryRules,
+    isLoading,
+    isMutating,
+    addCategory,
+    editCategory,
+    removeCategory,
+  } = useAppData();
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editing, setEditing] = useState<Category | null>(null);
@@ -54,6 +54,16 @@ export function CategoriesView({ tab }: ViewProps) {
       })),
     [categories],
   );
+
+  // Budgets and rules exist only for their category and are deleted with it by
+  // cascade, so the confirmation has to say so before, not after.
+  const cascadeNotice = useMemo(() => {
+    if (pendingDeletion === null) return null;
+    return categoryDeletionNotice(
+      budgets.filter((budget) => budget.category_id === pendingDeletion.id).length,
+      categoryRules.filter((rule) => rule.category_id === pendingDeletion.id).length,
+    );
+  }, [pendingDeletion, budgets, categoryRules]);
 
   function openCreateDialog() {
     setEditing(null);
@@ -189,34 +199,21 @@ export function CategoriesView({ tab }: ViewProps) {
         onSubmitCategory={handleSubmitCategory}
       />
 
-      <AlertDialog
+      <ConfirmDeleteDialog
         open={pendingDeletion !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingDeletion(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar esta categoría?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Se eliminará «{pendingDeletion?.name}» (
-              {pendingDeletion ? CATEGORY_TYPE_LABELS[pendingDeletion.type] : ""}). Las
-              transacciones ya registradas se conservan, pero quedarán sin categoría
-              asociada.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={isMutating}
-              onClick={handleConfirmDelete}
-            >
-              Eliminar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        onClose={() => setPendingDeletion(null)}
+        title="¿Eliminar esta categoría?"
+        description={
+          <>
+            Se eliminará «{pendingDeletion?.name}» (
+            {pendingDeletion ? CATEGORY_TYPE_LABELS[pendingDeletion.type] : ""}).{" "}
+            {cascadeNotice !== null && `${cascadeNotice} `}Las transacciones ya
+            registradas se conservan, pero quedarán sin categoría asociada.
+          </>
+        }
+        onConfirm={handleConfirmDelete}
+        isMutating={isMutating}
+      />
     </div>
   );
 }

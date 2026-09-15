@@ -5,16 +5,7 @@ import { ListCard } from "@/components/ListCard";
 import { SectionIntro } from "@/components/SectionIntro";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { ActionButton } from "@/components/ActionButton";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { BudgetDialog } from "@/components/BudgetDialog";
 import { useAppData } from "@/hooks/useAppData";
 import { calculateBudgetProgress } from "@/lib/finance";
@@ -166,32 +157,19 @@ export function BudgetsSection() {
         onSubmitBudget={handleSubmit}
       />
 
-      <AlertDialog
+      <ConfirmDeleteDialog
         open={pendingDeletion !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingDeletion(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar este presupuesto?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Se eliminará el tope de «{pendingDeletion?.category_name}». Tus
-              transacciones no se ven afectadas.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={isMutating}
-              onClick={handleConfirmDelete}
-            >
-              Eliminar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        onClose={() => setPendingDeletion(null)}
+        title="¿Eliminar este presupuesto?"
+        description={
+          <>
+            Se eliminará el tope de «{pendingDeletion?.category_name}». Tus transacciones
+            no se ven afectadas.
+          </>
+        }
+        onConfirm={handleConfirmDelete}
+        isMutating={isMutating}
+      />
     </div>
   );
 }

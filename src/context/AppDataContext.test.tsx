@@ -16,7 +16,13 @@ import { isReported } from "@/lib/reportedError";
 // the database, the network and the toasts — so these tests see exactly which
 // messages a user would see and how many requests go out.
 vi.mock("sonner", () => ({
-  toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+    dismiss: vi.fn(),
+  },
 }));
 
 vi.mock("@/hooks/useNotifications", () => ({ useNotifications: () => {} }));
@@ -113,6 +119,78 @@ describe("a reload that fails after a mutation that worked", () => {
       "No se pudieron recargar los datos",
       expect.anything(),
     );
+  });
+});
+
+describe("a step that can be taken back", () => {
+  // The options the success toast was shown with, for the one with this message.
+  function toastOptions(message: string) {
+    const call = vi.mocked(toast.success).mock.calls.find(([text]) => text === message);
+    return call?.[1] as
+      { action?: { label: string; onClick: () => void }; duration?: number } | undefined;
+  }
+
+  it("offers Deshacer, which runs the step's own undo", async () => {
+    const data = await mount();
+    const undo = vi.fn(() => Promise.resolve());
+    vi.mocked(db.recordRecurringOccurrence).mockResolvedValueOnce(undo);
+
+    await act(async () => {
+      await data.current.confirmRecurring(1, "2026-09-08");
+    });
+
+    const action = toastOptions("Movimiento registrado")?.action;
+    expect(action?.label).toBe("Deshacer");
+
+    act(() => {
+      action?.onClick();
+    });
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Se deshizo"));
+    expect(undo).toHaveBeenCalledOnce();
+  });
+
+  it("says so when the step can no longer be taken back", async () => {
+    const data = await mount();
+    const undo = vi.fn(() => Promise.reject(new Error("changed 0 rows instead of 1")));
+    vi.mocked(db.dismissExpectedMovement).mockResolvedValueOnce(undo);
+
+    await act(async () => {
+      await data.current.dismissExpected(1);
+    });
+    act(() => {
+      toastOptions("Movimiento descartado")?.action?.onClick();
+    });
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("No se pudo deshacer"));
+  });
+
+  it("does not offer it for Registrar todas", async () => {
+    const data = await mount();
+    vi.mocked(db.recordInstallment).mockResolvedValueOnce(vi.fn());
+
+    await act(async () => {
+      await data.current.confirmInstallment(1, 0, "2026-09-01", 100, {
+        offerUndo: false,
+      });
+    });
+
+    expect(toast.success).toHaveBeenCalledWith("Cuota registrada");
+  });
+
+  it("withdraws the offer as soon as anything else is written", async () => {
+    const data = await mount();
+    vi.mocked(db.recordLoanPayment).mockResolvedValueOnce(vi.fn());
+    vi.mocked(toast.success).mockReturnValueOnce("undo-toast");
+
+    await act(async () => {
+      await data.current.confirmLoanPayment(1, 0, "2026-09-01", 100);
+    });
+    await act(async () => {
+      await data.current.addCategory(aCategory);
+    });
+
+    expect(toast.dismiss).toHaveBeenCalledWith("undo-toast");
   });
 });
 

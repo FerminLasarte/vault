@@ -66,14 +66,14 @@ export function SummaryBar({
     value: isLoading ? "—" : formatCurrency(values[key], currency),
     valueClassName:
       tone === "positive"
-        ? "text-emerald-600 dark:text-emerald-400"
+        ? "text-positive"
         : tone === "negative"
-          ? "text-red-600 dark:text-red-400"
+          ? "text-negative"
           : // The result is the one figure whose colour is earned rather than
             // fixed: a period that ended in the red should say so.
             values[key] < 0
-            ? "text-red-600 dark:text-red-400"
-            : "text-emerald-600 dark:text-emerald-400",
+            ? "text-negative"
+            : "text-positive",
     sub:
       !isLoading && convertedValues !== null ? (
         <Hint

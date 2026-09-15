@@ -47,18 +47,13 @@ function MonthExpensesCard({ overview, currency, isLoading }: MonthOverviewCards
         ) : (
           <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
             {isUp ? (
-              <TrendingUp className="size-3.5 shrink-0 text-red-600 dark:text-red-400" />
+              <TrendingUp className="size-3.5 shrink-0 text-negative" />
             ) : (
-              <TrendingDown className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <TrendingDown className="size-3.5 shrink-0 text-positive" />
             )}
             <span>
               <span
-                className={cn(
-                  "font-medium",
-                  isUp
-                    ? "text-red-600 dark:text-red-400"
-                    : "text-emerald-600 dark:text-emerald-400",
-                )}
+                className={cn("font-medium", isUp ? "text-negative" : "text-positive")}
               >
                 {formatPercent(Math.abs(changeRatio))} {isUp ? "más" : "menos"}
               </span>{" "}
@@ -81,9 +76,7 @@ function BudgetCard({ overview, currency, isLoading }: MonthOverviewCardsProps) 
         <CardDescription>
           {isExceeded ? "Presupuesto excedido" : "Presupuesto disponible"}
         </CardDescription>
-        <CardTitle
-          className={cn("text-2xl", isExceeded && "text-red-600 dark:text-red-400")}
-        >
+        <CardTitle className={cn("text-2xl", isExceeded && "text-negative")}>
           {isLoading || budget === null
             ? PLACEHOLDER
             : formatCurrency(Math.abs(budget.remaining), currency)}

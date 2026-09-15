@@ -22,7 +22,7 @@ function expenseFigures(months: ProjectedMonth[], currency: string): Figure[] {
     // out into a third bar would triple the furniture to say one thing.
     sub:
       month.income > 0 ? (
-        <span className="text-xs text-emerald-600 dark:text-emerald-400">
+        <span className="text-xs text-positive">
           +{formatCurrency(month.income, currency)} a favor
         </span>
       ) : undefined,

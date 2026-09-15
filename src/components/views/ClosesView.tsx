@@ -135,7 +135,7 @@ export function ClosesView() {
                     <span
                       className={cn(
                         "text-sm font-medium tabular-nums",
-                        main.balance < 0 && "text-red-600 dark:text-red-400",
+                        main.balance < 0 && "text-negative",
                       )}
                     >
                       {formatCurrency(main.balance, main.currency)}
@@ -145,7 +145,7 @@ export function ClosesView() {
                         key={entry.currency}
                         className={cn(
                           "text-xs tabular-nums text-muted-foreground",
-                          entry.balance < 0 && "text-red-600/80 dark:text-red-400/80",
+                          entry.balance < 0 && "text-negative/80",
                         )}
                       >
                         {formatCurrency(entry.balance, entry.currency)}

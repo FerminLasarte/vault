@@ -11,16 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { ExpectedMovementDialog } from "@/components/ExpectedMovementDialog";
 import { useAppData } from "@/hooks/useAppData";
 import { collectPendingExpected, collectUpcomingExpected } from "@/lib/expected";
@@ -45,8 +36,8 @@ function Amount({
         muted
           ? "text-muted-foreground"
           : movement.type === "income"
-            ? "text-emerald-600 dark:text-emerald-400"
-            : "text-red-600 dark:text-red-400",
+            ? "text-positive"
+            : "text-negative",
       )}
     >
       {movement.type === "income" ? "+" : "-"}
@@ -256,32 +247,19 @@ export function ExpectedSection() {
         onSubmitExpected={handleSubmit}
       />
 
-      <AlertDialog
+      <ConfirmDeleteDialog
         open={pendingDeletion !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingDeletion(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar este previsto?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Se eliminará «{pendingDeletion?.description}». Si ya lo registraste, la
-              transacción se conserva.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={isMutating}
-              onClick={handleConfirmDelete}
-            >
-              Eliminar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        onClose={() => setPendingDeletion(null)}
+        title="¿Eliminar este previsto?"
+        description={
+          <>
+            Se eliminará «{pendingDeletion?.description}». Si ya lo registraste, la
+            transacción se conserva.
+          </>
+        }
+        onConfirm={handleConfirmDelete}
+        isMutating={isMutating}
+      />
     </div>
   );
 }

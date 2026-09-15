@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { TransactionForm } from "./TransactionForm";
+import { TransactionDialog } from "./TransactionDialog";
 import type { Category, PaymentMethod, TransactionWithCategory } from "@/db";
 
 beforeAll(() => {
@@ -54,39 +55,49 @@ function aTransaction(
 
 // The option list is rendered into the DOM alongside the trigger, so matching
 // on text alone finds the option too. Only the trigger says what is *selected*.
-function selectedCategory(container: HTMLElement): string {
-  const trigger = container.querySelector("#transaction-category");
+// Looked up in the document rather than the render container: the dialog is
+// portalled to the end of <body>.
+function selectedCategory(): string {
+  const trigger = document.querySelector("#transaction-category");
   return trigger?.textContent?.trim() ?? "";
 }
 
-function renderForm(editing: TransactionWithCategory | null) {
+function renderDialog(
+  editing: TransactionWithCategory | null,
+  handlers: {
+    onOpenChange?: (open: boolean) => void;
+    onSubmitTransaction?: () => Promise<void>;
+  } = {},
+) {
   return render(
-    <TransactionForm
+    <TransactionDialog
+      open
+      onOpenChange={handlers.onOpenChange ?? vi.fn()}
+      editing={editing}
       categories={CATEGORIES}
       categoryRules={[]}
       tags={[]}
       paymentMethods={ACCOUNTS}
       defaultCurrency="ARS"
-      editing={editing}
-      onSubmitTransaction={vi.fn()}
+      onSubmitTransaction={handlers.onSubmitTransaction ?? vi.fn()}
     />,
   );
 }
 
-describe("TransactionForm when editing", () => {
+describe("TransactionDialog when editing", () => {
   it("shows the category the transaction actually has", () => {
     // The regression: opening a transaction for editing replaced its category
     // with the first one on the list, so saving silently reassigned it.
-    const { container } = renderForm(aTransaction());
+    renderDialog(aTransaction());
 
-    expect(selectedCategory(container)).toContain("Padel");
-    expect(selectedCategory(container)).not.toContain("Bookit");
+    expect(selectedCategory()).toContain("Padel");
+    expect(selectedCategory()).not.toContain("Bookit");
   });
 
   it("shows the right category for an income too", () => {
     // Income reads from a different list, and the stale value it was compared
     // against came from the expense one.
-    const { container } = renderForm(
+    renderDialog(
       aTransaction({
         type: "income",
         category_id: 5,
@@ -95,22 +106,55 @@ describe("TransactionForm when editing", () => {
       }),
     );
 
-    expect(selectedCategory(container)).toContain("Venta");
-    expect(selectedCategory(container)).not.toContain("Abuelo");
+    expect(selectedCategory()).toContain("Venta");
+    expect(selectedCategory()).not.toContain("Abuelo");
   });
 
   it("keeps the rest of the transaction intact", () => {
-    renderForm(aTransaction());
+    renderDialog(aTransaction({ tag_names: "viaje" }));
 
     expect(screen.getByDisplayValue("Mensual (abril)")).toBeInTheDocument();
     expect(screen.getByDisplayValue("50000")).toBeInTheDocument();
+    expect(screen.getByText("viaje")).toBeInTheDocument();
   });
 
   it("still defaults to a usable category when creating", () => {
     // The repair is what gives a new transaction a sensible starting category;
     // fixing the edit case must not cost that.
-    const { container } = renderForm(null);
+    renderDialog(null);
 
-    expect(selectedCategory(container)).toContain("Bookit");
+    expect(selectedCategory()).toContain("Bookit");
+  });
+});
+
+// The frame every other form in a dialog already had: a line under the title
+// and a way out that is not the corner cross.
+describe("TransactionDialog as a dialog", () => {
+  it("says what it is for and offers Cancelar", async () => {
+    const onOpenChange = vi.fn();
+    renderDialog(null, { onOpenChange });
+
+    expect(screen.getByText(/no cuenta como ingreso ni como gasto/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("closes itself once the transaction is saved", async () => {
+    const onOpenChange = vi.fn();
+    const onSubmitTransaction = vi.fn(() => Promise.resolve());
+    renderDialog(null, { onOpenChange, onSubmitTransaction });
+
+    await userEvent.clear(screen.getByLabelText("Monto"));
+    await userEvent.type(screen.getByLabelText("Monto"), "1500");
+    await userEvent.type(screen.getByLabelText("Descripción"), "Verdulería");
+    await userEvent.click(screen.getByRole("button", { name: "Agregar transacción" }));
+
+    expect(onSubmitTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 1500, description: "Verdulería", categoryId: 1 }),
+      [],
+    );
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });

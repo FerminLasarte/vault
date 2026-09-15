@@ -3,6 +3,7 @@ import { Check, ChevronDown, HandCoins, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ListCard } from "@/components/ListCard";
+import { ProgressBar } from "@/components/ui/progress-bar";
 import { SectionIntro } from "@/components/SectionIntro";
 import { ActionButton } from "@/components/ActionButton";
 import {
@@ -12,16 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import {
   Table,
   TableBody,
@@ -47,9 +39,7 @@ import type { LoanWithNames, NewLoan } from "@/db";
 // A repayment on money I owe leaves my pocket, and a repayment on money owed to
 // me arrives in it, so the two are never the same colour or the same sign.
 function directionTone(direction: string): string {
-  return direction === "borrowed"
-    ? "text-red-600 dark:text-red-400"
-    : "text-emerald-600 dark:text-emerald-400";
+  return direction === "borrowed" ? "text-negative" : "text-positive";
 }
 
 interface ScheduleProps {
@@ -160,9 +150,12 @@ export function LoansSection() {
 
   async function payAll() {
     // Sequential: each confirmation advances its loan, and the next payment of
-    // the same loan depends on that having happened.
+    // the same loan depends on that having happened. No "Deshacer" per payment:
+    // a toast offering to take back one of many would be noise.
     for (const entry of pending) {
-      await confirmLoanPayment(entry.loan.id, entry.index, entry.date, entry.amount);
+      await confirmLoanPayment(entry.loan.id, entry.index, entry.date, entry.amount, {
+        offerUndo: false,
+      });
     }
   }
 
@@ -378,12 +371,7 @@ export function LoansSection() {
                   </div>
                 </div>
 
-                <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
-                  <div
-                    className="h-full rounded-full bg-primary transition-[width]"
-                    style={{ width: `${Math.min(paidRatio, 1) * 100}%` }}
-                  />
-                </div>
+                <ProgressBar ratio={paidRatio} />
 
                 <p className="text-xs text-muted-foreground">
                   Capital {formatCurrency(loan.principal, loan.currency)} ·{" "}
@@ -407,32 +395,19 @@ export function LoansSection() {
         onSubmitLoan={handleSubmit}
       />
 
-      <AlertDialog
+      <ConfirmDeleteDialog
         open={pendingDeletion !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingDeletion(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar este préstamo?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Se eliminará «{pendingDeletion?.description}». Las cuotas que ya registraste
-              se conservan como movimientos.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={isMutating}
-              onClick={handleConfirmDelete}
-            >
-              Eliminar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        onClose={() => setPendingDeletion(null)}
+        title="¿Eliminar este préstamo?"
+        description={
+          <>
+            Se eliminará «{pendingDeletion?.description}». Las cuotas que ya registraste
+            se conservan como movimientos.
+          </>
+        }
+        onConfirm={handleConfirmDelete}
+        isMutating={isMutating}
+      />
     </div>
   );
 }

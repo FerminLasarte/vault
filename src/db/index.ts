@@ -850,20 +850,90 @@ function advanceSeriesStatement(
   };
 }
 
+// Takes back a step the user just took on a commitment, for the "Deshacer" in
+// the toast that confirms it. Handed out by the step itself, the only place
+// that knows what it wrote.
+export type Undo = () => Promise<void>;
+
+// Deletes the transaction a step created, as part of undoing that step. It has
+// to still be there: one the user has deleted since means there is nothing
+// left to take back, and the whole undo writes nothing.
+function deleteCreatedTransactionStatements(transactionId: number): BatchStatement[] {
+  return [
+    {
+      query: "DELETE FROM transactions WHERE id = $1",
+      values: [transactionId],
+      expectChanges: 1,
+    },
+    DELETE_UNUSED_TAGS,
+  ];
+}
+
+// Moves a schedule back by one payment and deletes the movement that payment
+// recorded, but only while it is still the last payment registered: the same
+// compare-and-set as advancing, the other way round. Undoing instalment 3
+// after instalment 4 has gone in would leave a hole in the middle of the plan.
+function undoScheduleStep(
+  table: "loans" | "installment_plans",
+  id: number,
+  index: number,
+  transactionId: number,
+): Undo {
+  return async () => {
+    const db = await getDb();
+    await db.batch([
+      {
+        query: `UPDATE ${table}
+                SET confirmed_count = confirmed_count - 1
+                WHERE id = $1 AND confirmed_count = $2`,
+        values: [id, index + 1],
+        expectChanges: 1,
+      },
+      ...deleteCreatedTransactionStatements(transactionId),
+    ]);
+  };
+}
+
+// Puts a series back where it stood before an occurrence was decided on, and
+// deletes the movement if one was recorded. Only while that occurrence is still
+// the last one decided, for the same reason as a schedule.
+function undoSeriesStep(
+  template: RecurringTransaction,
+  date: string,
+  transactionId: number | null,
+): Undo {
+  return async () => {
+    const db = await getDb();
+    await db.batch([
+      {
+        query: `UPDATE recurring_transactions
+                SET last_confirmed_date = $1
+                WHERE id = $2 AND last_confirmed_date = $3`,
+        values: [template.last_confirmed_date, template.id, date],
+        expectChanges: 1,
+      },
+      ...(transactionId === null
+        ? []
+        : deleteCreatedTransactionStatements(transactionId)),
+    ]);
+  };
+}
+
 // Records the payment as a real movement and advances the loan by one, as a
-// single write: neither can land without the other.
+// single write: neither can land without the other. Returns how to take it
+// back, or null when the loan is gone and nothing was written.
 export async function recordLoanPayment(
   id: number,
   index: number,
   date: string,
   amount: number,
-): Promise<void> {
+): Promise<Undo | null> {
   const loan = await getLoan(id);
-  if (!loan) return;
+  if (!loan) return null;
   assertNextInSchedule("loan", loan, index);
 
   const db = await getDb();
-  await db.batch([
+  const [, inserted] = await db.batch([
     advanceScheduleStatement("loans", id, index),
     // A payment on money I owe leaves my pocket; a payment on money owed to me
     // arrives in it. Recording both as expenses would make being repaid look
@@ -880,22 +950,23 @@ export async function recordLoanPayment(
       date,
     }),
   ]);
+  return undoScheduleStep("loans", id, index, inserted.lastInsertId as number);
 }
 
 // Records one instalment as paid: writes the movement and advances the plan,
-// as a single write.
+// as a single write. Returns how to take it back.
 export async function recordInstallment(
   id: number,
   index: number,
   date: string,
   amount: number,
-): Promise<void> {
+): Promise<Undo | null> {
   const plan = await getInstallmentPlan(id);
-  if (!plan) return;
+  if (!plan) return null;
   assertNextInSchedule("installment plan", plan, index);
 
   const db = await getDb();
-  await db.batch([
+  const [, inserted] = await db.batch([
     advanceScheduleStatement("installment_plans", id, index),
     insertTransactionStatement({
       amount,
@@ -909,17 +980,27 @@ export async function recordInstallment(
       date,
     }),
   ]);
+  return undoScheduleStep(
+    "installment_plans",
+    id,
+    index,
+    inserted.lastInsertId as number,
+  );
 }
 
 // Turns one proposed occurrence into a real transaction and moves the series
 // past it, as a single write, so it is never proposed — or recorded — twice.
-export async function recordRecurringOccurrence(id: number, date: string): Promise<void> {
+// Returns how to take it back.
+export async function recordRecurringOccurrence(
+  id: number,
+  date: string,
+): Promise<Undo | null> {
   const template = await getRecurringTransaction(id);
-  if (!template) return;
+  if (!template) return null;
   assertNextOccurrence(template, date);
 
   const db = await getDb();
-  await db.batch([
+  const [, inserted] = await db.batch([
     advanceSeriesStatement(template, date),
     insertTransactionStatement({
       amount: template.amount,
@@ -933,20 +1014,22 @@ export async function recordRecurringOccurrence(id: number, date: string): Promi
       date,
     }),
   ]);
+  return undoSeriesStep(template, date, inserted.lastInsertId as number);
 }
 
 // Decides against an occurrence without recording anything, moving the series
-// past it just the same.
+// past it just the same. Returns how to take it back.
 export async function dismissRecurringOccurrence(
   id: number,
   date: string,
-): Promise<void> {
+): Promise<Undo | null> {
   const template = await getRecurringTransaction(id);
-  if (!template) return;
+  if (!template) return null;
   assertNextOccurrence(template, date);
 
   const db = await getDb();
   await db.batch([advanceSeriesStatement(template, date)]);
+  return undoSeriesStep(template, date, null);
 }
 
 // Soonest first: the list is a queue of what is coming, and the thing that is
@@ -1042,15 +1125,15 @@ export async function deleteExpectedMovement(id: number): Promise<void> {
 // Dated the day it was due rather than today: the user is recording that the
 // thing they foresaw happened, and moving it to whenever they got around to
 // confirming would put it in the wrong month.
-export async function confirmExpectedMovement(id: number): Promise<void> {
+export async function confirmExpectedMovement(id: number): Promise<Undo | null> {
   const db = await getDb();
   const [movement] = await db.select<ExpectedMovement[]>(
     "SELECT * FROM expected_movements WHERE id = $1",
     [id],
   );
-  if (!movement) return;
+  if (!movement) return null;
 
-  await db.batch([
+  const [inserted] = await db.batch([
     insertTransactionStatement({
       amount: movement.amount,
       type: movement.type,
@@ -1070,11 +1153,12 @@ export async function confirmExpectedMovement(id: number): Promise<void> {
       expectChanges: 1,
     },
   ]);
+  return reopenExpectedMovement(id, "confirmed", inserted.lastInsertId as number);
 }
 
 // Decides against it. Nothing is recorded, which is the whole difference from
 // confirming — both stop it being proposed, only one of them says it happened.
-export async function dismissExpectedMovement(id: number): Promise<void> {
+export async function dismissExpectedMovement(id: number): Promise<Undo> {
   const db = await getDb();
   await db.batch([
     {
@@ -1085,6 +1169,33 @@ export async function dismissExpectedMovement(id: number): Promise<void> {
       expectChanges: 1,
     },
   ]);
+  return reopenExpectedMovement(id, "dismissed", null);
+}
+
+// Sends a movement back to waiting and deletes the transaction confirming it
+// created, if it created one. Only from the decision being undone: if the
+// movement has moved on since — its transaction deleted, which already reopened
+// it — nothing is written.
+function reopenExpectedMovement(
+  id: number,
+  from: "confirmed" | "dismissed",
+  transactionId: number | null,
+): Undo {
+  return async () => {
+    const db = await getDb();
+    await db.batch([
+      {
+        query: `UPDATE expected_movements
+                SET status = 'pending', transaction_id = NULL
+                WHERE id = $1 AND status = $2 AND transaction_id IS $3`,
+        values: [id, from, transactionId],
+        expectChanges: 1,
+      },
+      ...(transactionId === null
+        ? []
+        : deleteCreatedTransactionStatements(transactionId)),
+    ]);
+  };
 }
 
 export async function listBudgets(): Promise<BudgetWithCategory[]> {

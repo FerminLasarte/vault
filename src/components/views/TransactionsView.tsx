@@ -30,22 +30,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { CurrencyFilter } from "@/components/CurrencyFilter";
 import { CategorySelect } from "@/components/filters/CategorySelect";
 import { DateRangePicker } from "@/components/DateRangePicker";
-import { TransactionForm } from "@/components/TransactionForm";
+import { TransactionDialog } from "@/components/TransactionDialog";
 import { AttachmentsDialog } from "@/components/AttachmentsDialog";
 import { useAppData } from "@/hooks/useAppData";
 import { applyTransactionFilters, EMPTY_DATE_RANGE, filterByTag } from "@/lib/finance";
@@ -212,7 +202,6 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
     } else {
       await addTransaction(values, transactionTags);
     }
-    setIsFormOpen(false);
   }
 
   async function handleConfirmDelete() {
@@ -440,10 +429,8 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
                         <TableCell
                           className={cn(
                             "text-right font-medium whitespace-nowrap",
-                            transaction.type === "income" &&
-                              "text-emerald-600 dark:text-emerald-400",
-                            transaction.type === "expense" &&
-                              "text-red-600 dark:text-red-400",
+                            transaction.type === "income" && "text-positive",
+                            transaction.type === "expense" && "text-negative",
                           )}
                         >
                           {transaction.type === "transfer" ? (
@@ -561,52 +548,32 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
         }}
       />
 
-      <AlertDialog
+      <ConfirmDeleteDialog
         open={pendingDeletion !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingDeletion(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar esta transacción?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Se eliminará «{pendingDeletion?.description}» del{" "}
-              {pendingDeletion ? formatDate(pendingDeletion.date) : ""}. Esta acción no se
-              puede deshacer.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={isMutating}
-              onClick={handleConfirmDelete}
-            >
-              Eliminar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        onClose={() => setPendingDeletion(null)}
+        title="¿Eliminar esta transacción?"
+        description={
+          <>
+            Se eliminará «{pendingDeletion?.description}» del{" "}
+            {pendingDeletion ? formatDate(pendingDeletion.date) : ""}. Esta acción no se
+            puede deshacer.
+          </>
+        }
+        onConfirm={handleConfirmDelete}
+        isMutating={isMutating}
+      />
 
-      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              {editing ? "Editar transacción" : "Nueva transacción"}
-            </DialogTitle>
-          </DialogHeader>
-          <TransactionForm
-            categories={categories}
-            categoryRules={categoryRules}
-            tags={tags}
-            paymentMethods={paymentMethods}
-            defaultCurrency={currency}
-            editing={editing}
-            onSubmitTransaction={handleSubmitTransaction}
-          />
-        </DialogContent>
-      </Dialog>
+      <TransactionDialog
+        open={isFormOpen}
+        onOpenChange={setIsFormOpen}
+        editing={editing}
+        categories={categories}
+        categoryRules={categoryRules}
+        tags={tags}
+        paymentMethods={paymentMethods}
+        defaultCurrency={currency}
+        onSubmitTransaction={handleSubmitTransaction}
+      />
     </div>
   );
 }

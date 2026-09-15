@@ -27,8 +27,10 @@ interface IncomeVsExpenseChartProps {
   isLoading: boolean;
 }
 
-const INCOME_COLOR = "#10b981";
-const EXPENSE_COLOR = "#ef4444";
+// The same tokens as every signed figure on screen, so a bar and the amount it
+// stands for are one colour, and both follow the theme.
+const INCOME_COLOR = "var(--positive)";
+const EXPENSE_COLOR = "var(--negative)";
 
 const axisTick = { fontSize: 12, fill: "var(--muted-foreground)" };
 

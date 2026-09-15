@@ -70,15 +70,15 @@ earlier decision and are not listed.
 | B-19 | Loan badge renders "Debo·Martín" without spaces                    | bug         | low      | 4     | [x]  |
 | I-09 | `index.html` still carries the template's lang, title and favicon  | improvement | low      | 4     | [x]  |
 | I-10 | "Aportar hoy" input has no accessible name                         | improvement | low      | 4     | [x]  |
-| B-20 | Attachments dialog briefly shows the previous transaction's files  | bug         | low      | 5     | [ ]  |
-| B-21 | Category rules card shows its empty state while loading            | bug         | low      | 5     | [ ]  |
-| I-11 | Delete confirmation copied 9 times; two deletes unconfirmed        | improvement | medium   | 5     | [ ]  |
-| I-12 | Income/expense colours hardcoded instead of tokens                 | improvement | medium   | 5     | [ ]  |
-| I-13 | `TransactionForm` does not follow `FormDialog` / `useDialogForm`   | improvement | medium   | 5     | [ ]  |
-| I-14 | `useUpdater` instantiated twice with independent state             | improvement | medium   | 5     | [ ]  |
-| I-15 | Hand-rolled progress bars duplicate `ui/progress-bar`              | improvement | low      | 5     | [ ]  |
-| I-16 | "Descartar" is irreversible; offer undo instead                    | improvement | medium   | 5     | [ ]  |
-| I-17 | Delete dialogs do not mention cascading effects                    | improvement | low      | 5     | [ ]  |
+| B-20 | Attachments dialog briefly shows the previous transaction's files  | bug         | low      | 5     | [x]  |
+| B-21 | Category rules card shows its empty state while loading            | bug         | low      | 5     | [x]  |
+| I-11 | Delete confirmation copied 9 times; two deletes unconfirmed        | improvement | medium   | 5     | [x]  |
+| I-12 | Income/expense colours hardcoded instead of tokens                 | improvement | medium   | 5     | [x]  |
+| I-13 | `TransactionForm` does not follow `FormDialog` / `useDialogForm`   | improvement | medium   | 5     | [x]  |
+| I-14 | `useUpdater` instantiated twice with independent state             | improvement | medium   | 5     | [x]  |
+| I-15 | Hand-rolled progress bars duplicate `ui/progress-bar`              | improvement | low      | 5     | [x]  |
+| I-16 | "Descartar" is irreversible; offer undo instead                    | improvement | medium   | 5     | [x]  |
+| I-17 | Delete dialogs do not mention cascading effects                    | improvement | low      | 5     | [x]  |
 | I-18 | Every mutation reloads the whole dataset                           | improvement | medium   | 6     | [ ]  |
 | I-19 | One giant context re-renders every consumer on each mutation       | improvement | medium   | 6     | [ ]  |
 | I-20 | Sync Tauri commands run on the main thread                         | improvement | medium   | 6     | [ ]  |
@@ -656,7 +656,7 @@ categories, type)` into `src/lib/categoryRules.ts` and use it in all three
   dialog titled for this one.
 - **Proposal:** `setAttachments([])` in the same block that resets `preview`;
   ignore responses whose `transactionId` is no longer current.
-- [ ] Done
+- [x] Done
 
 ### B-21 · Category rules card shows its empty state while loading
 
@@ -666,7 +666,7 @@ categories, type)` into `src/lib/categoryRules.ts` and use it in all three
   hay reglas…" flashes during the initial load. Every other list card passes
   it.
 - **Proposal:** read `isLoading` from `useAppData()` and pass it through.
-- [ ] Done
+- [x] Done
 
 ### I-11 · Delete confirmation copied 9 times; two deletes unconfirmed
 
@@ -682,7 +682,7 @@ categories, type)` into `src/lib/categoryRules.ts` and use it in all three
 - **Proposal:** a `ConfirmDeleteDialog` (title, description, `onConfirm`,
   `isMutating`) used by every delete — or, for the two unconfirmed ones, an
   undo toast (I-16).
-- [ ] Done
+- [x] Done
 
 ### I-12 · Income/expense colours hardcoded instead of tokens
 
@@ -700,7 +700,7 @@ dark:text-emerald-400` in ~14 places: `SummaryBar.tsx:69-76`,
 - **Proposal:** `--positive` / `--negative` tokens in `src/index.css` (light and
   dark) mapped in `@theme inline`; use `text-positive` / `text-negative` and
   `var(--positive)` in charts.
-- [ ] Done
+- [x] Done
 
 ### I-13 · `TransactionForm` does not follow `FormDialog` / `useDialogForm`
 
@@ -715,7 +715,7 @@ dark:text-emerald-400` in ~14 places: `SummaryBar.tsx:69-76`,
 - **Proposal:** migrate to `FormDialog` + `useDialogForm`, and decide
   explicitly whether "guardar y cargar otra" exists (if yes, wire it; if not,
   delete the reset).
-- [ ] Done
+- [x] Done
 
 ### I-14 · `useUpdater` instantiated twice with independent state
 
@@ -727,7 +727,7 @@ dark:text-emerald-400` in ~14 places: `SummaryBar.tsx:69-76`,
   version X; installing from the toast shows no progress in Ajustes; "Buscar
   actualizaciones" from the menu creates a second `Update` resource.
 - **Proposal:** an `UpdaterProvider` sharing one state.
-- [ ] Done
+- [x] Done
 
 ### I-15 · Hand-rolled progress bars duplicate `ui/progress-bar`
 
@@ -736,7 +736,7 @@ dark:text-emerald-400` in ~14 places: `SummaryBar.tsx:69-76`,
 - **Where:** `src/components/LoansSection.tsx:376-381`,
   `src/components/views/CommitmentsView.tsx:292-297`.
 - **Proposal:** `<ProgressBar ratio={paidRatio} />`.
-- [ ] Done
+- [x] Done
 
 ### I-16 · "Descartar" is irreversible; offer undo instead
 
@@ -751,7 +751,7 @@ dark:text-emerald-400` in ~14 places: `SummaryBar.tsx:69-76`,
   `last_confirmed_date` / `status = 'pending'` — undo over confirmation, in
   line with the UI principles. Same idea for "Registrar": delete the created
   transaction and revert the counter.
-- [ ] Done
+- [x] Done
 
 ### I-17 · Delete dialogs do not mention cascading effects
 
@@ -765,7 +765,7 @@ dark:text-emerald-400` in ~14 places: `SummaryBar.tsx:69-76`,
   (`src/components/views/AccountsView.tsx:270-272`) does not say so.
 - **Proposal:** list how many budgets, rules or goals are affected. Fits in the
   `ConfirmDeleteDialog` of I-11.
-- [ ] Done
+- [x] Done
 
 ---
 

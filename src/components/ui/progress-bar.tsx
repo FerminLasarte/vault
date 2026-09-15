@@ -17,7 +17,7 @@ interface ProgressBarProps {
 const TONE_CLASSES: Record<ProgressTone, string> = {
   primary: "bg-primary",
   destructive: "bg-destructive",
-  positive: "bg-emerald-600",
+  positive: "bg-positive",
 };
 
 export function ProgressBar({

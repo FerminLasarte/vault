@@ -5,16 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ListCard } from "@/components/ListCard";
 import { ActionButton } from "@/components/ActionButton";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PaymentMethodDialog } from "@/components/PaymentMethodDialog";
 import { ExchangeRateBar } from "@/components/ExchangeRateBar";
@@ -27,6 +18,7 @@ import {
 import { formatCurrency } from "@/lib/format";
 import { outstandingByCurrency } from "@/lib/installments";
 import { PAYMENT_METHOD_TYPE_LABELS } from "@/lib/labels";
+import { accountGoalsNotice } from "@/lib/deletionNotice";
 import { cn } from "@/lib/utils";
 import type { NewPaymentMethod, PaymentMethod } from "@/db";
 
@@ -35,6 +27,7 @@ export function AccountsView() {
     paymentMethods,
     transactions,
     installmentPlans,
+    savingsGoals,
     exchangeRate,
     isLoading,
     isMutating,
@@ -83,9 +76,10 @@ export function AccountsView() {
   const [editing, setEditing] = useState<PaymentMethod | null>(null);
   const [pendingDeletion, setPendingDeletion] = useState<PaymentMethod | null>(null);
 
-  // What deleting the account will do with its history, in figures: the
+  // What deleting the account will do with what hangs off it, in figures: the
   // movements and the opening balance move to "Sin asignar" rather than
-  // disappearing (see deletePaymentMethod).
+  // disappearing (see deletePaymentMethod), and a savings goal that follows its
+  // balance is left following nothing.
   const deletionNotice = useMemo(() => {
     if (pendingDeletion === null) return "";
     const movements = transactions.filter(
@@ -95,17 +89,24 @@ export function AccountsView() {
     ).length;
     const unassigned = `«Sin asignar (${pendingDeletion.currency})»`;
 
-    if (movements === 1) {
-      return `Su movimiento se conserva y pasa a ${unassigned}, junto con su saldo.`;
-    }
-    if (movements > 1) {
-      return `Sus ${movements} movimientos se conservan y pasan a ${unassigned}, junto con su saldo.`;
-    }
-    if (pendingDeletion.initial_balance !== 0) {
-      return `No tiene movimientos; su saldo inicial pasa a ${unassigned}.`;
-    }
-    return "No tiene movimientos registrados.";
-  }, [pendingDeletion, transactions]);
+    const history =
+      movements === 1
+        ? `Su movimiento se conserva y pasa a ${unassigned}, junto con su saldo.`
+        : movements > 1
+          ? `Sus ${movements} movimientos se conservan y pasan a ${unassigned}, junto con su saldo.`
+          : pendingDeletion.initial_balance !== 0
+            ? `No tiene movimientos; su saldo inicial pasa a ${unassigned}.`
+            : "No tiene movimientos registrados.";
+
+    const goals = accountGoalsNotice(
+      savingsGoals.filter(
+        (goal) =>
+          goal.tracking_mode === "account" &&
+          goal.payment_method_id === pendingDeletion.id,
+      ).length,
+    );
+    return goals === null ? history : `${history} ${goals}`;
+  }, [pendingDeletion, transactions, savingsGoals]);
 
   function openCreateDialog() {
     setEditing(null);
@@ -180,7 +181,7 @@ export function AccountsView() {
               <Card>
                 <CardHeader>
                   <CardDescription>Deuda pendiente</CardDescription>
-                  <CardTitle className="text-2xl text-red-600 dark:text-red-400">
+                  <CardTitle className="text-2xl text-negative">
                     {formatCurrency(debtArs, "ARS")}
                   </CardTitle>
                   <p className="text-xs text-muted-foreground">
@@ -242,7 +243,7 @@ export function AccountsView() {
               <span
                 className={cn(
                   "shrink-0 text-right text-sm font-medium tabular-nums",
-                  (balances.get(method.id) ?? 0) < 0 && "text-red-600 dark:text-red-400",
+                  (balances.get(method.id) ?? 0) < 0 && "text-negative",
                 )}
               >
                 {formatCurrency(balances.get(method.id) ?? 0, method.currency)}
@@ -282,31 +283,18 @@ export function AccountsView() {
         onSubmitMethod={handleSubmitMethod}
       />
 
-      <AlertDialog
+      <ConfirmDeleteDialog
         open={pendingDeletion !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingDeletion(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar esta cuenta?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Se eliminará «{pendingDeletion?.name}». {deletionNotice}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={isMutating}
-              onClick={handleConfirmDelete}
-            >
-              Eliminar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        onClose={() => setPendingDeletion(null)}
+        title="¿Eliminar esta cuenta?"
+        description={
+          <>
+            Se eliminará «{pendingDeletion?.name}». {deletionNotice}
+          </>
+        }
+        onConfirm={handleConfirmDelete}
+        isMutating={isMutating}
+      />
     </div>
   );
 }

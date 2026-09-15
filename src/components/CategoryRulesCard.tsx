@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ActionButton } from "@/components/ActionButton";
 import { ListCard } from "@/components/ListCard";
 import { FormDialog } from "@/components/FormDialog";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -32,6 +33,7 @@ export function CategoryRulesCard() {
   const {
     categories,
     categoryRules,
+    isLoading,
     isMutating,
     addCategoryRule,
     editCategoryRule,
@@ -40,6 +42,9 @@ export function CategoryRulesCard() {
 
   const [isOpen, setIsOpen] = useState(false);
   const [editing, setEditing] = useState<CategoryRuleWithCategory | null>(null);
+  const [pendingDeletion, setPendingDeletion] = useState<CategoryRuleWithCategory | null>(
+    null,
+  );
 
   const {
     control,
@@ -73,11 +78,18 @@ export function CategoryRulesCard() {
     setIsOpen(false);
   }
 
+  async function handleConfirmDelete() {
+    if (!pendingDeletion) return;
+    await removeCategoryRule(pendingDeletion.id);
+    setPendingDeletion(null);
+  }
+
   return (
     <>
       <ListCard
         title="Reglas de categorización"
         description="Cuando la descripción contenga el texto de una regla, la categoría se completa sola. Si varias coinciden, gana la más específica."
+        isLoading={isLoading}
         isEmpty={categoryRules.length === 0}
         empty={{
           message: "Todavía no hay reglas. Por ejemplo, «netflix» → Ocio.",
@@ -119,8 +131,7 @@ export function CategoryRulesCard() {
                   variant="ghost"
                   size="icon-sm"
                   label="Eliminar"
-                  disabled={isMutating}
-                  onClick={() => void removeCategoryRule(rule.id)}
+                  onClick={() => setPendingDeletion(rule)}
                 >
                   <Trash2 />
                   <span className="sr-only">Eliminar regla {rule.pattern}</span>
@@ -178,6 +189,21 @@ export function CategoryRulesCard() {
           )}
         </div>
       </FormDialog>
+
+      <ConfirmDeleteDialog
+        open={pendingDeletion !== null}
+        onClose={() => setPendingDeletion(null)}
+        title="¿Eliminar esta regla?"
+        description={
+          <>
+            Se eliminará la regla «{pendingDeletion?.pattern}» →{" "}
+            {pendingDeletion?.category_name}. Los movimientos que ya categorizó no
+            cambian.
+          </>
+        }
+        onConfirm={handleConfirmDelete}
+        isMutating={isMutating}
+      />
     </>
   );
 }

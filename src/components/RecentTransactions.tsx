@@ -91,9 +91,8 @@ export function RecentTransactions({
                   <span
                     className={cn(
                       "text-sm font-medium tabular-nums whitespace-nowrap",
-                      transaction.type === "income" &&
-                        "text-emerald-600 dark:text-emerald-400",
-                      transaction.type === "expense" && "text-red-600 dark:text-red-400",
+                      transaction.type === "income" && "text-positive",
+                      transaction.type === "expense" && "text-negative",
                     )}
                   >
                     {/* A transfer moves the user's own money and is neither a
