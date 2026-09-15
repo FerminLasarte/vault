@@ -3,15 +3,20 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { TransactionsView } from "./TransactionsView";
-import type { AppData } from "@/context/AppDataContext";
+import type { AppActions, AppData, AppStatus } from "@/context/AppDataContext";
+
+// The provider's three halves, read here from one object.
+type AppContext = AppData & AppActions & AppStatus;
 import type { TransactionWithCategory } from "@/db";
 
 // The view reads everything through this one hook, so replacing it is enough to
 // drive the component without a database or a Tauri runtime behind it.
-const appData = vi.hoisted(() => ({ current: {} as AppData }));
+const appData = vi.hoisted(() => ({ current: {} as AppContext }));
 
 vi.mock("@/hooks/useAppData", () => ({
   useAppData: () => appData.current,
+  useAppActions: () => appData.current,
+  useAppStatus: () => appData.current,
 }));
 
 beforeAll(() => {
@@ -74,7 +79,7 @@ function renderView(transactions: TransactionWithCategory[]) {
     addTransaction: vi.fn(),
     editTransaction: vi.fn(),
     removeTransaction: vi.fn(),
-  } as unknown as AppData;
+  } as unknown as AppContext;
 
   return render(
     <TransactionsView request={null} tab={null} onRequestHandled={vi.fn()} />,

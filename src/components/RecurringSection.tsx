@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Check, Pause, Pencil, Play, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,9 +14,8 @@ import {
 } from "@/components/ui/card";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { RecurringDialog } from "@/components/RecurringDialog";
-import { useAppData } from "@/hooks/useAppData";
-import { collectPendingRecurrences } from "@/lib/pendingRecurring";
-import { formatCurrency, formatDate, todayIsoDate } from "@/lib/format";
+import { useAppActions, useAppData, useAppStatus } from "@/hooks/useAppData";
+import { formatCurrency, formatDate } from "@/lib/format";
 import { RECURRENCE_FREQUENCY_LABELS, TRANSACTION_TYPE_LABELS } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import type { NewRecurringTransaction, RecurringTransactionWithNames } from "@/db";
@@ -27,18 +26,19 @@ export function RecurringSection() {
     categories,
     paymentMethods,
     isLoading,
-    isMutating,
+    pending: pendingCommitments,
+  } = useAppData();
+  const { isMutating } = useAppStatus();
+  const {
     addRecurring,
     editRecurring,
     removeRecurring,
     confirmRecurring,
     dismissRecurring,
-  } = useAppData();
+    registerAll,
+  } = useAppActions();
 
-  const pending = useMemo(
-    () => collectPendingRecurrences(recurring, todayIsoDate()),
-    [recurring],
-  );
+  const pending = pendingCommitments.recurring;
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editing, setEditing] = useState<RecurringTransactionWithNames | null>(null);
@@ -65,12 +65,15 @@ export function RecurringSection() {
   }
 
   async function acceptAll() {
-    // Sequential on purpose: each confirmation advances its template, and the
-    // next one has to see that. No "Deshacer" per movement: a toast offering to
-    // take back one of many would be noise.
-    for (const entry of pending) {
-      await confirmRecurring(entry.template.id, entry.date, { offerUndo: false });
-    }
+    // One write for the lot, in the order listed: a series' later occurrence
+    // follows its earlier one (see recordSteps).
+    await registerAll(
+      pending.map((entry) => ({
+        kind: "recurring",
+        id: entry.template.id,
+        date: entry.date,
+      })),
+    );
   }
 
   function waitingReason(waitingFor: string | null): string | null {

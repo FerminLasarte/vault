@@ -3,13 +3,20 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { CategoryRulesCard } from "./CategoryRulesCard";
-import type { AppData } from "@/context/AppDataContext";
+import type { AppActions, AppData, AppStatus } from "@/context/AppDataContext";
+
+// The provider's three halves, read here from one object.
+type AppContext = AppData & AppActions & AppStatus;
 import type { CategoryRuleWithCategory } from "@/db";
 
-const appData = vi.hoisted(() => ({ current: {} as AppData }));
-vi.mock("@/hooks/useAppData", () => ({ useAppData: () => appData.current }));
+const appData = vi.hoisted(() => ({ current: {} as AppContext }));
+vi.mock("@/hooks/useAppData", () => ({
+  useAppData: () => appData.current,
+  useAppActions: () => appData.current,
+  useAppStatus: () => appData.current,
+}));
 
-function renderCard(overrides: Partial<AppData>) {
+function renderCard(overrides: Partial<AppContext>) {
   appData.current = {
     categories: [],
     categoryRules: [],
@@ -19,7 +26,7 @@ function renderCard(overrides: Partial<AppData>) {
     editCategoryRule: vi.fn(),
     removeCategoryRule: vi.fn(),
     ...overrides,
-  } as unknown as AppData;
+  } as unknown as AppContext;
 
   return render(<CategoryRulesCard />);
 }

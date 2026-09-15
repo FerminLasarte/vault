@@ -9,7 +9,7 @@ import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PaymentMethodDialog } from "@/components/PaymentMethodDialog";
 import { ExchangeRateBar } from "@/components/ExchangeRateBar";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppActions, useAppData, useAppStatus } from "@/hooks/useAppData";
 import {
   calculateAccountBalances,
   consolidateByCurrency,
@@ -30,11 +30,9 @@ export function AccountsView() {
     savingsGoals,
     exchangeRate,
     isLoading,
-    isMutating,
-    addPaymentMethod,
-    editPaymentMethod,
-    removePaymentMethod,
   } = useAppData();
+  const { isMutating } = useAppStatus();
+  const { addPaymentMethod, editPaymentMethod, removePaymentMethod } = useAppActions();
 
   // Balances are derived, never stored: recomputing them from the movements
   // keeps them correct after any edit or deletion, with nothing to resync.

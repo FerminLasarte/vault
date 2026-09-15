@@ -7,7 +7,7 @@ import type {
   TransactionWithCategory,
 } from "@/db/schema";
 import { normalizeForSearch, splitTagNames } from "@/lib/text";
-import { toIsoDate } from "@/lib/format";
+import { toIsoDate, parseIsoDate } from "@/lib/format";
 
 export interface FinancialSummary {
   balance: number;
@@ -564,6 +564,17 @@ export function recentMonthsRange(
   const first = new Date(reference.getFullYear(), reference.getMonth() - (months - 1), 1);
 
   return { from: toIsoDate(first), to: toIsoDate(reference) };
+}
+
+// The period the analysis shows. "Últimos 12 meses" is held as that rather
+// than as the dates it stood for when picked, so it keeps running up to today
+// with the app left open overnight.
+export type StatisticsPeriod = { kind: "recent" } | { kind: "range"; range: DateRange };
+
+export function periodRange(period: StatisticsPeriod, today: string): DateRange {
+  return period.kind === "recent"
+    ? recentMonthsRange(RECENT_MONTHS, parseIsoDate(today))
+    : period.range;
 }
 
 // The full calendar year as a date range.

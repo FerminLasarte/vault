@@ -23,15 +23,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { LoanDialog } from "@/components/LoanDialog";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppActions, useAppData, useAppStatus } from "@/hooks/useAppData";
 import {
   amortizationSchedule,
   outstandingByDirection,
   outstandingPrincipal,
   totalInterest,
 } from "@/lib/loans";
-import { collectPendingLoanPayments } from "@/lib/pendingLoans";
-import { formatCurrency, formatDate, todayIsoDate } from "@/lib/format";
+import { formatCurrency, formatDate } from "@/lib/format";
 import { LOAN_DIRECTION_LABELS } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import type { LoanWithNames, NewLoan } from "@/db";
@@ -110,22 +109,18 @@ export function LoansSection() {
     categories,
     paymentMethods,
     isLoading,
-    isMutating,
-    addLoan,
-    editLoan,
-    removeLoan,
-    confirmLoanPayment,
+    pending: pendingCommitments,
   } = useAppData();
+  const { isMutating } = useAppStatus();
+  const { addLoan, editLoan, removeLoan, confirmLoanPayment, registerAll } =
+    useAppActions();
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editing, setEditing] = useState<LoanWithNames | null>(null);
   const [pendingDeletion, setPendingDeletion] = useState<LoanWithNames | null>(null);
   const [expanded, setExpanded] = useState<number | null>(null);
 
-  const pending = useMemo(
-    () => collectPendingLoanPayments(loans, todayIsoDate()),
-    [loans],
-  );
+  const pending = pendingCommitments.loans;
 
   const outstanding = useMemo(() => outstandingByDirection(loans), [loans]);
 
@@ -149,14 +144,17 @@ export function LoansSection() {
   }
 
   async function payAll() {
-    // Sequential: each confirmation advances its loan, and the next payment of
-    // the same loan depends on that having happened. No "Deshacer" per payment:
-    // a toast offering to take back one of many would be noise.
-    for (const entry of pending) {
-      await confirmLoanPayment(entry.loan.id, entry.index, entry.date, entry.amount, {
-        offerUndo: false,
-      });
-    }
+    // One write for the lot, in the order listed: a loan's later payment
+    // follows its earlier one (see recordSteps).
+    await registerAll(
+      pending.map((entry) => ({
+        kind: "loan",
+        id: entry.loan.id,
+        index: entry.index,
+        date: entry.date,
+        amount: entry.amount,
+      })),
+    );
   }
 
   return (

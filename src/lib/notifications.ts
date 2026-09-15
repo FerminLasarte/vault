@@ -1,18 +1,8 @@
 import { calculateBudgetProgress, budgetPeriodKey } from "@/lib/finance";
-import { collectPendingExpected } from "@/lib/expected";
-import { collectPendingInstallments } from "@/lib/pendingInstallments";
-import { collectPendingLoanPayments } from "@/lib/pendingLoans";
-import { collectPendingRecurrences } from "@/lib/pendingRecurring";
 import { formatCurrency, formatDate, formatMonthLabel, parseIsoDate } from "@/lib/format";
 import { hasClose, lastClosedMonthKey } from "@/lib/monthlyClose";
-import type {
-  BudgetWithCategory,
-  ExpectedMovementWithNames,
-  InstallmentPlanWithNames,
-  LoanWithNames,
-  RecurringTransactionWithNames,
-  Transaction,
-} from "@/db/schema";
+import type { BudgetWithCategory, Transaction } from "@/db/schema";
+import type { PendingCommitments } from "@/lib/pendingCommitments";
 
 // The share of a budget that counts as "worth a warning". Below it the user is
 // simply spending; above it the month is likely to end over the cap.
@@ -29,10 +19,10 @@ export interface AppNotification {
 }
 
 export interface NotificationSources {
-  installmentPlans: InstallmentPlanWithNames[];
-  loans: LoanWithNames[];
-  recurring: RecurringTransactionWithNames[];
-  expectedMovements: ExpectedMovementWithNames[];
+  // What is waiting, worked out once by the data provider (see
+  // collectPendingCommitments), so a notification cannot announce something
+  // the badge and the section do not show.
+  pending: PendingCommitments;
   budgets: BudgetWithCategory[];
   transactions: Transaction[];
 }
@@ -61,7 +51,7 @@ export function pendingNotifications(
     });
   }
 
-  for (const entry of collectPendingInstallments(sources.installmentPlans, today)) {
+  for (const entry of sources.pending.installments) {
     notifications.push({
       id: `installment:${entry.plan.id}:${entry.index}`,
       title: "Cuota vencida",
@@ -75,7 +65,7 @@ export function pendingNotifications(
   // Worded as a reminder rather than as a debt: unlike an instalment, nothing
   // is owed here. The date the user themselves picked has simply arrived, and
   // the only thing being asked is whether it happened.
-  for (const movement of collectPendingExpected(sources.expectedMovements, today)) {
+  for (const movement of sources.pending.expected) {
     notifications.push({
       // The due date is part of the id for the same reason the instalment
       // number is part of its own: editing the date makes it a different fact,
@@ -89,7 +79,7 @@ export function pendingNotifications(
     });
   }
 
-  for (const entry of collectPendingLoanPayments(sources.loans, today)) {
+  for (const entry of sources.pending.loans) {
     const owed = entry.loan.direction === "borrowed";
     notifications.push({
       id: `loan:${entry.loan.id}:${entry.index}`,
@@ -103,7 +93,7 @@ export function pendingNotifications(
     });
   }
 
-  for (const entry of collectPendingRecurrences(sources.recurring, today)) {
+  for (const entry of sources.pending.recurring) {
     notifications.push({
       id: `recurring:${entry.template.id}:${entry.date}`,
       title: "Movimiento recurrente pendiente",

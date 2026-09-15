@@ -6,7 +6,7 @@ import { FormDialog } from "@/components/FormDialog";
 import { useDialogForm } from "@/hooks/useDialogForm";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppActions, useAppData, useAppStatus } from "@/hooks/useAppData";
 import { MANUAL_RATE_SOURCE, RATE_TYPE_LABELS } from "@/lib/exchangeRate";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -20,13 +20,9 @@ type RateFormInput = z.input<typeof rateSchema>;
 type RateFormValues = z.output<typeof rateSchema>;
 
 export function ExchangeRateBar() {
-  const {
-    rateType,
-    exchangeRate,
-    isRefreshingRate,
-    refreshExchangeRate,
-    saveManualExchangeRate,
-  } = useAppData();
+  const { rateType, exchangeRate } = useAppData();
+  const { isRefreshingRate } = useAppStatus();
+  const { refreshExchangeRate, saveManualExchangeRate } = useAppActions();
 
   const [isEditing, setIsEditing] = useState(false);
 

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestDatabase } from "./testing/database";
 import {
   confirmExpectedMovement,
@@ -10,7 +10,6 @@ import {
   insertTransactionWithTags,
   listExpectedMovements,
   EXCHANGE_RATE_TYPE,
-  getLatestExchangeRate,
   getSetting,
   insertAttachment,
   insertCategory,
@@ -32,6 +31,7 @@ import {
   recordInstallment,
   recordLoanPayment,
   recordRecurringOccurrence,
+  recordSteps,
   setDatabaseForTesting,
   setSetting,
   setTransactionTags,
@@ -378,16 +378,19 @@ describe("exchange rates", () => {
     expect(await listExchangeRates("bolsa")).toHaveLength(unique.length);
   });
 
-  it("returns the most recent quote for the rate asked for", async () => {
+  it("lists one rate's series oldest first, so its last quote is the latest", async () => {
+    // The app shows the last quote of the series as the current one.
     await upsertExchangeRates([
-      aRate({ date: "2026-08-01", sell: 1100 }),
       aRate({ date: "2026-08-20", sell: 1300 }),
+      aRate({ date: "2026-08-01", sell: 1100 }),
       aRate({ date: "2026-08-20", rate_type: "blue", sell: 1500 }),
     ]);
 
-    expect((await getLatestExchangeRate("bolsa"))?.sell).toBe(1300);
-    expect((await getLatestExchangeRate("blue"))?.sell).toBe(1500);
-    expect(await getLatestExchangeRate("cripto")).toBeNull();
+    expect((await listExchangeRates("bolsa")).map((rate) => rate.sell)).toEqual([
+      1100, 1300,
+    ]);
+    expect((await listExchangeRates("blue")).at(-1)?.sell).toBe(1500);
+    expect(await listExchangeRates("cripto")).toEqual([]);
   });
 });
 
@@ -934,6 +937,227 @@ describe("undoing a step from its toast", () => {
     await expect(undo!()).rejects.toThrow();
 
     expect((await listExpectedMovements())[0].status).toBe("pending");
+  });
+});
+
+describe("registering every pending step at once", () => {
+  // "Registrar todas" used to be one write per step: a failure halfway left
+  // some registered and some not, with nothing to say which. Now it is one
+  // write, and its one "Deshacer" takes all of it back or none of it.
+
+  async function aPlan(description = "Heladera") {
+    await insertInstallmentPlan({
+      description,
+      totalAmount: 1200,
+      installmentCount: 12,
+      currency: "ARS",
+      categoryId: null,
+      paymentMethodId: null,
+      firstDueDate: "2026-07-10",
+      cashPrice: null,
+    });
+    return (await listInstallmentPlans()).find(
+      (plan) => plan.description === description,
+    )!;
+  }
+
+  async function aLoan() {
+    await insertLoan({
+      direction: "borrowed",
+      counterparty: "Banco",
+      description: "Préstamo personal",
+      principal: 1200,
+      currency: "ARS",
+      annualRate: 0,
+      installmentCount: 12,
+      categoryId: null,
+      paymentMethodId: null,
+      firstDueDate: "2026-07-10",
+    });
+    return (await listLoans())[0];
+  }
+
+  async function aSeries() {
+    await insertRecurringTransaction({
+      description: "Alquiler",
+      amount: 500,
+      type: "expense",
+      categoryId: null,
+      paymentMethodId: null,
+      currency: "ARS",
+      frequency: "monthly",
+      startDate: "2026-08-08",
+      isActive: true,
+    });
+    return (await listRecurringTransactions())[0];
+  }
+
+  async function confirmedCounts() {
+    return Object.fromEntries(
+      (await listInstallmentPlans()).map((plan) => [
+        plan.description,
+        plan.confirmed_count,
+      ]),
+    );
+  }
+
+  it("registers every step, of several plans, in one write", async () => {
+    const fridge = await aPlan("Heladera");
+    const tv = await aPlan("Televisor");
+    const batch = vi.spyOn(db, "batch");
+
+    await recordSteps([
+      { kind: "installment", id: fridge.id, index: 0, date: "2026-07-10", amount: 100 },
+      { kind: "installment", id: fridge.id, index: 1, date: "2026-08-10", amount: 100 },
+      { kind: "installment", id: tv.id, index: 0, date: "2026-07-10", amount: 100 },
+    ]);
+
+    expect(batch).toHaveBeenCalledOnce();
+    expect(await confirmedCounts()).toEqual({ Heladera: 2, Televisor: 1 });
+    const descriptions = (await listTransactionsWithCategory()).map((t) => t.description);
+    expect(descriptions.sort()).toEqual([
+      "Heladera (1/12)",
+      "Heladera (2/12)",
+      "Televisor (1/12)",
+    ]);
+  });
+
+  it("works through a series and a loan the same way", async () => {
+    const series = await aSeries();
+    const loan = await aLoan();
+
+    await recordSteps([
+      { kind: "recurring", id: series.id, date: "2026-08-08" },
+      { kind: "recurring", id: series.id, date: "2026-09-08" },
+      { kind: "loan", id: loan.id, index: 0, date: "2026-07-10", amount: 100 },
+      { kind: "loan", id: loan.id, index: 1, date: "2026-08-10", amount: 100 },
+    ]);
+
+    expect((await listRecurringTransactions())[0].last_confirmed_date).toBe("2026-09-08");
+    expect((await listLoans())[0].confirmed_count).toBe(2);
+    expect(await listTransactionsWithCategory()).toHaveLength(4);
+  });
+
+  it("writes nothing when one step is not the next one due", async () => {
+    const fridge = await aPlan();
+    const loan = await aLoan();
+
+    await expect(
+      recordSteps([
+        { kind: "loan", id: loan.id, index: 0, date: "2026-07-10", amount: 100 },
+        { kind: "installment", id: fridge.id, index: 1, date: "2026-08-10", amount: 100 },
+      ]),
+    ).rejects.toThrow();
+
+    expect((await listLoans())[0].confirmed_count).toBe(0);
+    expect(await confirmedCounts()).toEqual({ Heladera: 0 });
+    expect(await listTransactionsWithCategory()).toHaveLength(0);
+  });
+
+  it("writes nothing when the write fails halfway", async () => {
+    const fridge = await aPlan("Heladera");
+    const tv = await aPlan("Televisor");
+    await db.execute(
+      `CREATE TRIGGER fail_on_tv BEFORE INSERT ON transactions
+       WHEN NEW.description = 'Televisor (1/12)'
+       BEGIN SELECT RAISE(ABORT, 'simulated failure'); END`,
+    );
+
+    await expect(
+      recordSteps([
+        { kind: "installment", id: fridge.id, index: 0, date: "2026-07-10", amount: 100 },
+        { kind: "installment", id: tv.id, index: 0, date: "2026-07-10", amount: 100 },
+      ]),
+    ).rejects.toThrow();
+
+    expect(await confirmedCounts()).toEqual({ Heladera: 0, Televisor: 0 });
+    expect(await listTransactionsWithCategory()).toHaveLength(0);
+  });
+
+  it("takes every step back with its one undo", async () => {
+    const fridge = await aPlan();
+    const series = await aSeries();
+    const undo = await recordSteps([
+      { kind: "installment", id: fridge.id, index: 0, date: "2026-07-10", amount: 100 },
+      { kind: "installment", id: fridge.id, index: 1, date: "2026-08-10", amount: 100 },
+      { kind: "recurring", id: series.id, date: "2026-08-08" },
+      { kind: "recurring", id: series.id, date: "2026-09-08" },
+    ]);
+    const batch = vi.spyOn(db, "batch");
+
+    await undo();
+
+    expect(batch).toHaveBeenCalledOnce();
+    expect(await confirmedCounts()).toEqual({ Heladera: 0 });
+    expect((await listRecurringTransactions())[0].last_confirmed_date).toBeNull();
+    expect(await listTransactionsWithCategory()).toHaveLength(0);
+  });
+
+  it("takes none of them back when one is no longer the last step of its plan", async () => {
+    const fridge = await aPlan("Heladera");
+    const tv = await aPlan("Televisor");
+    const undo = await recordSteps([
+      { kind: "installment", id: fridge.id, index: 0, date: "2026-07-10", amount: 100 },
+      { kind: "installment", id: tv.id, index: 0, date: "2026-07-10", amount: 100 },
+    ]);
+    await recordInstallment(tv.id, 1, "2026-08-10", 100);
+
+    await expect(undo()).rejects.toThrow();
+
+    expect(await confirmedCounts()).toEqual({ Heladera: 1, Televisor: 2 });
+    expect(await listTransactionsWithCategory()).toHaveLength(3);
+  });
+});
+
+describe("importing a file", () => {
+  // One row after another used to be one write each, plus a read of every tag
+  // and a sweep of the tags table for every tagged row.
+
+  it("imports every row, with its tags, in one write", async () => {
+    const batch = vi.spyOn(db, "batch");
+    const execute = vi.spyOn(db, "execute");
+
+    await insertTransactions([
+      { transaction: anExpense({ description: "Uno" }), tags: ["viaje"] },
+      { transaction: anExpense({ description: "Dos" }), tags: [] },
+      { transaction: anExpense({ description: "Tres" }), tags: ["viaje", "auto"] },
+    ]);
+
+    expect(batch).toHaveBeenCalledOnce();
+    expect(execute).not.toHaveBeenCalled();
+    expect(await listTransactionsWithCategory()).toHaveLength(3);
+    expect(await listTags()).toHaveLength(2);
+  });
+
+  it("imports nothing when one row cannot be written", async () => {
+    await expect(
+      insertTransactions([
+        { transaction: anExpense({ description: "Uno" }), tags: ["viaje"] },
+        { transaction: anExpense({ description: "Dos", amount: 0 }), tags: [] },
+      ]),
+    ).rejects.toThrow();
+
+    expect(await listTransactionsWithCategory()).toHaveLength(0);
+    expect(await listTags()).toHaveLength(0);
+  });
+
+  it("files a new tag spelt two ways in one file under one name", async () => {
+    await insertTransactions([
+      { transaction: anExpense({ description: "Uno" }), tags: ["Ñandú"] },
+      { transaction: anExpense({ description: "Dos" }), tags: ["ñandú"] },
+    ]);
+
+    expect((await listTags()).map((tag) => tag.name)).toEqual(["Ñandú"]);
+  });
+
+  it("adds a transaction without tags as a single statement", async () => {
+    const batch = vi.spyOn(db, "batch");
+    const select = vi.spyOn(db, "select");
+
+    await insertTransactionWithTags(anExpense(), []);
+
+    expect(select).not.toHaveBeenCalled();
+    expect(batch.mock.calls[0][0]).toHaveLength(1);
   });
 });
 

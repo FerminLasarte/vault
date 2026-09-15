@@ -53,6 +53,24 @@ export function rateSourceFor(type: RateType): string {
   return `dolarapi:${type}`;
 }
 
+// The series with one more quote stored in it, the way upsertExchangeRate
+// stores it: one per day, in date order, and a manual correction replaced only
+// by another manual one. Lets a download reach the screen without reading the
+// whole series back, and without showing a figure the database refused.
+export function withRate(history: ExchangeRate[], rate: ExchangeRate): ExchangeRate[] {
+  const index = history.findIndex((stored) => stored.date >= rate.date);
+  if (index === -1) return [...history, rate];
+
+  const stored = history[index];
+  if (stored.date !== rate.date) {
+    return [...history.slice(0, index), rate, ...history.slice(index)];
+  }
+  if (stored.source === MANUAL_RATE_SOURCE && rate.source !== MANUAL_RATE_SOURCE) {
+    return history;
+  }
+  return [...history.slice(0, index), rate, ...history.slice(index + 1)];
+}
+
 // Today's quote for one rate. CORS is open and no key or account is involved,
 // so the webview can read it directly and nothing about the user is ever sent.
 function currentRateUrl(type: RateType): string {

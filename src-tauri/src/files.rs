@@ -177,6 +177,24 @@ fn replace_with(
     result
 }
 
+// Runs blocking file work on the runtime's pool of blocking threads, for the
+// commands in lib.rs. A plain `fn` command runs on the main thread, so copying
+// a large file or encoding a 5 MB receipt froze the window and the menu until
+// it was done; an `async fn` doing the same work inline would only move the
+// stall to one of the few threads that drive every other async command.
+pub async fn blocking<T, F>(work: F) -> Result<T, String>
+where
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+    T: Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .unwrap_or_else(|error| {
+            eprintln!("A file operation stopped unexpectedly: {error}");
+            Err(FILE_ERROR.to_string())
+        })
+}
+
 pub fn write_atomically(destination: &Path, database: &Path, bytes: &[u8]) -> Result<(), String> {
     replace_with(destination, database, |temporary| {
         fs::write(temporary, bytes).map_err(user_error)
@@ -305,6 +323,25 @@ mod tests {
         assert_eq!(check, "ok");
         pool.close().await;
         count
+    }
+
+    #[test]
+    fn blocking_work_runs_off_the_calling_thread() {
+        // A command's own thread is the one that must stay free: for a plain
+        // `fn` command that was the main thread, which froze the window.
+        let caller = std::thread::current().id();
+
+        let worker =
+            tauri::async_runtime::block_on(blocking(|| Ok(std::thread::current().id()))).unwrap();
+
+        assert_ne!(worker, caller);
+    }
+
+    #[test]
+    fn blocking_work_that_panics_is_reported_in_spanish() {
+        let result = tauri::async_runtime::block_on(blocking::<(), _>(|| panic!("boom")));
+
+        assert_eq!(result, Err(FILE_ERROR.to_string()));
     }
 
     #[test]

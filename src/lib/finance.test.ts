@@ -31,6 +31,7 @@ import {
   buildRateLookup,
   convertAtDate,
   yearFromRange,
+  periodRange,
   recentMonthsRange,
   getNextMonthKeys,
   yearRange,
@@ -1227,5 +1228,23 @@ describe("getNextMonthKeys", () => {
 
   it("returns nothing when asked for nothing", () => {
     expect(getNextMonthKeys(0, "2026-08")).toEqual([]);
+  });
+});
+
+describe("periodRange", () => {
+  // Held as fixed dates, "Últimos 12 meses" stopped at the day the screen was
+  // opened: left open overnight, today's movements fell outside the analysis
+  // and the selector read "Personalizado".
+  it("keeps the recent period running up to today", () => {
+    expect(periodRange({ kind: "recent" }, "2026-09-15")).toEqual({
+      from: "2025-10-01",
+      to: "2026-09-15",
+    });
+  });
+
+  it("keeps a chosen range as it is", () => {
+    const range = { from: "2025-01-01", to: "2025-12-31" };
+
+    expect(periodRange({ kind: "range", range }, "2026-09-15")).toBe(range);
   });
 });

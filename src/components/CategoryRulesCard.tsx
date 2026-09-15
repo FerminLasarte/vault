@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppActions, useAppData, useAppStatus } from "@/hooks/useAppData";
 import type { CategoryRuleWithCategory } from "@/db";
 import { toSelectValue } from "@/lib/forms";
 
@@ -30,15 +30,9 @@ type RuleFormInput = z.input<typeof ruleSchema>;
 type RuleFormValues = z.output<typeof ruleSchema>;
 
 export function CategoryRulesCard() {
-  const {
-    categories,
-    categoryRules,
-    isLoading,
-    isMutating,
-    addCategoryRule,
-    editCategoryRule,
-    removeCategoryRule,
-  } = useAppData();
+  const { categories, categoryRules, isLoading } = useAppData();
+  const { isMutating } = useAppStatus();
+  const { addCategoryRule, editCategoryRule, removeCategoryRule } = useAppActions();
 
   const [isOpen, setIsOpen] = useState(false);
   const [editing, setEditing] = useState<CategoryRuleWithCategory | null>(null);

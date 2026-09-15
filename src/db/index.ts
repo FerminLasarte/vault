@@ -329,6 +329,10 @@ export async function updateTransaction(
 
 // The transaction and its tags as one write, so a failure partway never leaves
 // a new movement without the tags it was saved with.
+//
+// A new transaction has no tags to replace and unlinks none, so there is
+// nothing to clear first and nothing to sweep after — and with no tags at all,
+// nothing to read either: the write is the one INSERT.
 export async function insertTransactionWithTags(
   transaction: NewTransaction,
   tags: string[],
@@ -336,7 +340,9 @@ export async function insertTransactionWithTags(
   const db = await getDb();
   const [inserted] = await db.batch([
     insertTransactionStatement(transaction),
-    ...(await tagStatements(db, insertedIdOf(0), tags)),
+    ...(tags.length === 0
+      ? []
+      : linkTagStatements(insertedIdOf(0), tags, await knownTags(db))),
   ]);
   return inserted.lastInsertId as number;
 }
@@ -838,14 +844,15 @@ function advanceScheduleStatement(
 // accepted into the ledger and when it is dismissed, since either way the user
 // has decided about it and it must stop being proposed.
 function advanceSeriesStatement(
-  template: RecurringTransaction,
+  id: number,
+  from: string | null,
   date: string,
 ): BatchStatement {
   return {
     query: `UPDATE recurring_transactions
             SET last_confirmed_date = $1
             WHERE id = $2 AND last_confirmed_date IS $3`,
-    values: [date, template.id, template.last_confirmed_date],
+    values: [date, id, from],
     expectChanges: 1,
   };
 }
@@ -873,49 +880,109 @@ function deleteCreatedTransactionStatements(transactionId: number): BatchStateme
 // recorded, but only while it is still the last payment registered: the same
 // compare-and-set as advancing, the other way round. Undoing instalment 3
 // after instalment 4 has gone in would leave a hole in the middle of the plan.
-function undoScheduleStep(
+function undoScheduleStatements(
   table: "loans" | "installment_plans",
   id: number,
   index: number,
   transactionId: number,
-): Undo {
+): BatchStatement[] {
+  return [
+    {
+      query: `UPDATE ${table}
+              SET confirmed_count = confirmed_count - 1
+              WHERE id = $1 AND confirmed_count = $2`,
+      values: [id, index + 1],
+      expectChanges: 1,
+    },
+    ...deleteCreatedTransactionStatements(transactionId),
+  ];
+}
+
+// Puts a series back where it stood before an occurrence was decided on — at
+// `from` — and deletes the movement if one was recorded. Only while that
+// occurrence is still the last one decided, for the same reason as a schedule.
+function undoSeriesStatements(
+  id: number,
+  from: string | null,
+  date: string,
+  transactionId: number | null,
+): BatchStatement[] {
+  return [
+    {
+      query: `UPDATE recurring_transactions
+              SET last_confirmed_date = $1
+              WHERE id = $2 AND last_confirmed_date = $3`,
+      values: [from, id, date],
+      expectChanges: 1,
+    },
+    ...(transactionId === null ? [] : deleteCreatedTransactionStatements(transactionId)),
+  ];
+}
+
+// An undo that writes these statements as one batch: every compare-and-set in
+// it holds, or nothing is written.
+function undoing(statements: BatchStatement[]): Undo {
   return async () => {
     const db = await getDb();
-    await db.batch([
-      {
-        query: `UPDATE ${table}
-                SET confirmed_count = confirmed_count - 1
-                WHERE id = $1 AND confirmed_count = $2`,
-        values: [id, index + 1],
-        expectChanges: 1,
-      },
-      ...deleteCreatedTransactionStatements(transactionId),
-    ]);
+    await db.batch(statements);
   };
 }
 
-// Puts a series back where it stood before an occurrence was decided on, and
-// deletes the movement if one was recorded. Only while that occurrence is still
-// the last one decided, for the same reason as a schedule.
-function undoSeriesStep(
+// The movement a loan payment records. A payment on money I owe leaves my
+// pocket; a payment on money owed to me arrives in it. Recording both as
+// expenses would make being repaid look like a cost.
+function loanPaymentTransaction(
+  loan: Loan,
+  index: number,
+  date: string,
+  amount: number,
+): NewTransaction {
+  return {
+    amount,
+    type: loan.direction === "borrowed" ? "expense" : "income",
+    currency: loan.currency,
+    categoryId: loan.category_id,
+    paymentMethodId: loan.payment_method_id,
+    destinationPaymentMethodId: null,
+    destinationAmount: null,
+    description: `${loan.description} (${index + 1}/${loan.installment_count})`,
+    date,
+  };
+}
+
+function installmentTransaction(
+  plan: InstallmentPlan,
+  index: number,
+  date: string,
+  amount: number,
+): NewTransaction {
+  return {
+    amount,
+    type: "expense",
+    currency: plan.currency,
+    categoryId: plan.category_id,
+    paymentMethodId: plan.payment_method_id,
+    destinationPaymentMethodId: null,
+    destinationAmount: null,
+    description: `${plan.description} (${index + 1}/${plan.installment_count})`,
+    date,
+  };
+}
+
+function occurrenceTransaction(
   template: RecurringTransaction,
   date: string,
-  transactionId: number | null,
-): Undo {
-  return async () => {
-    const db = await getDb();
-    await db.batch([
-      {
-        query: `UPDATE recurring_transactions
-                SET last_confirmed_date = $1
-                WHERE id = $2 AND last_confirmed_date = $3`,
-        values: [template.last_confirmed_date, template.id, date],
-        expectChanges: 1,
-      },
-      ...(transactionId === null
-        ? []
-        : deleteCreatedTransactionStatements(transactionId)),
-    ]);
+): NewTransaction {
+  return {
+    amount: template.amount,
+    type: template.type,
+    currency: template.currency,
+    categoryId: template.category_id,
+    paymentMethodId: template.payment_method_id,
+    destinationPaymentMethodId: null,
+    destinationAmount: null,
+    description: template.description,
+    date,
   };
 }
 
@@ -935,22 +1002,11 @@ export async function recordLoanPayment(
   const db = await getDb();
   const [, inserted] = await db.batch([
     advanceScheduleStatement("loans", id, index),
-    // A payment on money I owe leaves my pocket; a payment on money owed to me
-    // arrives in it. Recording both as expenses would make being repaid look
-    // like a cost.
-    insertTransactionStatement({
-      amount,
-      type: loan.direction === "borrowed" ? "expense" : "income",
-      currency: loan.currency,
-      categoryId: loan.category_id,
-      paymentMethodId: loan.payment_method_id,
-      destinationPaymentMethodId: null,
-      destinationAmount: null,
-      description: `${loan.description} (${index + 1}/${loan.installment_count})`,
-      date,
-    }),
+    insertTransactionStatement(loanPaymentTransaction(loan, index, date, amount)),
   ]);
-  return undoScheduleStep("loans", id, index, inserted.lastInsertId as number);
+  return undoing(
+    undoScheduleStatements("loans", id, index, inserted.lastInsertId as number),
+  );
 }
 
 // Records one instalment as paid: writes the movement and advances the plan,
@@ -968,23 +1024,15 @@ export async function recordInstallment(
   const db = await getDb();
   const [, inserted] = await db.batch([
     advanceScheduleStatement("installment_plans", id, index),
-    insertTransactionStatement({
-      amount,
-      type: "expense",
-      currency: plan.currency,
-      categoryId: plan.category_id,
-      paymentMethodId: plan.payment_method_id,
-      destinationPaymentMethodId: null,
-      destinationAmount: null,
-      description: `${plan.description} (${index + 1}/${plan.installment_count})`,
-      date,
-    }),
+    insertTransactionStatement(installmentTransaction(plan, index, date, amount)),
   ]);
-  return undoScheduleStep(
-    "installment_plans",
-    id,
-    index,
-    inserted.lastInsertId as number,
+  return undoing(
+    undoScheduleStatements(
+      "installment_plans",
+      id,
+      index,
+      inserted.lastInsertId as number,
+    ),
   );
 }
 
@@ -1001,20 +1049,17 @@ export async function recordRecurringOccurrence(
 
   const db = await getDb();
   const [, inserted] = await db.batch([
-    advanceSeriesStatement(template, date),
-    insertTransactionStatement({
-      amount: template.amount,
-      type: template.type,
-      currency: template.currency,
-      categoryId: template.category_id,
-      paymentMethodId: template.payment_method_id,
-      destinationPaymentMethodId: null,
-      destinationAmount: null,
-      description: template.description,
-      date,
-    }),
+    advanceSeriesStatement(template.id, template.last_confirmed_date, date),
+    insertTransactionStatement(occurrenceTransaction(template, date)),
   ]);
-  return undoSeriesStep(template, date, inserted.lastInsertId as number);
+  return undoing(
+    undoSeriesStatements(
+      template.id,
+      template.last_confirmed_date,
+      date,
+      inserted.lastInsertId as number,
+    ),
+  );
 }
 
 // Decides against an occurrence without recording anything, moving the series
@@ -1028,8 +1073,127 @@ export async function dismissRecurringOccurrence(
   assertNextOccurrence(template, date);
 
   const db = await getDb();
-  await db.batch([advanceSeriesStatement(template, date)]);
-  return undoSeriesStep(template, date, null);
+  await db.batch([
+    advanceSeriesStatement(template.id, template.last_confirmed_date, date),
+  ]);
+  return undoing(
+    undoSeriesStatements(template.id, template.last_confirmed_date, date, null),
+  );
+}
+
+// One step of "Registrar todas": what a single "Registrar" takes, tagged with
+// the kind of commitment it moves on.
+export type CommitmentStep =
+  | { kind: "installment"; id: number; index: number; date: string; amount: number }
+  | { kind: "loan"; id: number; index: number; date: string; amount: number }
+  | { kind: "recurring"; id: number; date: string };
+
+// Registers every step as one write: all of them, or — if any is refused or
+// fails — none. Steps on the same plan are taken in the order given, each
+// checked against where the one before left the plan, exactly as a run of
+// single "Registrar" would be checked; that one-at-a-time run used to leave
+// part of the list registered when a step failed halfway.
+//
+// Returns one undo for the lot. It too is one write with a compare-and-set per
+// step, so if any step is no longer the last one taken on its plan, none of
+// them is taken back.
+export async function recordSteps(steps: CommitmentStep[]): Promise<Undo> {
+  // Where each plan stands, read once and moved on as the steps are planned.
+  const loans = new Map<number, Loan>();
+  const plans = new Map<number, InstallmentPlan>();
+  const series = new Map<number, RecurringTransaction>();
+
+  const statements: BatchStatement[] = [];
+  // For each step, where its transaction is inserted and how to take it back
+  // once that transaction's id is known.
+  const planned: {
+    insertAt: number;
+    undo: (transactionId: number) => BatchStatement[];
+  }[] = [];
+
+  for (const step of steps) {
+    switch (step.kind) {
+      case "loan": {
+        const loan = loans.get(step.id) ?? (await getLoan(step.id));
+        if (!loan) throw new Error(`Loan ${step.id} no longer exists`);
+        assertNextInSchedule("loan", loan, step.index);
+        loans.set(step.id, { ...loan, confirmed_count: loan.confirmed_count + 1 });
+
+        statements.push(advanceScheduleStatement("loans", step.id, step.index));
+        planned.push({
+          insertAt: statements.length,
+          undo: (transactionId) =>
+            undoScheduleStatements("loans", step.id, step.index, transactionId),
+        });
+        statements.push(
+          insertTransactionStatement(
+            loanPaymentTransaction(loan, step.index, step.date, step.amount),
+          ),
+        );
+        break;
+      }
+      case "installment": {
+        const plan = plans.get(step.id) ?? (await getInstallmentPlan(step.id));
+        if (!plan) throw new Error(`Installment plan ${step.id} no longer exists`);
+        assertNextInSchedule("installment plan", plan, step.index);
+        plans.set(step.id, { ...plan, confirmed_count: plan.confirmed_count + 1 });
+
+        statements.push(
+          advanceScheduleStatement("installment_plans", step.id, step.index),
+        );
+        planned.push({
+          insertAt: statements.length,
+          undo: (transactionId) =>
+            undoScheduleStatements(
+              "installment_plans",
+              step.id,
+              step.index,
+              transactionId,
+            ),
+        });
+        statements.push(
+          insertTransactionStatement(
+            installmentTransaction(plan, step.index, step.date, step.amount),
+          ),
+        );
+        break;
+      }
+      case "recurring": {
+        const template = series.get(step.id) ?? (await getRecurringTransaction(step.id));
+        if (!template)
+          throw new Error(`Recurring transaction ${step.id} no longer exists`);
+        assertNextOccurrence(template, step.date);
+        const from = template.last_confirmed_date;
+        series.set(step.id, { ...template, last_confirmed_date: step.date });
+
+        statements.push(advanceSeriesStatement(step.id, from, step.date));
+        planned.push({
+          insertAt: statements.length,
+          undo: (transactionId) =>
+            undoSeriesStatements(step.id, from, step.date, transactionId),
+        });
+        statements.push(
+          insertTransactionStatement(occurrenceTransaction(template, step.date)),
+        );
+        break;
+      }
+    }
+  }
+
+  if (statements.length === 0) return async () => {};
+
+  const db = await getDb();
+  const results = await db.batch(statements);
+
+  // Last step first: two steps on one plan have to come off in the reverse of
+  // the order they went on. The tag sweep each one carries runs once, at the
+  // end.
+  const undoStatements = planned
+    .map(({ insertAt, undo }) => undo(results[insertAt].lastInsertId as number))
+    .reverse()
+    .flat()
+    .filter((statement) => statement !== DELETE_UNUSED_TAGS);
+  return undoing([...undoStatements, DELETE_UNUSED_TAGS]);
 }
 
 // Soonest first: the list is a queue of what is coming, and the thing that is
@@ -1261,53 +1425,76 @@ const DELETE_UNUSED_TAGS: BatchStatement = {
 // and let "Ñandú" and "ñandú" through as two tags. The existing tags are read
 // before the batch runs; a tag deleted in between makes the batch fail whole
 // on its foreign key, rather than write a half-tagged transaction.
-async function tagStatements(
-  db: SqlConnection,
-  transactionId: number | ReturnType<typeof insertedIdOf>,
-  names: string[],
-): Promise<BatchStatement[]> {
-  const fold = (name: string) => name.toLocaleLowerCase("es");
+type TransactionRef = number | ReturnType<typeof insertedIdOf>;
 
+const foldTagName = (name: string) => name.toLocaleLowerCase("es");
+
+// Every tag there is, by folded name: its id once it exists, or the spelling
+// it is about to be created with. Read once per write, however many
+// transactions that write tags.
+type TagRef = { id: number } | { name: string };
+type KnownTags = Map<string, TagRef>;
+
+async function knownTags(db: SqlConnection): Promise<KnownTags> {
+  const tags = await db.select<Tag[]>("SELECT id, name FROM tags");
+  return new Map(tags.map((tag) => [foldTagName(tag.name), { id: tag.id }]));
+}
+
+// The statements that put these tags on a transaction, creating the ones that
+// do not exist yet. A tag created here is added to `known`, so a later row of
+// the same write spelling it differently ("ñandú" after "Ñandú") reuses it.
+function linkTagStatements(
+  transactionId: TransactionRef,
+  names: string[],
+  known: KnownTags,
+): BatchStatement[] {
   const wanted = Array.from(
     new Map(
       names
         .map((name) => name.trim())
         .filter((name) => name !== "")
-        .map((name) => [fold(name), name]),
+        .map((name) => [foldTagName(name), name]),
     ).values(),
   );
-  const existing = new Map(
-    (await db.select<Tag[]>("SELECT id, name FROM tags")).map((tag) => [
-      fold(tag.name),
-      tag.id,
-    ]),
-  );
 
+  return wanted.flatMap((name): BatchStatement[] => {
+    const tag = known.get(foldTagName(name));
+    if (tag !== undefined && "id" in tag) {
+      return [
+        {
+          query: `INSERT OR IGNORE INTO transaction_tags (transaction_id, tag_id)
+                  VALUES ($1, $2)`,
+          values: [transactionId, tag.id],
+        },
+      ];
+    }
+
+    const spelling = tag?.name ?? name;
+    known.set(foldTagName(name), { name: spelling });
+    return [
+      ...(tag === undefined
+        ? [{ query: "INSERT OR IGNORE INTO tags (name) VALUES ($1)", values: [spelling] }]
+        : []),
+      {
+        query: `INSERT OR IGNORE INTO transaction_tags (transaction_id, tag_id)
+                VALUES ($1, (SELECT id FROM tags WHERE name = $2))`,
+        values: [transactionId, spelling],
+      },
+    ];
+  });
+}
+
+async function tagStatements(
+  db: SqlConnection,
+  transactionId: TransactionRef,
+  names: string[],
+): Promise<BatchStatement[]> {
   return [
     {
       query: "DELETE FROM transaction_tags WHERE transaction_id = $1",
       values: [transactionId],
     },
-    ...wanted.flatMap((name): BatchStatement[] => {
-      const tagId = existing.get(fold(name));
-      if (tagId !== undefined) {
-        return [
-          {
-            query: `INSERT OR IGNORE INTO transaction_tags (transaction_id, tag_id)
-                    VALUES ($1, $2)`,
-            values: [transactionId, tagId],
-          },
-        ];
-      }
-      return [
-        { query: "INSERT OR IGNORE INTO tags (name) VALUES ($1)", values: [name] },
-        {
-          query: `INSERT OR IGNORE INTO transaction_tags (transaction_id, tag_id)
-                  VALUES ($1, (SELECT id FROM tags WHERE name = $2))`,
-          values: [transactionId, name],
-        },
-      ];
-    }),
+    ...linkTagStatements(transactionId, names, await knownTags(db)),
     DELETE_UNUSED_TAGS,
   ];
 }
@@ -1364,36 +1551,29 @@ export async function deleteCategoryRule(id: number): Promise<void> {
   await db.execute("DELETE FROM category_rules WHERE id = $1", [id]);
 }
 
-// Inserts many rows in sequence, each one whole with its tags. Every row has
-// already been validated by the import planner, so a mid-way failure is not
-// expected; if one does happen the rows before it stay written, which is
-// preferable to silently discarding a long import that was almost entirely
-// fine — and re-importing the file skips them as duplicates.
+// Inserts every row, each with its tags, as one write: a single round trip and
+// a single transaction, with the existing tags read once. All or nothing — a
+// file that fails partway leaves no half of itself behind to be told apart
+// from the rest, and importing it again after the fix starts from clean.
 export async function insertTransactions(
   entries: { transaction: NewTransaction; tags: string[] }[],
 ): Promise<void> {
-  for (const entry of entries) {
-    if (entry.tags.length > 0) {
-      await insertTransactionWithTags(entry.transaction, entry.tags);
-    } else {
-      await insertTransaction(entry.transaction);
-    }
-  }
-}
+  if (entries.length === 0) return;
 
-// Returns the most recent cached quote, or null when none has ever been
-// stored — which is only the case before the first successful fetch.
-export async function getLatestExchangeRate(
-  rateType: string,
-): Promise<ExchangeRate | null> {
   const db = await getDb();
-  const rows = await db.select<ExchangeRate[]>(
-    `SELECT * FROM exchange_rates
-     WHERE rate_type = $1
-     ORDER BY date DESC LIMIT 1`,
-    [rateType],
-  );
-  return rows[0] ?? null;
+  const known: KnownTags = entries.some((entry) => entry.tags.length > 0)
+    ? await knownTags(db)
+    : new Map<string, TagRef>();
+
+  const statements: BatchStatement[] = [];
+  for (const entry of entries) {
+    const at = statements.length;
+    statements.push(
+      insertTransactionStatement(entry.transaction),
+      ...linkTagStatements(insertedIdOf(at), entry.tags, known),
+    );
+  }
+  await db.batch(statements);
 }
 
 // Keys the app stores about itself. Kept as constants so a typo cannot quietly
