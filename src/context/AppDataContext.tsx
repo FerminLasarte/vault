@@ -9,6 +9,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { ReportedError } from "@/lib/reportedError";
+import { transactionCount } from "@/lib/transactionCounts";
 import {
   deleteAttachment,
   deleteBudget,
@@ -785,7 +786,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         runMutation(
           () => insertTransactions(imported),
           ["transactions"],
-          `${imported.length} transacciones importadas`,
+          transactionCount(imported.length, "importada"),
           "No se pudieron importar las transacciones",
         ),
 

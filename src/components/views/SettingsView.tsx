@@ -45,6 +45,7 @@ import {
   saveDatabaseCopy,
 } from "@/lib/files";
 import { fileErrorMessage } from "@/lib/fileErrors";
+import { duplicatesSkipped, transactionCount } from "@/lib/transactionCounts";
 import { ImportMappingDialog } from "@/components/ImportMappingDialog";
 import { EMPTY_MAPPING } from "@/lib/importMapping";
 import {
@@ -153,7 +154,7 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
         `vault-${todayIsoDate()}.csv`,
         transactionsToCsv(transactions),
       );
-      if (saved) toast.success(`${transactions.length} transacciones exportadas`);
+      if (saved) toast.success(transactionCount(transactions.length, "exportada"));
     } catch (error) {
       console.error("Failed to export the transactions:", error);
       toast.error(fileErrorMessage(error, "No se pudo exportar el archivo"));
@@ -425,14 +426,11 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
           {outcome && (
             <div className="flex flex-col gap-2 rounded-lg border border-border p-4">
               <p className="text-sm font-medium">
-                {outcome.imported}{" "}
-                {outcome.imported === 1
-                  ? "transacción importada"
-                  : "transacciones importadas"}
+                {transactionCount(outcome.imported, "importada")}
               </p>
               {outcome.duplicates > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  {outcome.duplicates} ya existían y se omitieron.
+                  {duplicatesSkipped(outcome.duplicates)}
                 </p>
               )}
               {outcome.skipped.length > 0 && (

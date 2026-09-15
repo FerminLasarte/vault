@@ -133,6 +133,45 @@ describe("a reload that fails after a mutation that worked", () => {
   });
 });
 
+describe("an import", () => {
+  function anImported(description: string) {
+    return {
+      transaction: {
+        amount: 1000,
+        type: "expense" as const,
+        currency: "ARS",
+        categoryId: null,
+        paymentMethodId: null,
+        destinationPaymentMethodId: null,
+        destinationAmount: null,
+        description,
+        date: "2026-09-15",
+      },
+      tags: [],
+    };
+  }
+
+  it("counts a single transaction in the singular", async () => {
+    const data = await mount();
+
+    await act(async () => {
+      await data.current.importTransactions([anImported("Café")]);
+    });
+
+    expect(toast.success).toHaveBeenCalledWith("1 transacción importada");
+  });
+
+  it("counts several transactions in the plural", async () => {
+    const data = await mount();
+
+    await act(async () => {
+      await data.current.importTransactions([anImported("Café"), anImported("Taxi")]);
+    });
+
+    expect(toast.success).toHaveBeenCalledWith("2 transacciones importadas");
+  });
+});
+
 describe("a step that can be taken back", () => {
   // The options the success toast was shown with, for the one with this message.
   function toastOptions(message: string) {
