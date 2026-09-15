@@ -3,7 +3,12 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { TransactionDialog } from "./TransactionDialog";
-import type { Category, PaymentMethod, TransactionWithCategory } from "@/db";
+import type {
+  Category,
+  CategoryRuleWithCategory,
+  PaymentMethod,
+  TransactionWithCategory,
+} from "@/db";
 
 beforeAll(() => {
   Object.defineProperty(Element.prototype, "scrollIntoView", {
@@ -67,6 +72,7 @@ function renderDialog(
   handlers: {
     onOpenChange?: (open: boolean) => void;
     onSubmitTransaction?: () => Promise<void>;
+    categoryRules?: CategoryRuleWithCategory[];
   } = {},
 ) {
   return render(
@@ -75,7 +81,7 @@ function renderDialog(
       onOpenChange={handlers.onOpenChange ?? vi.fn()}
       editing={editing}
       categories={CATEGORIES}
-      categoryRules={[]}
+      categoryRules={handlers.categoryRules ?? []}
       tags={[]}
       paymentMethods={ACCOUNTS}
       defaultCurrency="ARS"
@@ -124,6 +130,48 @@ describe("TransactionDialog when editing", () => {
     renderDialog(null);
 
     expect(selectedCategory()).toContain("Bookit");
+  });
+});
+
+// A rule sending "netflix" to Gimnasio — deliberately not the first category,
+// which the form would pick on its own anyway.
+const NETFLIX_TO_GIMNASIO = {
+  id: 1,
+  pattern: "netflix",
+  category_id: 2,
+  category_name: "Gimnasio",
+  category_icon: "🏋️",
+} as CategoryRuleWithCategory;
+
+describe("TransactionDialog and category rules", () => {
+  it("keeps the saved category when a rule of another category matches", () => {
+    // The regression: opening the transaction ran the rules over its saved
+    // description, and saving then reassigned its category without a word.
+    renderDialog(aTransaction({ description: "Netflix" }), {
+      categoryRules: [NETFLIX_TO_GIMNASIO],
+    });
+
+    expect(selectedCategory()).toContain("Padel");
+  });
+
+  it("applies the rules to an edited transaction once its description changes", async () => {
+    renderDialog(aTransaction({ description: "Cuota del club" }), {
+      categoryRules: [NETFLIX_TO_GIMNASIO],
+    });
+
+    const description = screen.getByLabelText("Descripción");
+    await userEvent.clear(description);
+    await userEvent.type(description, "Netflix");
+
+    expect(selectedCategory()).toContain("Gimnasio");
+  });
+
+  it("fills in the category of a new transaction as its description is typed", async () => {
+    renderDialog(null, { categoryRules: [NETFLIX_TO_GIMNASIO] });
+
+    await userEvent.type(screen.getByLabelText("Descripción"), "Netflix");
+
+    expect(selectedCategory()).toContain("Gimnasio");
   });
 });
 

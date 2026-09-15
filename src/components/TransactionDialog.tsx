@@ -175,9 +175,23 @@ export function TransactionDialog({
   // overriding a deliberate choice is worse than no autocomplete. Every opening
   // starts over.
   const categoryTouchedRef = useRef(false);
+
+  // Whether the description has been typed in since the dialog opened. A
+  // transaction being edited already has the category it was saved with — as
+  // deliberate a choice as one picked by hand — so the rules leave it alone
+  // until its description changes. Running them over the saved description on
+  // opening replaced the category, and saving then reassigned it unasked.
+  const descriptionEditedRef = useRef(false);
+
   useEffect(() => {
-    if (open) categoryTouchedRef.current = false;
+    if (!open) return;
+    categoryTouchedRef.current = false;
+    descriptionEditedRef.current = false;
   }, [open]);
+
+  // Registered here so the input can mark the description as typed in from its
+  // own change handler, before handing the event on to the form.
+  const descriptionField = register("description");
 
   const selectedType = watch("type");
   const typedDescription = watch("description");
@@ -295,6 +309,7 @@ export function TransactionDialog({
   // is left alone rather than silently switching the type.
   useEffect(() => {
     if (selectedType === "transfer" || categoryTouchedRef.current) return;
+    if (isEditing && !descriptionEditedRef.current) return;
 
     const matched = matchCategoryIdForType(
       typedDescription ?? "",
@@ -305,7 +320,7 @@ export function TransactionDialog({
     if (matched === null) return;
 
     setValue("categoryId", matched, { shouldValidate: false });
-  }, [typedDescription, categoryRules, categories, selectedType, setValue]);
+  }, [typedDescription, categoryRules, categories, selectedType, isEditing, setValue]);
 
   const categorySelectItems = useMemo(
     () =>
@@ -581,7 +596,11 @@ export function TransactionDialog({
           placeholder={
             isTransfer ? "Ej. Compra de dólares" : "Ej. Compra en el supermercado"
           }
-          {...register("description")}
+          {...descriptionField}
+          onChange={(event) => {
+            descriptionEditedRef.current = true;
+            void descriptionField.onChange(event);
+          }}
         />
         {errors.description && (
           <p className="text-xs text-destructive">{errors.description.message}</p>
