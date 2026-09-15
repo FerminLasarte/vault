@@ -12,16 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { RecurringDialog } from "@/components/RecurringDialog";
 import { useAppData } from "@/hooks/useAppData";
 import { collectPendingRecurrences } from "@/lib/pendingRecurring";
@@ -75,9 +66,10 @@ export function RecurringSection() {
 
   async function acceptAll() {
     // Sequential on purpose: each confirmation advances its template, and the
-    // next one has to see that.
+    // next one has to see that. No "Deshacer" per movement: a toast offering to
+    // take back one of many would be noise.
     for (const entry of pending) {
-      await confirmRecurring(entry.template.id, entry.date);
+      await confirmRecurring(entry.template.id, entry.date, { offerUndo: false });
     }
   }
 
@@ -157,8 +149,8 @@ export function RecurringSection() {
                       className={cn(
                         "text-sm font-medium tabular-nums",
                         entry.template.type === "income"
-                          ? "text-emerald-600 dark:text-emerald-400"
-                          : "text-red-600 dark:text-red-400",
+                          ? "text-positive"
+                          : "text-negative",
                       )}
                     >
                       {entry.template.type === "income" ? "+" : "-"}
@@ -309,32 +301,19 @@ export function RecurringSection() {
         onSubmitRecurring={handleSubmit}
       />
 
-      <AlertDialog
+      <ConfirmDeleteDialog
         open={pendingDeletion !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingDeletion(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar esta recurrente?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Se eliminará «{pendingDeletion?.description}». Los movimientos que ya
-              registraste a partir de ella se conservan.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={isMutating}
-              onClick={handleConfirmDelete}
-            >
-              Eliminar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        onClose={() => setPendingDeletion(null)}
+        title="¿Eliminar esta recurrente?"
+        description={
+          <>
+            Se eliminará «{pendingDeletion?.description}». Los movimientos que ya
+            registraste a partir de ella se conservan.
+          </>
+        }
+        onConfirm={handleConfirmDelete}
+        isMutating={isMutating}
+      />
     </div>
   );
 }

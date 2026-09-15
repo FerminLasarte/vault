@@ -98,6 +98,7 @@ import {
   type RecurringTransactionWithNames,
   type Tag,
   type TransactionWithCategory,
+  type Undo,
 } from "@/db";
 import {
   DEFAULT_RATE_TYPE,
@@ -109,6 +110,18 @@ import {
 import type { RateType } from "@/lib/exchangeRate";
 import { todayIsoDate } from "@/lib/format";
 import { useNotifications } from "@/hooks/useNotifications";
+
+// For the steps on a commitment that can be taken back from their toast.
+export interface StepOptions {
+  // Whether the success toast offers "Deshacer"; on unless said otherwise. Off
+  // for "Registrar todas": a toast per step, each offering to take back one of
+  // many, would be noise rather than a way back.
+  offerUndo?: boolean;
+}
+
+// How long a toast that can undo stays up. Longer than a plain one: it has to
+// be read and decided on, not just noticed.
+const UNDO_TOAST_DURATION = 8000;
 
 export interface AppData {
   transactions: TransactionWithCategory[];
@@ -176,6 +189,7 @@ export interface AppData {
     index: number,
     date: string,
     amount: number,
+    options?: StepOptions,
   ) => Promise<void>;
 
   addInstallmentPlan: (plan: NewInstallmentPlan) => Promise<void>;
@@ -187,6 +201,7 @@ export interface AppData {
     index: number,
     date: string,
     amount: number,
+    options?: StepOptions,
   ) => Promise<void>;
 
   addRecurring: (recurring: NewRecurringTransaction) => Promise<void>;
@@ -194,10 +209,10 @@ export interface AppData {
   removeRecurring: (id: number) => Promise<void>;
   // Turns one proposed occurrence into a real transaction and moves the series
   // past it, so it is never proposed twice.
-  confirmRecurring: (id: number, date: string) => Promise<void>;
+  confirmRecurring: (id: number, date: string, options?: StepOptions) => Promise<void>;
   // Decides against an occurrence without recording anything, moving the series
   // past it just the same.
-  dismissRecurring: (id: number, date: string) => Promise<void>;
+  dismissRecurring: (id: number, date: string, options?: StepOptions) => Promise<void>;
 
   // Attachments are not held in context: only their count travels with the
   // transaction list, and the bytes are fetched by the dialog that shows them.
@@ -210,10 +225,10 @@ export interface AppData {
   // Records the movement as having happened: writes the real transaction and
   // keeps its id, so the two never drift and a mistaken confirmation can be
   // traced back.
-  confirmExpected: (id: number) => Promise<void>;
+  confirmExpected: (id: number, options?: StepOptions) => Promise<void>;
   // Decides against it. Nothing is recorded, and it stops being proposed —
   // which is the same gesture `dismissRecurring` offers, for the same reason.
-  dismissExpected: (id: number) => Promise<void>;
+  dismissExpected: (id: number, options?: StepOptions) => Promise<void>;
 
   addBudget: (budget: NewBudget) => Promise<void>;
   editBudget: (id: number, budget: NewBudget) => Promise<void>;
@@ -281,6 +296,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   // under a previous one (see refreshExchangeRate). State alone cannot do that:
   // a callback only ever sees the render it was created in.
   const currentRateType = useRef<RateType>(DEFAULT_RATE_TYPE);
+  // The toast currently offering "Deshacer", if any.
+  const undoToast = useRef<string | number | null>(null);
 
   const refresh = useCallback(async () => {
     await initDatabase();
@@ -493,16 +510,30 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   // The write and the reload are reported separately. A reload that fails after
   // the write went through is not a failed mutation: saying "No se pudo…" there
   // invited a retry that wrote the same thing twice.
+  //
+  // A step that hands back how to take it back gets a "Deshacer" in its toast,
+  // when asked to offer one: undo instead of a confirmation in front of every
+  // "Registrar" and "Descartar".
   const runMutation = useCallback(
-    async (
-      mutation: () => Promise<void>,
+    async function run(
+      mutation: () => Promise<Undo | null | void>,
       successMessage: string,
       errorMessage: string,
-    ) => {
+      { offerUndo = false }: StepOptions = {},
+    ): Promise<void> {
+      // "Deshacer" takes back the last thing done, and only that. Once anything
+      // else is written the offer goes, rather than staying up to fail its
+      // compare-and-set when clicked.
+      if (undoToast.current !== null) {
+        toast.dismiss(undoToast.current);
+        undoToast.current = null;
+      }
+
       setIsMutating(true);
       try {
+        let undo: Undo | null | void;
         try {
-          await mutation();
+          undo = await mutation();
         } catch (error) {
           console.error(`${errorMessage}:`, error);
           toast.error(errorMessage);
@@ -511,7 +542,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           throw new ReportedError(error);
         }
 
-        toast.success(successMessage);
+        if (offerUndo && typeof undo === "function") {
+          const takeBack = undo;
+          undoToast.current = toast.success(successMessage, {
+            duration: UNDO_TOAST_DURATION,
+            action: {
+              label: "Deshacer",
+              onClick: () => {
+                // Nothing waits on the undo, and a failure has already been
+                // told to the user by `run` itself.
+                run(takeBack, "Se deshizo", "No se pudo deshacer").catch(() => {});
+              },
+            },
+          });
+        } else {
+          toast.success(successMessage);
+        }
 
         try {
           await refresh();
@@ -634,11 +680,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           "Préstamo eliminado",
           "No se pudo eliminar el préstamo",
         ),
-      confirmLoanPayment: (id, index, date, amount) =>
+      confirmLoanPayment: (id, index, date, amount, options) =>
         runMutation(
           () => recordLoanPayment(id, index, date, amount),
           "Cuota registrada",
           "No se pudo registrar la cuota",
+          { offerUndo: options?.offerUndo ?? true },
         ),
 
       addInstallmentPlan: (plan) =>
@@ -659,11 +706,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           "Compra en cuotas eliminada",
           "No se pudo eliminar la compra en cuotas",
         ),
-      confirmInstallment: (id, index, date, amount) =>
+      confirmInstallment: (id, index, date, amount, options) =>
         runMutation(
           () => recordInstallment(id, index, date, amount),
           "Cuota registrada",
           "No se pudo registrar la cuota",
+          { offerUndo: options?.offerUndo ?? true },
         ),
 
       addRecurring: (entry) =>
@@ -684,17 +732,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           "Recurrente eliminada",
           "No se pudo eliminar la recurrente",
         ),
-      confirmRecurring: (id, date) =>
+      confirmRecurring: (id, date, options) =>
         runMutation(
           () => recordRecurringOccurrence(id, date),
           "Movimiento registrado",
           "No se pudo registrar el movimiento",
+          { offerUndo: options?.offerUndo ?? true },
         ),
-      dismissRecurring: (id, date) =>
+      dismissRecurring: (id, date, options) =>
         runMutation(
           () => dismissRecurringOccurrence(id, date),
           "Ocurrencia descartada",
           "No se pudo descartar la ocurrencia",
+          { offerUndo: options?.offerUndo ?? true },
         ),
 
       addAttachment: (attachment) =>
@@ -728,17 +778,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           "Movimiento previsto eliminado",
           "No se pudo eliminar el movimiento previsto",
         ),
-      confirmExpected: (id) =>
+      confirmExpected: (id, options) =>
         runMutation(
           () => confirmExpectedMovement(id),
           "Movimiento registrado",
           "No se pudo registrar el movimiento",
+          { offerUndo: options?.offerUndo ?? true },
         ),
-      dismissExpected: (id) =>
+      dismissExpected: (id, options) =>
         runMutation(
           () => dismissExpectedMovement(id),
           "Movimiento descartado",
           "No se pudo descartar el movimiento",
+          { offerUndo: options?.offerUndo ?? true },
         ),
 
       addBudget: (budget) =>

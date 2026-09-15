@@ -778,6 +778,165 @@ describe("writes that span several statements", () => {
   });
 });
 
+describe("undoing a step from its toast", () => {
+  // "Deshacer" takes back what "Registrar" or "Descartar" just did — and only
+  // while it is still the last step taken on that plan, so an old toast can
+  // never punch a hole in the middle of one.
+
+  async function aPlan() {
+    await insertInstallmentPlan({
+      description: "Heladera",
+      totalAmount: 1200,
+      installmentCount: 12,
+      currency: "ARS",
+      categoryId: null,
+      paymentMethodId: null,
+      firstDueDate: "2026-07-10",
+      cashPrice: null,
+    });
+    return (await listInstallmentPlans())[0];
+  }
+
+  async function aLoan() {
+    await insertLoan({
+      direction: "borrowed",
+      counterparty: "Banco",
+      description: "Préstamo personal",
+      principal: 1200,
+      currency: "ARS",
+      annualRate: 0,
+      installmentCount: 12,
+      categoryId: null,
+      paymentMethodId: null,
+      firstDueDate: "2026-07-10",
+    });
+    return (await listLoans())[0];
+  }
+
+  async function aSeries() {
+    await insertRecurringTransaction({
+      description: "Alquiler",
+      amount: 500,
+      type: "expense",
+      categoryId: null,
+      paymentMethodId: null,
+      currency: "ARS",
+      frequency: "monthly",
+      startDate: "2026-08-08",
+      isActive: true,
+    });
+    return (await listRecurringTransactions())[0];
+  }
+
+  async function anExpectedMovement() {
+    await insertExpectedMovement({
+      description: "VTV",
+      amount: 80_000,
+      type: "expense",
+      currency: "ARS",
+      categoryId: null,
+      paymentMethodId: null,
+      dueDate: "2026-09-01",
+    });
+    return (await listExpectedMovements())[0];
+  }
+
+  it("takes back an instalment: the plan goes back one and its movement is gone", async () => {
+    const plan = await aPlan();
+    const undo = await recordInstallment(plan.id, 0, "2026-07-10", 100);
+
+    await undo!();
+
+    expect((await listInstallmentPlans())[0].confirmed_count).toBe(0);
+    expect(await listTransactionsWithCategory()).toHaveLength(0);
+  });
+
+  it("refuses to take back an instalment that is no longer the last one", async () => {
+    const plan = await aPlan();
+    const undoFirst = await recordInstallment(plan.id, 0, "2026-07-10", 100);
+    await recordInstallment(plan.id, 1, "2026-08-10", 100);
+
+    await expect(undoFirst!()).rejects.toThrow();
+
+    expect((await listInstallmentPlans())[0].confirmed_count).toBe(2);
+    expect(await listTransactionsWithCategory()).toHaveLength(2);
+  });
+
+  it("takes back a loan payment, once", async () => {
+    const loan = await aLoan();
+    const undo = await recordLoanPayment(loan.id, 0, "2026-07-10", 100);
+
+    await undo!();
+    await expect(undo!()).rejects.toThrow();
+
+    expect((await listLoans())[0].confirmed_count).toBe(0);
+    expect(await listTransactionsWithCategory()).toHaveLength(0);
+  });
+
+  it("takes back a recurring occurrence that was registered", async () => {
+    const series = await aSeries();
+    const undo = await recordRecurringOccurrence(series.id, "2026-08-08");
+
+    await undo!();
+
+    expect((await listRecurringTransactions())[0].last_confirmed_date).toBeNull();
+    expect(await listTransactionsWithCategory()).toHaveLength(0);
+  });
+
+  it("takes back a recurring occurrence that was dismissed", async () => {
+    const series = await aSeries();
+    const undo = await dismissRecurringOccurrence(series.id, "2026-08-08");
+
+    await undo!();
+
+    expect((await listRecurringTransactions())[0].last_confirmed_date).toBeNull();
+  });
+
+  it("refuses to take back an occurrence once the next one is decided", async () => {
+    const series = await aSeries();
+    const undo = await dismissRecurringOccurrence(series.id, "2026-08-08");
+    await recordRecurringOccurrence(series.id, "2026-09-08");
+
+    await expect(undo!()).rejects.toThrow();
+
+    expect((await listRecurringTransactions())[0].last_confirmed_date).toBe("2026-09-08");
+    expect(await listTransactionsWithCategory()).toHaveLength(1);
+  });
+
+  it("takes back a confirmed expected movement: it waits again and its transaction is gone", async () => {
+    const movement = await anExpectedMovement();
+    const undo = await confirmExpectedMovement(movement.id);
+
+    await undo!();
+
+    const [reopened] = await listExpectedMovements();
+    expect(reopened.status).toBe("pending");
+    expect(reopened.transaction_id).toBeNull();
+    expect(await listTransactionsWithCategory()).toHaveLength(0);
+  });
+
+  it("takes back a dismissed expected movement", async () => {
+    const movement = await anExpectedMovement();
+    const undo = await dismissExpectedMovement(movement.id);
+
+    await undo();
+
+    expect((await listExpectedMovements())[0].status).toBe("pending");
+  });
+
+  it("refuses to take back a confirmation whose transaction was deleted since", async () => {
+    const movement = await anExpectedMovement();
+    const undo = await confirmExpectedMovement(movement.id);
+    const [transaction] = await listTransactionsWithCategory();
+    // Deleting it already sent the movement back to waiting.
+    await deleteTransaction(transaction.id);
+
+    await expect(undo!()).rejects.toThrow();
+
+    expect((await listExpectedMovements())[0].status).toBe("pending");
+  });
+});
+
 describe("deleting an account", () => {
   async function placeholder(currency = "ARS") {
     const rows = await db.select<PaymentMethod[]>(

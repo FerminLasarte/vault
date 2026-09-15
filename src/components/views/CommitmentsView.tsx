@@ -11,21 +11,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LoansSection } from "@/components/LoansSection";
 import { ExpectedSection } from "@/components/ExpectedSection";
 import { ListCard } from "@/components/ListCard";
+import { ProgressBar } from "@/components/ui/progress-bar";
 import { RecurringSection } from "@/components/RecurringSection";
 import { useRequestedTab } from "@/hooks/useRequestedTab";
 import { COMMITMENT_TABS, DEFAULT_COMMITMENT_TAB } from "@/lib/navigation";
@@ -98,9 +90,12 @@ export function CommitmentsView({ tab }: ViewProps) {
 
   async function payAll() {
     // Sequential: each confirmation advances its plan, and the next instalment
-    // of the same plan depends on that having happened.
+    // of the same plan depends on that having happened. No "Deshacer" per
+    // instalment: a toast offering to take back one of many would be noise.
     for (const entry of pending) {
-      await confirmInstallment(entry.plan.id, entry.index, entry.date, entry.amount);
+      await confirmInstallment(entry.plan.id, entry.index, entry.date, entry.amount, {
+        offerUndo: false,
+      });
     }
   }
 
@@ -182,7 +177,7 @@ export function CommitmentsView({ tab }: ViewProps) {
                       </div>
 
                       <div className="flex shrink-0 items-center gap-2">
-                        <span className="text-sm font-medium tabular-nums text-red-600 dark:text-red-400">
+                        <span className="text-sm font-medium tabular-nums text-negative">
                           -{formatCurrency(entry.amount, entry.plan.currency)}
                         </span>
                         <ActionButton
@@ -294,12 +289,7 @@ export function CommitmentsView({ tab }: ViewProps) {
                       </div>
                     </div>
 
-                    <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
-                      <div
-                        className="h-full rounded-full bg-primary transition-[width]"
-                        style={{ width: `${Math.min(paidRatio, 1) * 100}%` }}
-                      />
-                    </div>
+                    <ProgressBar ratio={paidRatio} />
 
                     <p className="text-xs text-muted-foreground">
                       Total {formatCurrency(plan.total_amount, plan.currency)} · primera
@@ -340,32 +330,19 @@ export function CommitmentsView({ tab }: ViewProps) {
         onSubmitPlan={handleSubmit}
       />
 
-      <AlertDialog
+      <ConfirmDeleteDialog
         open={pendingDeletion !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingDeletion(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar esta compra en cuotas?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Se eliminará «{pendingDeletion?.description}». Las cuotas que ya registraste
-              se conservan como movimientos.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={isMutating}
-              onClick={handleConfirmDelete}
-            >
-              Eliminar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        onClose={() => setPendingDeletion(null)}
+        title="¿Eliminar esta compra en cuotas?"
+        description={
+          <>
+            Se eliminará «{pendingDeletion?.description}». Las cuotas que ya registraste
+            se conservan como movimientos.
+          </>
+        }
+        onConfirm={handleConfirmDelete}
+        isMutating={isMutating}
+      />
     </div>
   );
 }

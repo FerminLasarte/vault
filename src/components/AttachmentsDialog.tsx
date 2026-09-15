@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Download, Eye, Paperclip, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ActionButton } from "@/components/ActionButton";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import {
   Dialog,
   DialogContent,
@@ -34,17 +35,35 @@ interface AttachmentsDialogProps {
 export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDialogProps) {
   const { addAttachment, removeAttachment, isMutating } = useAppData();
 
-  const [attachments, setAttachments] = useState<AttachmentMeta[]>([]);
+  // Held together with the transaction they belong to, so a list is only ever
+  // shown under its own transaction. A bare list kept the previous one on screen
+  // — "Eliminar" buttons included — until the next query came back.
+  const [loaded, setLoaded] = useState<{
+    transactionId: number;
+    attachments: AttachmentMeta[];
+  } | null>(null);
   const [preview, setPreview] = useState<{ meta: AttachmentMeta; url: string } | null>(
     null,
   );
   const [isBusy, setIsBusy] = useState(false);
+  const [pendingDeletion, setPendingDeletion] = useState<AttachmentMeta | null>(null);
 
   const transactionId = transaction?.id ?? null;
 
+  // Null while this transaction's list is still on its way.
+  const attachments =
+    loaded !== null && loaded.transactionId === transactionId ? loaded.attachments : null;
+
+  // Only the latest query may land. Answers can come back out of order, and an
+  // older one would otherwise replace the list of the transaction on screen.
+  const latestRequest = useRef(0);
+
   const refresh = useCallback(async () => {
     if (transactionId === null) return;
-    setAttachments(await listAttachments(transactionId));
+    const request = ++latestRequest.current;
+    const rows = await listAttachments(transactionId);
+    if (request === latestRequest.current)
+      setLoaded({ transactionId, attachments: rows });
   }, [transactionId]);
 
   // Clearing the preview belongs in the render pass, not in an effect: an
@@ -54,14 +73,12 @@ export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDial
   if (transactionId !== lastTransactionId) {
     setLastTransactionId(transactionId);
     setPreview(null);
+    setPendingDeletion(null);
   }
 
   // Fetching, on the other hand, genuinely is a side effect: it talks to the
   // database and the state lands only once the query has come back.
   useEffect(() => {
-    // The state lands once the query resolves, not synchronously during the
-    // effect, so there is no cascading render for the rule to prevent.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
   }, [refresh]);
 
@@ -112,9 +129,11 @@ export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDial
     }
   }
 
-  async function handleDelete(meta: AttachmentMeta) {
-    await removeAttachment(meta.id);
-    if (preview?.meta.id === meta.id) setPreview(null);
+  async function handleConfirmDelete() {
+    if (!pendingDeletion) return;
+    await removeAttachment(pendingDeletion.id);
+    if (preview?.meta.id === pendingDeletion.id) setPreview(null);
+    setPendingDeletion(null);
     await refresh();
   }
 
@@ -130,7 +149,9 @@ export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDial
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
-          {attachments.length === 0 ? (
+          {attachments === null ? (
+            <p className="text-sm text-muted-foreground">Cargando...</p>
+          ) : attachments.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               Todavía no hay comprobantes para este movimiento.
             </p>
@@ -184,8 +205,7 @@ export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDial
                       variant="ghost"
                       size="icon-sm"
                       label="Eliminar"
-                      disabled={isMutating}
-                      onClick={() => void handleDelete(meta)}
+                      onClick={() => setPendingDeletion(meta)}
                     >
                       <Trash2 />
                       <span className="sr-only">
@@ -218,6 +238,24 @@ export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDial
             </Button>
           </div>
         </div>
+
+        {/* Inside the content rather than beside it, so it opens as a child of
+            this dialog: a sibling would count as a click outside and close it. */}
+        <ConfirmDeleteDialog
+          open={pendingDeletion !== null}
+          onClose={() => setPendingDeletion(null)}
+          title="¿Eliminar este comprobante?"
+          description={
+            <>
+              Se eliminará «
+              {pendingDeletion ? fileNameFromPath(pendingDeletion.file_name) : ""}». La
+              única copia está en la base de Vault, así que solo se puede recuperar desde
+              una copia de seguridad.
+            </>
+          }
+          onConfirm={handleConfirmDelete}
+          isMutating={isMutating}
+        />
       </DialogContent>
     </Dialog>
   );

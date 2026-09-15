@@ -13,6 +13,7 @@ import { ClosesView } from "@/components/views/ClosesView";
 import { SettingsView } from "@/components/views/SettingsView";
 import { Toaster } from "@/components/ui/sonner";
 import { AppDataProvider } from "@/context/AppDataContext";
+import { UpdaterProvider } from "@/context/UpdaterContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -107,11 +108,12 @@ function App() {
         {/* A short delay keeps the tooltips from flashing as the pointer merely
             crosses a row of icon buttons on its way somewhere else. */}
         <TooltipProvider delay={350}>
-          <AppDataProvider>
-            <div className="flex h-screen bg-background text-foreground">
-              <SidebarWithBadges currentView={view} onNavigate={setView} />
-              <main className="min-w-0 flex-1 overflow-auto p-4 sm:p-8">
-                {/* Fills this column's top padding, which is the strip along
+          <UpdaterProvider>
+            <AppDataProvider>
+              <div className="flex h-screen bg-background text-foreground">
+                <SidebarWithBadges currentView={view} onNavigate={setView} />
+                <main className="min-w-0 flex-1 overflow-auto p-4 sm:p-8">
+                  {/* Fills this column's top padding, which is the strip along
                     the window's top edge that the sidebar header and the page
                     header between them leave uncovered — and the first place a
                     hand reaches to move a window. The negative margin cancels
@@ -121,28 +123,29 @@ function App() {
                     It scrolls away with the content instead of floating above
                     it, which is the point: a fixed strip would keep taking
                     clicks meant for whatever had scrolled underneath it. */}
-                <div
-                  aria-hidden
-                  data-tauri-drag-region
-                  className="-mt-4 h-4 sm:-mt-8 sm:h-8"
-                />
-                <ErrorBoundary
-                  resetKey={view}
-                  fallback={(error, retry) => (
-                    <ViewErrorFallback error={error} retry={retry} />
-                  )}
-                >
-                  <CurrentView
-                    request={request}
-                    tab={tab}
-                    onRequestHandled={markHandled}
+                  <div
+                    aria-hidden
+                    data-tauri-drag-region
+                    className="-mt-4 h-4 sm:-mt-8 sm:h-8"
                   />
-                </ErrorBoundary>
-              </main>
-            </div>
-            <UpdatePrompt />
-            <Toaster position="bottom-right" />
-          </AppDataProvider>
+                  <ErrorBoundary
+                    resetKey={view}
+                    fallback={(error, retry) => (
+                      <ViewErrorFallback error={error} retry={retry} />
+                    )}
+                  >
+                    <CurrentView
+                      request={request}
+                      tab={tab}
+                      onRequestHandled={markHandled}
+                    />
+                  </ErrorBoundary>
+                </main>
+              </div>
+              <UpdatePrompt />
+              <Toaster position="bottom-right" />
+            </AppDataProvider>
+          </UpdaterProvider>
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

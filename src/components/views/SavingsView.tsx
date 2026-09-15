@@ -6,16 +6,7 @@ import { ListCard } from "@/components/ListCard";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { ActionButton } from "@/components/ActionButton";
 import { Input } from "@/components/ui/input";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { SavingsGoalDialog } from "@/components/SavingsGoalDialog";
 import { useAppData } from "@/hooks/useAppData";
@@ -237,32 +228,19 @@ export function SavingsView() {
         onSubmitGoal={handleSubmit}
       />
 
-      <AlertDialog
+      <ConfirmDeleteDialog
         open={pendingDeletion !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingDeletion(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar este objetivo?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Se eliminará «{pendingDeletion?.name}» y los aportes que hayas registrado en
-              él. Tus transacciones no se ven afectadas.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={isMutating}
-              onClick={handleConfirmDelete}
-            >
-              Eliminar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        onClose={() => setPendingDeletion(null)}
+        title="¿Eliminar este objetivo?"
+        description={
+          <>
+            Se eliminará «{pendingDeletion?.name}» y los aportes que hayas registrado en
+            él. Tus transacciones no se ven afectadas.
+          </>
+        }
+        onConfirm={handleConfirmDelete}
+        isMutating={isMutating}
+      />
     </div>
   );
 }
