@@ -1,22 +1,24 @@
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use tauri::Manager;
 use tauri_plugin_sql::{DbInstances, DbPool, Migration, MigrationKind};
 
 mod db;
+mod dialogs;
 mod files;
 mod menu;
 
 // Deliberately still "vault-ai.db" after the app was renamed to Vault; see the
-// note in src/db/index.ts. The two constants must name the same file.
+// note in src/db/index.ts. Both constants must name the same file, and the
+// frontend's DATABASE_URL must match this one (src/db/databaseFile.test.ts).
 const DATABASE_FILE: &str = "vault-ai.db";
 const DATABASE_URL: &str = "sqlite:vault-ai.db";
 
 // Where the SQL plugin keeps the database: it resolves `sqlite:` URLs against
 // the app config folder, not the data folder.
-fn database_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+fn live_database(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(app
         .path()
         .app_config_dir()
@@ -24,54 +26,128 @@ fn database_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .join(DATABASE_FILE))
 }
 
+// For Ajustes, which shows where the data lives. Worked out here, from the
+// same function the backup guards against, so the screen cannot point at a
+// different folder than the one the plugin opened.
+#[tauri::command]
+fn database_path(app: tauri::AppHandle) -> Result<String, String> {
+    live_database(&app).map(|path| path.to_string_lossy().into_owned())
+}
+
 // File I/O lives in Rust rather than behind the fs plugin: the plugin scopes
 // every path up front, which for a "save wherever you like" export would mean
-// granting the webview blanket access to the user's home directory. These
-// commands only ever touch the exact path the user picked in the native dialog,
-// and never the live database (see files::guard_destination).
+// granting the webview blanket access to the user's home directory.
 //
-// All four are async and hand their work to files::blocking, so the window
-// keeps responding while a file is read or written.
+// Each command opens the native dialog itself (see dialogs.rs) and touches only
+// the path the user picked there — no command takes a path from the webview —
+// and never the live database (see files::guard_destination). Each returns
+// false or None when the user cancels, which is not an error.
+//
+// The dialog and the I/O run inside files::blocking, so the window keeps
+// responding while a file is read or written.
 #[tauri::command]
-async fn write_text_file(
-    app: tauri::AppHandle,
-    path: String,
+async fn export_csv(
+    window: tauri::Window,
+    default_name: String,
     contents: String,
-) -> Result<(), String> {
-    let database = database_path(&app)?;
+) -> Result<bool, String> {
+    let database = live_database(window.app_handle())?;
     files::blocking(move || {
-        files::write_atomically(Path::new(&path), &database, contents.as_bytes())
+        let Some(path) = dialogs::choose_destination(&window, &default_name, Some(&dialogs::CSV))
+        else {
+            return Ok(false);
+        };
+        files::write_atomically(&path, &database, contents.as_bytes()).map(|()| true)
     })
     .await
 }
 
 #[tauri::command]
-async fn read_text_file(path: String) -> Result<String, String> {
-    files::blocking(move || files::read_text(Path::new(&path))).await
+async fn import_csv(window: tauri::Window) -> Result<Option<String>, String> {
+    files::blocking(move || {
+        dialogs::choose_file(&window, &dialogs::CSV)
+            .map(|path| files::read_text(&path))
+            .transpose()
+    })
+    .await
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PickedAttachment {
+    file_name: String,
+    content_base64: String,
 }
 
 #[tauri::command]
-async fn read_file_base64(path: String) -> Result<String, String> {
+async fn pick_attachment(window: tauri::Window) -> Result<Option<PickedAttachment>, String> {
     files::blocking(move || {
-        files::read_attachment(Path::new(&path)).map(|bytes| BASE64.encode(bytes))
+        let Some(path) = dialogs::choose_file(&window, &dialogs::ATTACHMENT) else {
+            return Ok(None);
+        };
+        let bytes = files::read_attachment(&path)?;
+        Ok(Some(PickedAttachment {
+            file_name: dialogs::file_name(&path),
+            content_base64: BASE64.encode(bytes),
+        }))
     })
     .await
 }
 
 #[tauri::command]
-async fn write_file_base64(
-    app: tauri::AppHandle,
-    path: String,
+async fn save_attachment_copy(
+    window: tauri::Window,
+    file_name: String,
     contents: String,
-) -> Result<(), String> {
-    let database = database_path(&app)?;
+) -> Result<bool, String> {
+    let database = live_database(window.app_handle())?;
     files::blocking(move || {
+        // Decoded before asking where to save, so a damaged attachment is
+        // reported without the user having chosen a place for it first.
         let bytes = BASE64.decode(contents).map_err(|error| {
             eprintln!("The attachment is not valid base64: {error}");
             files::DAMAGED_ATTACHMENT_ERROR.to_string()
         })?;
+        let Some(path) = dialogs::choose_destination(&window, &file_name, None) else {
+            return Ok(false);
+        };
+        files::write_atomically(&path, &database, &bytes).map(|()| true)
+    })
+    .await
+}
 
-        files::write_atomically(Path::new(&path), &database, &bytes)
+// A spreadsheet goes to the webview as base64, where read-excel-file parses
+// it; anything else is read as text.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase", tag = "kind", content = "content")]
+enum StatementContent {
+    Spreadsheet(String),
+    Text(String),
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PickedStatement {
+    file_name: String,
+    #[serde(flatten)]
+    content: StatementContent,
+}
+
+#[tauri::command]
+async fn open_statement(window: tauri::Window) -> Result<Option<PickedStatement>, String> {
+    files::blocking(move || {
+        let Some(path) = dialogs::choose_file(&window, &dialogs::STATEMENT) else {
+            return Ok(None);
+        };
+        let content = if dialogs::has_extension(&path, &["xlsx", "xls"]) {
+            StatementContent::Spreadsheet(BASE64.encode(files::read_statement(&path)?))
+        } else {
+            StatementContent::Text(files::read_text(&path)?)
+        };
+        Ok(Some(PickedStatement {
+            file_name: dialogs::file_name(&path),
+            content,
+        }))
     })
     .await
 }
@@ -90,16 +166,31 @@ const DATABASE_NOT_OPEN: &str = "La base de datos no está abierta";
 
 // Saves a snapshot of the live database, taken through the SQL plugin's own
 // connection pool so it sees exactly what the app sees (see files::backup_to).
+// Taken after the dialog closes, so anything written while it was open is in.
 #[tauri::command]
-async fn backup_database(app: tauri::AppHandle, destination: String) -> Result<(), String> {
-    let database = database_path(&app)?;
+async fn backup_database(window: tauri::Window, default_name: String) -> Result<bool, String> {
+    let database = live_database(window.app_handle())?;
+    let app = window.app_handle().clone();
+    let destination = files::blocking(move || {
+        Ok(dialogs::choose_destination(
+            &window,
+            &default_name,
+            Some(&dialogs::DATABASE),
+        ))
+    })
+    .await?;
+    let Some(destination) = destination else {
+        return Ok(false);
+    };
+
     let instances = app.state::<DbInstances>();
     let instances = instances.0.read().await;
     let Some(DbPool::Sqlite(pool)) = instances.get(DATABASE_URL) else {
         return Err(DATABASE_NOT_OPEN.to_string());
     };
-
-    files::backup_to(pool, &database, Path::new(&destination)).await
+    files::backup_to(pool, &database, &destination)
+        .await
+        .map(|()| true)
 }
 
 // Writes several statements as one transaction, on the SQL plugin's own pool
@@ -985,11 +1076,13 @@ pub fn run() {
         })
         .on_menu_event(|app, event| menu::handle_event(app, event.id().as_ref()))
         .invoke_handler(tauri::generate_handler![
-            write_text_file,
-            read_text_file,
-            read_file_base64,
-            write_file_base64,
+            export_csv,
+            import_csv,
+            pick_attachment,
+            save_attachment_copy,
+            open_statement,
             backup_database,
+            database_path,
             execute_batch,
             print_window
         ]);

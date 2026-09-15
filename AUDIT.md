@@ -85,13 +85,13 @@ earlier decision and are not listed.
 | I-21 | "Registrar todas" and imports do one round trip per item           | improvement | low      | 6     | [x]  |
 | I-22 | "Today" goes stale with the app open overnight                     | improvement | low      | 6     | [x]  |
 | I-23 | Pending counts computed in several places                          | improvement | low      | 6     | [x]  |
-| I-24 | File commands accept any path, and there is no CSP                 | improvement | medium   | 7     | [ ]  |
-| I-25 | Capabilities grant more than is used                               | improvement | low      | 7     | [ ]  |
-| I-26 | `read_file_base64` reads the whole file before checking its size   | improvement | low      | 7     | [ ]  |
-| B-22 | Backup and Settings look for the DB in the wrong folder on Linux   | bug         | low      | 7     | [ ]  |
-| I-27 | Dead code, unused tokens and template assets                       | improvement | low      | 7     | [ ]  |
-| I-28 | Dependencies, release profile and version in three places          | improvement | low      | 7     | [ ]  |
-| I-29 | `backup_database` still does blocking file work on an async thread | improvement | low      | 7     | [ ]  |
+| I-24 | File commands accept any path, and there is no CSP                 | improvement | medium   | 7     | [x]  |
+| I-25 | Capabilities grant more than is used                               | improvement | low      | 7     | [x]  |
+| I-26 | `read_file_base64` reads the whole file before checking its size   | improvement | low      | 7     | [x]  |
+| B-22 | Backup and Settings look for the DB in the wrong folder on Linux   | bug         | low      | 7     | [x]  |
+| I-27 | Dead code, unused tokens and template assets                       | improvement | low      | 7     | [x]  |
+| I-28 | Dependencies, release profile and version in three places          | improvement | low      | 7     | [x]  |
+| I-29 | `backup_database` still does blocking file work on an async thread | improvement | low      | 7     | [x]  |
 
 ---
 
@@ -925,7 +925,30 @@ blob:; connect-src ipc: http://ipc.localhost https://dolarapi.com
 https://api.argentinadatos.com; object-src 'none'; base-uri 'self'`, plus a
   `devCsp` allowing `ws://localhost:1420` for Vite HMR. Test XLSX import and
   attachment preview afterwards.
-- [ ] Done
+- **Done as:** the dialogs open from Rust (`src-tauri/src/dialogs.rs`,
+  `DialogExt` inside `files::blocking`), and no file command takes a path from
+  the webview: `export_csv`, `import_csv`, `backup_database`,
+  `pick_attachment`, `save_attachment_copy` and `open_statement`. They keep
+  `files::guard_destination` and the atomic write. A suggested file name is
+  cut down to its last component, so the webview cannot steer the panel to
+  another folder. The CSP is the proposal plus `worker-src 'self' blob:`:
+  read-excel-file parses every sheet in a worker started from a `blob:` URL
+  (and fflate unzips archives over 512 KB the same way), so without it XLSX
+  import breaks. No `devCsp`: on desktop `tauri dev` loads Vite directly and
+  Tauri applies no CSP at all there (it adds it only to responses from its own
+  protocol, and the dev proxy is mobile-only), so it would do nothing.
+- **Checked in the running app** (a production-mode build,
+  `tauri build --debug --no-bundle`, since `tauri dev` applies no CSP): the
+  app loads, the rate download goes through (`connect-src`) and the charts
+  draw. "Importar resumen bancario" opens the native panel from Rust, and
+  cancelling it shows no error. An XLSX made for the test (not the user's
+  data), picked through that panel, parses in its worker and shows in the
+  mapping dialog; cancelled, nothing imported. **Not checked there:** the
+  attachment preview (that database has no attachments, and adding one
+  writes data), and export, backup, CSV import and saving a copy (each
+  writes a file or data); covered by `src/lib/files.test.ts` and the
+  `files.rs` tests.
+- [x] Done
 
 ### I-25 · Capabilities grant more than is used
 
@@ -940,7 +963,13 @@ https://api.argentinadatos.com; object-src 'none'; base-uri 'self'`, plus a
   and nothing is missing.
 - **Proposal:** `dialog:allow-open`, `dialog:allow-save`,
   `opener:allow-open-url` scoped to `mailto:*`.
-- [ ] Done
+- **Done as:** no `dialog:` permission at all. Since I-24 the webview opens no
+  dialog, so it needs neither `open` nor `save` (decided with the user). The
+  `@tauri-apps/plugin-dialog` npm package is gone too; the Rust crate stays.
+  `opener:allow-open-url` is scoped to `mailto:*`.
+- **Not checked in the running app:** "Escribir una sugerencia" (it opens
+  the mail app). `tauri-build` validates the capability file at build time.
+- [x] Done
 
 ### I-26 · `read_file_base64` reads the whole file before checking its size
 
@@ -953,7 +982,14 @@ https://api.argentinadatos.com; object-src 'none'; base-uri 'self'`, plus a
   the user only sees "No se pudo leer el archivo".
 - **Proposal:** check `fs::metadata(&path)?.len()` before reading; a separate
   limit (or command) for bank statements.
-- [ ] Done
+- **Done as:** the size comes from `fs::metadata` before anything is read, and
+  the read stops one byte past the limit in case the file grew in between.
+  Spreadsheet statements get their own 20 MB limit (`read_statement`, used by
+  `open_statement`); receipts stay at 5 MB. CSV and TXT statements are still
+  read with no limit, as before.
+- **Not checked in the running app:** an oversized file; covered by the
+  `files.rs` tests, including one the app cannot open.
+- [x] Done
 
 ### B-22 · Backup and Settings look for the DB in the wrong folder on Linux
 
@@ -970,7 +1006,17 @@ https://api.argentinadatos.com; object-src 'none'; base-uri 'self'`, plus a
 - **Proposal:** use `app_config_dir()` / `appConfigDir()`; move `"vault-ai.db"`
   to one constant (repeated today in `lib.rs:72`, `lib.rs:775`,
   `src/db/index.ts:31`, `SettingsView.tsx:121`). Do it with B-01 if convenient.
-- [ ] Done
+- **Done as:** the Rust side was already right (`database_path()` on
+  `app_config_dir()`, from batch 1). Ajustes now asks Rust for the path (a
+  `database_path` command) instead of joining `appDataDir()` and the file
+  name, so the path shown is the one the backup guards (decided with the user
+  over `appConfigDir()`). The name is left in `DATABASE_FILE` / `DATABASE_URL`
+  in `lib.rs` and in `DATABASE_URL` in `src/db/index.ts`, which has to be a
+  URL; `src/db/databaseFile.test.ts` keeps the three equal.
+- **Checked in the running app:** Ajustes shows
+  `~/Library/Application Support/com.ferminlasarte.vault-ai/vault-ai.db`,
+  from the new command. **Not checked:** Linux itself (no Linux machine).
+- [x] Done
 
 ### I-27 · Dead code, unused tokens and template assets
 
@@ -994,7 +1040,16 @@ https://api.argentinadatos.com; object-src 'none'; base-uri 'self'`, plus a
   - `insertTransaction` (`src/db/index.ts`) — test-only since I-21 (the import
     is one batch); the tests can use `insertTransactionWithTags(…, [])`.
     Found in batch 6.
-- [ ] Done
+- **Done as:** `react.svg` deleted; the chart and sidebar tokens removed along
+  with their `@theme` mappings; `export` dropped from `EmptyState`,
+  `TrendEntry`, `PrintRequest`, `UpdaterStatus` and `AvailableUpdate` (the last
+  two moved to `UpdaterContext.tsx` with I-14; `Updater` stays exported because
+  `useUpdater` imports it); `insertTransaction` removed, and
+  `src/db/index.test.ts` wraps `insertTransactionWithTags(…, [])` in a local
+  helper. Already gone before this batch: `public/` (I-09),
+  `countTransactionsForPaymentMethod` (I-04), and
+  `expected_movements.transaction_id` is read now (B-16, and I-16's undo).
+- [x] Done
 
 ### I-28 · Dependencies, release profile and version in three places
 
@@ -1017,7 +1072,20 @@ https://api.argentinadatos.com; object-src 'none'; base-uri 'self'`, plus a
     with nothing checking they match (the updater compares against
     `tauri.conf.json`). Use `"version": "../package.json"` in
     `tauri.conf.json`.
-- [ ] Done
+- **Done as:** `serde` kept: `db.rs` has used it since batch 3
+  (`execute_batch`), so that point no longer held. `base64` 0.22, the version
+  Tauri uses; 0.21.7 is still in the lock through another dependency.
+  `[profile.release]` with `lto`, `codegen-units = 1` and `strip`, but without
+  `panic = "abort"` (decided with the user): `files::blocking` reports a panic
+  in file work as an error the user can read, and abort would close the app
+  instead. `shadcn`, `tailwindcss` and `@tailwindcss/vite` moved to
+  `devDependencies`. `tauri.conf.json` reads the version from `package.json`;
+  Cargo cannot, so `Cargo.toml` keeps a copy, and `src/version.test.ts` fails
+  if it or `Cargo.lock` disagree. README updated.
+- **Checked in the running app:** Ajustes shows "Versión instalada: 1.2.1",
+  read through `package.json`. **Not checked:** the size of a release build
+  (none was made).
+- [x] Done
 
 ### I-29 · `backup_database` still does blocking file work on an async thread
 
@@ -1032,4 +1100,8 @@ https://api.argentinadatos.com; object-src 'none'; base-uri 'self'`, plus a
   threads. Each is short (a rename within one folder), so the effect is small.
 - **Proposal:** run the guard and the final rename through `files::blocking`,
   keeping `VACUUM INTO` on the pool.
-- [ ] Done
+- **Done as:** proposed. The guard and the temporary name go through
+  `files::blocking` first, then the rename (or the cleanup after a failure).
+  Behaviour is unchanged; the backup tests in `files.rs` cover it.
+- **Not checked in the running app:** a backup (it writes a file).
+- [x] Done

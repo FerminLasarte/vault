@@ -311,13 +311,6 @@ function updateTransactionStatement(
   };
 }
 
-export async function insertTransaction(transaction: NewTransaction): Promise<number> {
-  const db = await getDb();
-  const { query, values } = insertTransactionStatement(transaction);
-  const result = await db.execute(query, values);
-  return result.lastInsertId as number;
-}
-
 export async function updateTransaction(
   id: number,
   transaction: NewTransaction,

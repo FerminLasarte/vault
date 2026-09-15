@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { printWindow } from "@/lib/files";
 
-export interface PrintRequest<T> {
+interface PrintRequest<T> {
   // Which document was asked for. What that means is the caller's business:
   // one screen chooses between two documents, another names a month.
   target: T;

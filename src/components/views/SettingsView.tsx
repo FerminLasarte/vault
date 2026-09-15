@@ -9,7 +9,6 @@ import {
   RefreshCw,
   Upload,
 } from "lucide-react";
-import { appDataDir, join } from "@tauri-apps/api/path";
 import { getVersion } from "@tauri-apps/api/app";
 import { toast } from "sonner";
 import { SuggestionDialog } from "@/components/SuggestionDialog";
@@ -39,6 +38,7 @@ import { useUpdater } from "@/hooks/useUpdater";
 import { buildImportPlan, detectDelimiter, parseCsv, transactionsToCsv } from "@/lib/csv";
 import { CURRENCY_CODES } from "@/lib/currency";
 import {
+  getDatabasePath,
   openCsvFile,
   openStatementFile,
   saveCsvFile,
@@ -117,12 +117,9 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
   const [mapping, setMapping] = useState<ColumnMapping>(EMPTY_MAPPING);
 
   useEffect(() => {
-    // `join` rather than string concatenation: appDataDir() comes back without
-    // a trailing separator, so a template literal glues the folder and the file
-    // name into one nonexistent path.
-    appDataDir()
-      // Still the pre-rename file name; see the note in src/db/index.ts.
-      .then((dir) => join(dir, "vault-ai.db"))
+    // Asked of Rust, which knows where the SQL plugin opened the file; working
+    // it out here with appDataDir() showed the wrong folder on Linux.
+    getDatabasePath()
       .then(setDatabasePath)
       .catch(() => setDatabasePath(null));
   }, []);
