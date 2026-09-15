@@ -10,5 +10,13 @@ Loose ideas for future Vault work. Not a commitment or a plan — just a place t
 
 ## Later
 
-1. Plans?
-2. Investments?
+1. Investments?
+2. **Donation pop-up** — every so often, when the app opens, show a small pop-up
+   inviting the user to donate. It replaces paid plans as the way to fund Vault.
+   Keep it rare and easy to dismiss, never on the first launch, and never
+   blocking the app.
+
+## Dropped
+
+- **Paid plans** — a local-first app with a public repo has nothing to gate.
+  Donations (above) take their place.
