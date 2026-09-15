@@ -38,10 +38,10 @@ earlier decision and are not listed.
 
 | ID   | Title                                                              | Type        | Severity | Batch | Done |
 | ---- | ------------------------------------------------------------------ | ----------- | -------- | ----- | ---- |
-| B-01 | Saving a backup over the live database wipes it                    | bug         | high     | 1     | [ ]  |
-| S-01 | Backup may be stale or internally inconsistent (WAL)               | suspicion   | medium   | 1     | [ ]  |
-| B-02 | Confirming a non-oldest occurrence silently drops the earlier ones | bug         | high     | 1     | [ ]  |
-| I-01 | No guard against editing an already-shipped migration              | improvement | medium   | 1     | [ ]  |
+| B-01 | Saving a backup over the live database wipes it                    | bug         | high     | 1     | [x]  |
+| S-01 | Backup may be stale or internally inconsistent (WAL)               | suspicion   | medium   | 1     | [x]  |
+| B-02 | Confirming a non-oldest occurrence silently drops the earlier ones | bug         | high     | 1     | [x]  |
+| I-01 | No guard against editing an already-shipped migration              | improvement | medium   | 1     | [x]  |
 | B-03 | Cierres crashes on a closed month with only transfers              | bug         | high     | 2     | [ ]  |
 | B-04 | Native menu actions do nothing when fired from another view        | bug         | high     | 2     | [ ]  |
 | B-05 | A manual exchange-rate correction is overwritten on relaunch       | bug         | medium   | 2     | [ ]  |
@@ -118,7 +118,7 @@ earlier decision and are not listed.
   uso"). Apply the same guard to the other two write commands. Write to a
   temporary file in the destination folder and `fs::rename` it into place, so a
   failure halfway never destroys an earlier backup. Combine with S-01.
-- [ ] Done
+- [x] Done
 
 ### S-01 · Backup may be stale or internally inconsistent (WAL)
 
@@ -143,7 +143,7 @@ earlier decision and are not listed.
   consistent SQLite snapshot that includes the WAL) into a temporary file in
   the destination folder, then have Rust `rename` it (with B-01's guard). At
   minimum, checkpoint after the dialog returns, right before the copy.
-- [ ] Done
+- [x] Done
 
 ### B-02 · Confirming a non-oldest occurrence silently drops the earlier ones
 
@@ -171,7 +171,7 @@ earlier decision and are not listed.
   cuota N"). Also validate in the mutation (`index === confirmed_count`, or
   `date` is the first pending one) and reject otherwise. B-09's compare-and-set
   makes the database enforce it too.
-- [ ] Done
+- [x] Done
 
 ### I-01 · No guard against editing an already-shipped migration
 
@@ -189,7 +189,7 @@ earlier decision and are not listed.
 - **Proposal:** a test (Vitest, reusing `src/db/testing/migrations.ts`, or a
   Rust `#[test]`) with a `{version: sha256}` fixture that fails when the SQL of
   an already-shipped version changes.
-- [ ] Done
+- [x] Done
 
 ---
 

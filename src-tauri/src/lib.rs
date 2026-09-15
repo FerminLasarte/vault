@@ -1,20 +1,37 @@
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use tauri::Manager;
-use tauri_plugin_sql::{Migration, MigrationKind};
+use tauri_plugin_sql::{DbInstances, DbPool, Migration, MigrationKind};
 
+mod files;
 mod menu;
+
+// Deliberately still "vault-ai.db" after the app was renamed to Vault; see the
+// note in src/db/index.ts. The two constants must name the same file.
+const DATABASE_FILE: &str = "vault-ai.db";
+const DATABASE_URL: &str = "sqlite:vault-ai.db";
+
+// Where the SQL plugin keeps the database: it resolves `sqlite:` URLs against
+// the app config folder, not the data folder.
+fn database_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    Ok(app
+        .path()
+        .app_config_dir()
+        .map_err(|error| error.to_string())?
+        .join(DATABASE_FILE))
+}
 
 // File I/O lives in Rust rather than behind the fs plugin: the plugin scopes
 // every path up front, which for a "save wherever you like" export would mean
 // granting the webview blanket access to the user's home directory. These
-// commands only ever touch the exact path the user picked in the native dialog.
+// commands only ever touch the exact path the user picked in the native dialog,
+// and never the live database (see files::guard_destination).
 #[tauri::command]
-fn write_text_file(path: String, contents: String) -> Result<(), String> {
-    fs::write(&path, contents).map_err(|error| error.to_string())
+fn write_text_file(app: tauri::AppHandle, path: String, contents: String) -> Result<(), String> {
+    files::write_atomically(Path::new(&path), &database_path(&app)?, contents.as_bytes())
 }
 
 #[tauri::command]
@@ -42,12 +59,12 @@ fn read_file_base64(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn write_file_base64(path: String, contents: String) -> Result<(), String> {
+fn write_file_base64(app: tauri::AppHandle, path: String, contents: String) -> Result<(), String> {
     let bytes = BASE64
         .decode(contents)
         .map_err(|error| format!("El adjunto está dañado: {error}"))?;
 
-    fs::write(&path, bytes).map_err(|error| error.to_string())
+    files::write_atomically(Path::new(&path), &database_path(&app)?, &bytes)
 }
 
 // Opens the system print dialog for this window.
@@ -60,20 +77,18 @@ fn print_window(window: tauri::WebviewWindow) -> Result<(), String> {
     window.print().map_err(|error| error.to_string())
 }
 
-// Copies the live SQLite file. The WAL is checkpointed by the caller first, so
-// what lands on disk is a complete database rather than a stale main file.
+// Saves a snapshot of the live database, taken through the SQL plugin's own
+// connection pool so it sees exactly what the app sees (see files::backup_to).
 #[tauri::command]
-fn backup_database(app: tauri::AppHandle, destination: String) -> Result<(), String> {
-    let source: PathBuf = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| error.to_string())?
-        // Still the pre-rename file name; see the note in src/db/index.ts.
-        .join("vault-ai.db");
+async fn backup_database(app: tauri::AppHandle, destination: String) -> Result<(), String> {
+    let database = database_path(&app)?;
+    let instances = app.state::<DbInstances>();
+    let instances = instances.0.read().await;
+    let Some(DbPool::Sqlite(pool)) = instances.get(DATABASE_URL) else {
+        return Err("La base de datos no está abierta".to_string());
+    };
 
-    fs::copy(&source, &destination)
-        .map(|_| ())
-        .map_err(|error| error.to_string())
+    files::backup_to(pool, &database, Path::new(&destination)).await
 }
 
 // Run automatically by the SQL plugin the moment the frontend opens the
@@ -772,7 +787,7 @@ pub fn run() {
         )
         .plugin(
             tauri_plugin_sql::Builder::default()
-                .add_migrations("sqlite:vault-ai.db", migrations())
+                .add_migrations(DATABASE_URL, migrations())
                 .build(),
         )
         .setup(|app| {

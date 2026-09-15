@@ -9,8 +9,6 @@ import {
 import { toast } from "sonner";
 import {
   deleteAttachment,
-  advanceInstallmentPlan,
-  advanceLoan,
   deleteBudget,
   deleteCategory,
   deleteInstallmentPlan,
@@ -60,7 +58,10 @@ import {
   updateCategory,
   setSetting,
   setTransactionTags,
-  markRecurringConfirmed,
+  dismissRecurringOccurrence,
+  recordInstallment,
+  recordLoanPayment,
+  recordRecurringOccurrence,
   updateBudget,
   updateInstallmentPlan,
   updateLoan,
@@ -614,26 +615,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         ),
       confirmLoanPayment: (id, index, date, amount) =>
         runMutation(
-          async () => {
-            const loan = loans.find((entry) => entry.id === id);
-            if (!loan) return;
-
-            // A payment on money I owe leaves my pocket; a payment on money
-            // owed to me arrives in it. Recording both as expenses would make
-            // being repaid look like a cost.
-            await insertTransaction({
-              amount,
-              type: loan.direction === "borrowed" ? "expense" : "income",
-              currency: loan.currency,
-              categoryId: loan.category_id,
-              paymentMethodId: loan.payment_method_id,
-              destinationPaymentMethodId: null,
-              destinationAmount: null,
-              description: `${loan.description} (${index + 1}/${loan.installment_count})`,
-              date,
-            });
-            await advanceLoan(id, index + 1);
-          },
+          () => recordLoanPayment(id, index, date, amount),
           "Cuota registrada",
           "No se pudo registrar la cuota",
         ),
@@ -658,23 +640,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         ),
       confirmInstallment: (id, index, date, amount) =>
         runMutation(
-          async () => {
-            const plan = installmentPlans.find((entry) => entry.id === id);
-            if (!plan) return;
-
-            await insertTransaction({
-              amount,
-              type: "expense",
-              currency: plan.currency,
-              categoryId: plan.category_id,
-              paymentMethodId: plan.payment_method_id,
-              destinationPaymentMethodId: null,
-              destinationAmount: null,
-              description: `${plan.description} (${index + 1}/${plan.installment_count})`,
-              date,
-            });
-            await advanceInstallmentPlan(id, index + 1);
-          },
+          () => recordInstallment(id, index, date, amount),
           "Cuota registrada",
           "No se pudo registrar la cuota",
         ),
@@ -699,29 +665,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         ),
       confirmRecurring: (id, date) =>
         runMutation(
-          async () => {
-            const template = recurring.find((entry) => entry.id === id);
-            if (!template) return;
-
-            await insertTransaction({
-              amount: template.amount,
-              type: template.type,
-              currency: template.currency,
-              categoryId: template.category_id,
-              paymentMethodId: template.payment_method_id,
-              destinationPaymentMethodId: null,
-              destinationAmount: null,
-              description: template.description,
-              date,
-            });
-            await markRecurringConfirmed(id, date);
-          },
+          () => recordRecurringOccurrence(id, date),
           "Movimiento registrado",
           "No se pudo registrar el movimiento",
         ),
       dismissRecurring: (id, date) =>
         runMutation(
-          () => markRecurringConfirmed(id, date),
+          () => dismissRecurringOccurrence(id, date),
           "Ocurrencia descartada",
           "No se pudo descartar la ocurrencia",
         ),

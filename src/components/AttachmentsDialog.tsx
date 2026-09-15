@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { getAttachmentContent, listAttachments } from "@/db";
 import { useAppData } from "@/hooks/useAppData";
-import { pickAttachment, saveAttachmentCopy } from "@/lib/files";
+import { pickAttachment, saveAttachmentCopy, saveErrorMessage } from "@/lib/files";
 import { formatDate } from "@/lib/format";
 import type { AttachmentMeta, TransactionWithCategory } from "@/db";
 
@@ -99,7 +99,7 @@ export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDial
       if (saved) toast.success("Copia guardada");
     } catch (error) {
       console.error("Failed to save a copy of the attachment:", error);
-      toast.error("No se pudo guardar la copia");
+      toast.error(saveErrorMessage(error, "No se pudo guardar la copia"));
     } finally {
       setIsBusy(false);
     }

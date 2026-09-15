@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -55,6 +56,82 @@ beforeAll(() => {
 
 afterAll(() => {
   rmSync(workspace, { recursive: true, force: true });
+});
+
+// The SQL of every migration that has reached users, as a sha256 of the string
+// in src-tauri/src/lib.rs.
+//
+// sqlx records a checksum for each migration it applies and refuses to open the
+// database if the SQL of an applied version later changes — whitespace
+// included. The plugin runs migrations inside `Database.load`, so an edited
+// migration makes every existing install come up empty on "No se pudieron
+// cargar los datos", with no way out. A shipped migration is therefore frozen:
+// fix it with a new one instead.
+//
+// When a release ships new migrations, add their hashes here (the failure
+// message below prints them).
+const SHIPPED_MIGRATIONS: Record<number, string> = {
+  1: "3eca9c5d8b69f8fae8a029620e220cb2fdd6fc49c78925975059b3b7057e2bff",
+  2: "e1d7880244d287647af523a10045b7f5b5703c9fd49474534dad77d347a70cac",
+  3: "635defd68e0fb3995d1d09e11a4dc89a6e2969035e8e05477c90a0996ee14f25",
+  4: "4206baf3f472704a6fbb3c1a1fe41d43714e898e4d4a79d10b87cf85e0e9979f",
+  5: "c95f2621837f519fbbfd53739b633475478f7a72f2d7e7567b897123f93f0f65",
+  6: "aee563a55dca6db6b93e4c099ca38a74e610ebb7a0d353b08453d7bd8cab8eae",
+  7: "05182c69a5cf499009028724edfc2dc36c7cc2c4ad8c1f78b772c9946f261e64",
+  8: "0abf7944eefb507329b6b36e04b3f731410f994d6161d441eac2be9448d0a384",
+  9: "cf2d99837ab296d3fbd392bf12cc79e39af87afd0608d0053de869d3316081d3",
+  10: "49a87ecc8415f97e815681cd604d7b682fdcf402cb2a829f3313c3802e83fd3b",
+  11: "a63848fee0b882e439c4a1db35d84016d19c31b00fb37b8702d7509f56190a7c",
+  12: "f41b1707903d72c35fbf116faa87c686d8f64086f599cc260201789b45c013d8",
+  13: "ed1afed713ee3b2517d3a7577b32c95fe04846e58b088f7951c76b2096def620",
+  14: "f91a8db12a0e513adfe43489ccd4ecf493bb09d3653b17a10b0a43ec6df3e1b5",
+  15: "747844880f84b50a771c3b1bc10eac2f3d0a64078ab60d3cf8ed97fd0290ed7e",
+  16: "009b993ba078ab57d5a61ad17423880a6d5772ee32a7c3133bda93cce3b0ef9c",
+  17: "e9a1c1634986e74542a5f89795285ac03963b68d75d1deef97c3b0672d856dd5",
+  18: "1bea2a4e6eb321257be9d8b26d077526fd51542de1773894a8a02591c8cb41a1",
+  19: "66ffddd76e22d84b0aa271a9668cfe9d17de11922f34278143d6aa8407008373",
+  20: "926ffbd2a0d7e0c0c35926038321ecb483939122aeb52333ab2c1fae9758148a",
+  21: "73651d6d748431dc9a718cc306430a3026071738255c3833a9dab220580589a8",
+  22: "6de0e062f4a231e02d60c3a37ae1e03fb3512d8d6485422734aeeb163a5268eb",
+  23: "9d27c35105765759873df65aceddd7b341eddc0fbb174ebffb8d3397ec1926ea",
+  24: "f8239465605fba1e58bb381432ea2cca9ef7809559e84d72d8d21cc662e35883",
+  25: "bebc7b7b1d7d6738192831deb8e7f0235b92e62980d3068b24a8a34c25ae94c2",
+  26: "e35bd0b95cc9de105239aaadf66b2b61236276aab98d573bfc50f36aa74053da",
+};
+
+function sha256(text: string): string {
+  return createHash("sha256").update(text).digest("hex");
+}
+
+describe("shipped migrations", () => {
+  it("are never edited", () => {
+    const current = new Map(
+      parseMigrations().map((migration) => [migration.version, sha256(migration.sql)]),
+    );
+
+    for (const [version, hash] of Object.entries(SHIPPED_MIGRATIONS)) {
+      expect(
+        current.get(Number(version)),
+        `Migration ${version} has already shipped and its SQL changed. Existing ` +
+          `installs would fail to open the database; revert it and add a new ` +
+          `migration instead.`,
+      ).toBe(hash);
+    }
+  });
+
+  it("are only ever followed by new versions", () => {
+    const lastShipped = Math.max(...Object.keys(SHIPPED_MIGRATIONS).map(Number));
+    const unshipped = parseMigrations().filter((m) => m.version > lastShipped);
+
+    // Not a failure: a migration under development may still change. This only
+    // documents what to add to SHIPPED_MIGRATIONS once it is released.
+    for (const migration of unshipped) {
+      console.info(
+        `Unshipped migration ${migration.version}: "${sha256(migration.sql)}"`,
+      );
+    }
+    expect(parseMigrations().length).toBeGreaterThanOrEqual(lastShipped);
+  });
 });
 
 describe("migrations", () => {

@@ -5,21 +5,29 @@ import {
   countTransactionsForPaymentMethod,
   deletePaymentMethod,
   deleteTransaction,
+  dismissRecurringOccurrence,
   EXCHANGE_RATE_TYPE,
   getLatestExchangeRate,
   getSetting,
   insertAttachment,
   insertCategory,
+  insertInstallmentPlan,
   insertLoan,
   insertPaymentMethod,
+  insertRecurringTransaction,
   insertTransaction,
   insertTransactions,
   listAttachments,
   listCategories,
   listExchangeRates,
+  listInstallmentPlans,
   listLoans,
+  listRecurringTransactions,
   listTags,
   listTransactionsWithCategory,
+  recordInstallment,
+  recordLoanPayment,
+  recordRecurringOccurrence,
   setDatabaseForTesting,
   setSetting,
   setTransactionTags,
@@ -361,6 +369,143 @@ describe("exchange rates", () => {
     expect((await getLatestExchangeRate("bolsa"))?.sell).toBe(1300);
     expect((await getLatestExchangeRate("blue"))?.sell).toBe(1500);
     expect(await getLatestExchangeRate("cripto")).toBeNull();
+  });
+});
+
+describe("confirming commitments out of order", () => {
+  // Each pending occurrence has its own button, but what is stored is a
+  // position: registering instalment 2 while 1 is still due used to set the
+  // plan to "2 paid", and instalment 1 vanished with no movement behind it.
+
+  async function aPlanWithTwoDue() {
+    await insertInstallmentPlan({
+      description: "Heladera",
+      totalAmount: 1200,
+      installmentCount: 12,
+      currency: "ARS",
+      categoryId: null,
+      paymentMethodId: null,
+      firstDueDate: "2026-07-10",
+      cashPrice: null,
+    });
+    return (await listInstallmentPlans())[0];
+  }
+
+  async function aLoanWithTwoDue() {
+    await insertLoan({
+      direction: "borrowed",
+      counterparty: "Banco",
+      description: "Préstamo personal",
+      principal: 1200,
+      currency: "ARS",
+      annualRate: 0,
+      installmentCount: 12,
+      categoryId: null,
+      paymentMethodId: null,
+      firstDueDate: "2026-07-10",
+    });
+    return (await listLoans())[0];
+  }
+
+  async function aSeriesWithTwoDue() {
+    await insertRecurringTransaction({
+      description: "Alquiler",
+      amount: 500,
+      type: "expense",
+      categoryId: null,
+      paymentMethodId: null,
+      currency: "ARS",
+      frequency: "monthly",
+      startDate: "2026-08-08",
+      isActive: true,
+    });
+    return (await listRecurringTransactions())[0];
+  }
+
+  it("refuses a later instalment while an earlier one is still due", async () => {
+    const plan = await aPlanWithTwoDue();
+
+    await expect(recordInstallment(plan.id, 1, "2026-08-10", 100)).rejects.toThrow();
+
+    expect((await listInstallmentPlans())[0].confirmed_count).toBe(0);
+    expect(await listTransactionsWithCategory()).toHaveLength(0);
+  });
+
+  it("registers instalments one after the other", async () => {
+    const plan = await aPlanWithTwoDue();
+
+    // What "Registrar todas" does, with the data it read before the first one.
+    await recordInstallment(plan.id, 0, "2026-07-10", 100);
+    await recordInstallment(plan.id, 1, "2026-08-10", 100);
+
+    expect((await listInstallmentPlans())[0].confirmed_count).toBe(2);
+    const descriptions = (await listTransactionsWithCategory()).map((t) => t.description);
+    expect(descriptions.sort()).toEqual(["Heladera (1/12)", "Heladera (2/12)"]);
+  });
+
+  it("refuses the same instalment twice", async () => {
+    const plan = await aPlanWithTwoDue();
+    await recordInstallment(plan.id, 0, "2026-07-10", 100);
+
+    await expect(recordInstallment(plan.id, 0, "2026-07-10", 100)).rejects.toThrow();
+
+    expect(await listTransactionsWithCategory()).toHaveLength(1);
+  });
+
+  it("refuses a later loan payment while an earlier one is still due", async () => {
+    const loan = await aLoanWithTwoDue();
+
+    await expect(recordLoanPayment(loan.id, 1, "2026-08-10", 100)).rejects.toThrow();
+
+    expect((await listLoans())[0].confirmed_count).toBe(0);
+    expect(await listTransactionsWithCategory()).toHaveLength(0);
+  });
+
+  it("registers loan payments one after the other", async () => {
+    const loan = await aLoanWithTwoDue();
+
+    await recordLoanPayment(loan.id, 0, "2026-07-10", 100);
+    await recordLoanPayment(loan.id, 1, "2026-08-10", 100);
+
+    expect((await listLoans())[0].confirmed_count).toBe(2);
+    expect(await listTransactionsWithCategory()).toHaveLength(2);
+  });
+
+  it("refuses a later recurring occurrence while an earlier one is pending", async () => {
+    const series = await aSeriesWithTwoDue();
+
+    await expect(recordRecurringOccurrence(series.id, "2026-09-08")).rejects.toThrow();
+
+    expect((await listRecurringTransactions())[0].last_confirmed_date).toBeNull();
+    expect(await listTransactionsWithCategory()).toHaveLength(0);
+  });
+
+  it("refuses to dismiss a later occurrence while an earlier one is pending", async () => {
+    const series = await aSeriesWithTwoDue();
+
+    await expect(dismissRecurringOccurrence(series.id, "2026-09-08")).rejects.toThrow();
+
+    expect((await listRecurringTransactions())[0].last_confirmed_date).toBeNull();
+  });
+
+  it("refuses a date that is not an occurrence of the series", async () => {
+    const series = await aSeriesWithTwoDue();
+
+    await expect(recordRecurringOccurrence(series.id, "2026-08-09")).rejects.toThrow();
+    await expect(dismissRecurringOccurrence(series.id, "2026-08-09")).rejects.toThrow();
+
+    expect((await listRecurringTransactions())[0].last_confirmed_date).toBeNull();
+  });
+
+  it("works through a series in order, registering and dismissing", async () => {
+    const series = await aSeriesWithTwoDue();
+
+    await dismissRecurringOccurrence(series.id, "2026-08-08");
+    await recordRecurringOccurrence(series.id, "2026-09-08");
+
+    expect((await listRecurringTransactions())[0].last_confirmed_date).toBe("2026-09-08");
+    const transactions = await listTransactionsWithCategory();
+    expect(transactions.map((t) => t.date)).toEqual(["2026-09-08"]);
   });
 });
 

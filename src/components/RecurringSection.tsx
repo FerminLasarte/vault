@@ -81,6 +81,12 @@ export function RecurringSection() {
     }
   }
 
+  function waitingReason(waitingFor: string | null): string | null {
+    return waitingFor === null
+      ? null
+      : `Primero registrá o descartá el del ${formatDate(waitingFor)}`;
+  }
+
   async function togglePaused(template: RecurringTransactionWithNames) {
     await editRecurring(template.id, {
       description: template.description,
@@ -164,6 +170,7 @@ export function RecurringSection() {
                       size="icon-sm"
                       label="Registrar"
                       disabled={isMutating}
+                      disabledReason={waitingReason(entry.waitingFor)}
                       onClick={() => void confirmRecurring(entry.template.id, entry.date)}
                     >
                       <Check />
@@ -177,6 +184,7 @@ export function RecurringSection() {
                       size="icon-sm"
                       label="Descartar"
                       disabled={isMutating}
+                      disabledReason={waitingReason(entry.waitingFor)}
                       onClick={() => void dismissRecurring(entry.template.id, entry.date)}
                     >
                       <X />

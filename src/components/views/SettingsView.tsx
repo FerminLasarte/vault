@@ -31,7 +31,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { checkpointDatabase } from "@/db";
 import { useAppData } from "@/hooks/useAppData";
 import { useTheme } from "@/hooks/useTheme";
 import { useUpdater } from "@/hooks/useUpdater";
@@ -42,6 +41,7 @@ import {
   openStatementFile,
   saveCsvFile,
   saveDatabaseCopy,
+  saveErrorMessage,
 } from "@/lib/files";
 import { ImportMappingDialog } from "@/components/ImportMappingDialog";
 import { EMPTY_MAPPING } from "@/lib/importMapping";
@@ -156,7 +156,7 @@ export function SettingsView({ request }: ViewProps) {
       if (saved) toast.success(`${transactions.length} transacciones exportadas`);
     } catch (error) {
       console.error("Failed to export the transactions:", error);
-      toast.error("No se pudo exportar el archivo");
+      toast.error(saveErrorMessage(error, "No se pudo exportar el archivo"));
     } finally {
       setIsWorking(false);
     }
@@ -165,8 +165,6 @@ export function SettingsView({ request }: ViewProps) {
   async function handleBackup() {
     setIsWorking(true);
     try {
-      // Without this the copy would miss whatever is still in the -wal sidecar.
-      await checkpointDatabase();
       const saved = await saveDatabaseCopy(`vault-${todayIsoDate()}.db`);
       if (saved) {
         await recordBackup();
@@ -174,7 +172,7 @@ export function SettingsView({ request }: ViewProps) {
       }
     } catch (error) {
       console.error("Failed to back up the database:", error);
-      toast.error("No se pudo guardar la copia");
+      toast.error(saveErrorMessage(error, "No se pudo guardar la copia"));
     } finally {
       setIsWorking(false);
     }

@@ -191,6 +191,11 @@ export function CommitmentsView({ tab }: ViewProps) {
                           size="icon-sm"
                           label="Registrar cuota"
                           disabled={isMutating}
+                          disabledReason={
+                            entry.waitingFor === null
+                              ? null
+                              : `Primero registrá la cuota ${entry.waitingFor}`
+                          }
                           onClick={() =>
                             void confirmInstallment(
                               entry.plan.id,

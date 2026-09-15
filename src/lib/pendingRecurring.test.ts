@@ -24,6 +24,27 @@ function template(
   };
 }
 
+describe("collectPendingRecurrences ordering", () => {
+  it("lets only the oldest occurrence of each series be decided on", () => {
+    const pending = collectPendingRecurrences(
+      [
+        template({ id: 1, start_date: "2026-07-08" }),
+        template({ id: 2, start_date: "2026-08-01" }),
+      ],
+      "2026-09-10",
+    );
+    expect(
+      pending.map((entry) => [entry.template.id, entry.date, entry.waitingFor]),
+    ).toEqual([
+      [1, "2026-07-08", null],
+      [2, "2026-08-01", null],
+      [1, "2026-08-08", "2026-07-08"],
+      [2, "2026-09-01", "2026-08-01"],
+      [1, "2026-09-08", "2026-07-08"],
+    ]);
+  });
+});
+
 describe("collectPendingRecurrences", () => {
   it("lists every occurrence still awaiting a decision", () => {
     const pending = collectPendingRecurrences([template()], "2026-08-22");

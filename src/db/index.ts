@@ -1,4 +1,5 @@
 import Database from "@tauri-apps/plugin-sql";
+import { pendingOccurrences } from "@/lib/recurring";
 import type {
   AttachmentMeta,
   BudgetPeriod,
@@ -11,13 +12,16 @@ import type {
   PaymentMethod,
   PaymentMethodType,
   NewTransaction,
+  InstallmentPlan,
   InstallmentPlanWithNames,
+  Loan,
   LoanDirection,
   LoanWithNames,
   RecurrenceFrequencyValue,
   SavingsContribution,
   SavingsGoalWithNames,
   SavingsTrackingMode,
+  RecurringTransaction,
   RecurringTransactionWithNames,
   Tag,
   TransactionWithCategory,
@@ -678,6 +682,154 @@ export async function markRecurringConfirmed(id: number, date: string): Promise<
   );
 }
 
+// Instalments and loan payments are settled strictly in order. A schedule only
+// stores how many are paid, so settling a later one would silently count every
+// earlier one as paid too, with no movement behind it. Checked against the row
+// as stored rather than what the screen last rendered, so "Registrar todas"
+// can still work through a schedule one payment after another.
+function assertNextInSchedule(
+  kind: string,
+  row: { id: number; confirmed_count: number; installment_count: number },
+  index: number,
+): void {
+  if (index !== row.confirmed_count || index >= row.installment_count) {
+    throw new Error(
+      `Payment ${index + 1} of ${kind} ${row.id} is not the next one due ` +
+        `(${row.confirmed_count} of ${row.installment_count} already confirmed)`,
+    );
+  }
+}
+
+// The same rule for a recurring series: it stores the last occurrence decided
+// on, so deciding a later one would settle every pending one before it.
+function assertNextOccurrence(template: RecurringTransaction, date: string): void {
+  const [next] = pendingOccurrences(
+    template.start_date,
+    template.frequency,
+    template.last_confirmed_date,
+    date,
+    1,
+  );
+  if (next !== date) {
+    throw new Error(
+      `${date} is not the next pending occurrence of recurring transaction ${template.id}`,
+    );
+  }
+}
+
+async function getLoan(id: number): Promise<Loan | null> {
+  const db = await getDb();
+  const rows = await db.select<Loan[]>("SELECT * FROM loans WHERE id = $1", [id]);
+  return rows[0] ?? null;
+}
+
+async function getInstallmentPlan(id: number): Promise<InstallmentPlan | null> {
+  const db = await getDb();
+  const rows = await db.select<InstallmentPlan[]>(
+    "SELECT * FROM installment_plans WHERE id = $1",
+    [id],
+  );
+  return rows[0] ?? null;
+}
+
+async function getRecurringTransaction(id: number): Promise<RecurringTransaction | null> {
+  const db = await getDb();
+  const rows = await db.select<RecurringTransaction[]>(
+    "SELECT * FROM recurring_transactions WHERE id = $1",
+    [id],
+  );
+  return rows[0] ?? null;
+}
+
+// Records the payment as a real movement and advances the loan by one, in
+// that order, so a failure never leaves a loan claiming a payment that was
+// never written.
+export async function recordLoanPayment(
+  id: number,
+  index: number,
+  date: string,
+  amount: number,
+): Promise<void> {
+  const loan = await getLoan(id);
+  if (!loan) return;
+  assertNextInSchedule("loan", loan, index);
+
+  // A payment on money I owe leaves my pocket; a payment on money owed to me
+  // arrives in it. Recording both as expenses would make being repaid look
+  // like a cost.
+  await insertTransaction({
+    amount,
+    type: loan.direction === "borrowed" ? "expense" : "income",
+    currency: loan.currency,
+    categoryId: loan.category_id,
+    paymentMethodId: loan.payment_method_id,
+    destinationPaymentMethodId: null,
+    destinationAmount: null,
+    description: `${loan.description} (${index + 1}/${loan.installment_count})`,
+    date,
+  });
+  await advanceLoan(id, index + 1);
+}
+
+// Records one instalment as paid: writes the movement and advances the plan.
+export async function recordInstallment(
+  id: number,
+  index: number,
+  date: string,
+  amount: number,
+): Promise<void> {
+  const plan = await getInstallmentPlan(id);
+  if (!plan) return;
+  assertNextInSchedule("installment plan", plan, index);
+
+  await insertTransaction({
+    amount,
+    type: "expense",
+    currency: plan.currency,
+    categoryId: plan.category_id,
+    paymentMethodId: plan.payment_method_id,
+    destinationPaymentMethodId: null,
+    destinationAmount: null,
+    description: `${plan.description} (${index + 1}/${plan.installment_count})`,
+    date,
+  });
+  await advanceInstallmentPlan(id, index + 1);
+}
+
+// Turns one proposed occurrence into a real transaction and moves the series
+// past it, so it is never proposed twice.
+export async function recordRecurringOccurrence(id: number, date: string): Promise<void> {
+  const template = await getRecurringTransaction(id);
+  if (!template) return;
+  assertNextOccurrence(template, date);
+
+  await insertTransaction({
+    amount: template.amount,
+    type: template.type,
+    currency: template.currency,
+    categoryId: template.category_id,
+    paymentMethodId: template.payment_method_id,
+    destinationPaymentMethodId: null,
+    destinationAmount: null,
+    description: template.description,
+    date,
+  });
+  await markRecurringConfirmed(id, date);
+}
+
+// Decides against an occurrence without recording anything, moving the series
+// past it just the same.
+export async function dismissRecurringOccurrence(
+  id: number,
+  date: string,
+): Promise<void> {
+  const template = await getRecurringTransaction(id);
+  if (!template) return;
+  assertNextOccurrence(template, date);
+
+  await markRecurringConfirmed(id, date);
+}
+
 // Soonest first: the list is a queue of what is coming, and the thing that is
 // coming next is the one worth looking at.
 export async function listExpectedMovements(): Promise<ExpectedMovementWithNames[]> {
@@ -921,13 +1073,6 @@ export async function insertTransactions(
       await setTransactionTags(id, entry.tags);
     }
   }
-}
-
-// Folds the write-ahead log back into the main database file. Without this a
-// copy of vault-ai.db would miss everything still sitting in the -wal sidecar.
-export async function checkpointDatabase(): Promise<void> {
-  const db = await getDb();
-  await db.execute("PRAGMA wal_checkpoint(TRUNCATE)");
 }
 
 // Returns the most recent cached quote, or null when none has ever been
