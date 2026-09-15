@@ -12,6 +12,9 @@
       "allow": [
         {
           "url": "mailto:*"
+        },
+        {
+          "url": "https://link.mercadopago.com.ar/ferminlasarte"
         }
       ]
     },

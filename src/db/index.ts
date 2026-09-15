@@ -1647,6 +1647,9 @@ export const LAST_SEEN_CLOSE = "last_seen_close";
 // the file they came from, so the same bank's export does not have to be mapped
 // again every month.
 export const IMPORT_PROFILES = "import_profiles";
+// How often the donation invitation has been earned and answered, as the JSON
+// that src/lib/donationPrompt.ts reads and writes. Never leaves the machine.
+export const DONATION_PROMPT = "donation_prompt";
 
 export async function getSetting(key: string): Promise<string | null> {
   const db = await getDb();
