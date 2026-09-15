@@ -19,8 +19,9 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { UpdatePrompt } from "@/components/UpdatePrompt";
 import { AppErrorFallback, ViewErrorFallback } from "@/components/ErrorFallback";
 import { useMenuEvents } from "@/hooks/useMenuEvents";
+import { usePendingMenuRequest } from "@/hooks/useMenuRequest";
 import { MENU_ACTION_VIEW } from "@/lib/menu";
-import type { MenuAction, MenuRequest, ViewProps } from "@/lib/menu";
+import type { MenuAction, ViewProps } from "@/lib/menu";
 import type { Destination, TabRequest, View } from "@/lib/navigation";
 
 // Views take the pending menu request and the tab it asked for, and a component
@@ -64,7 +65,7 @@ function SidebarWithBadges({
 
 function App() {
   const [view, setView] = useState<View>("statistics");
-  const [request, setRequest] = useState<MenuRequest | null>(null);
+  const { request, issue, markHandled } = usePendingMenuRequest();
   // The tab a menu entry asked for, if it asked for one. Held here rather than
   // inside each view because the request arrives from outside the view — often
   // while a different one is on screen.
@@ -72,12 +73,14 @@ function App() {
   const CurrentView = VIEWS[view];
 
   // An action is answered by the view that owns it, which may not be the one on
-  // screen, so navigating there is part of handling the click. The sequence
-  // number is what makes picking the same entry twice count as two requests.
-  const handleAction = useCallback((action: MenuAction) => {
-    setView(MENU_ACTION_VIEW[action]);
-    setRequest((previous) => ({ action, seq: (previous?.seq ?? 0) + 1 }));
-  }, []);
+  // screen, so navigating there is part of handling the click.
+  const handleAction = useCallback(
+    (action: MenuAction) => {
+      setView(MENU_ACTION_VIEW[action]);
+      issue(action);
+    },
+    [issue],
+  );
 
   // Three of the menu's nine entries now name a tab rather than a view of their
   // own. A view that receives a tab it does not recognise ignores it, which is
@@ -129,7 +132,11 @@ function App() {
                     <ViewErrorFallback error={error} retry={retry} />
                   )}
                 >
-                  <CurrentView request={request} tab={tab} />
+                  <CurrentView
+                    request={request}
+                    tab={tab}
+                    onRequestHandled={markHandled}
+                  />
                 </ErrorBoundary>
               </main>
             </div>

@@ -13,6 +13,7 @@ import {
 import { getAttachmentContent, listAttachments } from "@/db";
 import { useAppData } from "@/hooks/useAppData";
 import { pickAttachment, saveAttachmentCopy, saveErrorMessage } from "@/lib/files";
+import { isReported } from "@/lib/reportedError";
 import { formatDate } from "@/lib/format";
 import type { AttachmentMeta, TransactionWithCategory } from "@/db";
 
@@ -73,8 +74,10 @@ export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDial
       await refresh();
     } catch (error) {
       console.error("Failed to attach the file:", error);
-      // Rust returns a readable message for the size limit, worth surfacing.
-      toast.error(String(error));
+      // A failed save has already said so (see ReportedError). Otherwise it
+      // came from reading the file, where Rust returns a readable message for
+      // the size limit that is worth surfacing.
+      if (!isReported(error)) toast.error(String(error));
     } finally {
       setIsBusy(false);
     }

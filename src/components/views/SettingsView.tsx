@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Bell,
   CalendarClock,
@@ -32,6 +32,8 @@ import {
 } from "@/components/ui/select";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useAppData } from "@/hooks/useAppData";
+import { useMenuRequest } from "@/hooks/useMenuRequest";
+import { isReported } from "@/lib/reportedError";
 import { useTheme } from "@/hooks/useTheme";
 import { useUpdater } from "@/hooks/useUpdater";
 import { buildImportPlan, parseCsv, transactionsToCsv } from "@/lib/csv";
@@ -80,7 +82,7 @@ interface ImportOutcome {
   skipped: ImportSkip[];
 }
 
-export function SettingsView({ request }: ViewProps) {
+export function SettingsView({ request, onRequestHandled }: ViewProps) {
   const {
     transactions,
     categories,
@@ -264,44 +266,33 @@ export function SettingsView({ request }: ViewProps) {
       }
     } catch (error) {
       console.error("Failed to import the file:", error);
-      toast.error("No se pudo leer el archivo");
+      // A failed import already said so in its own words; this message is only
+      // for the file itself failing to open or parse.
+      if (!isReported(error)) toast.error("No se pudo leer el archivo");
     } finally {
       setIsWorking(false);
     }
   }
 
-  // The three data entries in the Archivo menu. Each opens a native file dialog
-  // and then reads or writes a file, so unlike opening a dialog these genuinely
-  // belong in an effect.
-  //
-  // A ref rather than state: which click was already handled is bookkeeping,
-  // nothing renders from it, and holding it in state would schedule a render
-  // for every menu click on top of the one the action itself causes.
-  const lastRequestSeq = useRef(request?.seq ?? 0);
-  useEffect(() => {
-    if (request === null || request.seq === lastRequestSeq.current) return;
-    lastRequestSeq.current = request.seq;
-
+  // The data entries in the Archivo menu. Each opens a native file dialog and
+  // then reads or writes a file, so unlike opening a dialog these genuinely
+  // belong in an effect, which `useMenuRequest` provides.
+  useMenuRequest(request, onRequestHandled, (action) => {
     const run =
-      request.action === "backup"
+      action === "backup"
         ? handleBackup
-        : request.action === "export-csv"
+        : action === "export-csv"
           ? handleExportCsv
-          : request.action === "import-csv"
+          : action === "import-csv"
             ? handleImportCsv
-            : request.action === "check-updates"
+            : action === "check-updates"
               ? updater.check
               : null;
 
-    // Replaying a native menu click is a reaction to an external system, not
-    // state derived from props: the handler marks itself busy and then awaits a
-    // file dialog, so nothing cascades.
+    // The handler marks itself busy and then awaits a file dialog, so nothing
+    // cascades from running it here.
     if (run !== null) void run();
-    // The handlers are redefined on every render and are only ever invoked in
-    // response to a new sequence number, so listing them here would re-run this
-    // on every render instead of once per menu click.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [request]);
+  });
 
   const busy = isWorking || isMutating;
 

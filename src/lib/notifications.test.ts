@@ -308,6 +308,17 @@ describe("the monthly close", () => {
     expect(july.id).not.toBe(august.id);
   });
 
+  it("says nothing when the month that ended only moved money between accounts", () => {
+    const transfer: Transaction = {
+      ...anExpenseOn("2026-07-12"),
+      type: "transfer",
+      destination_payment_method_id: 2,
+    };
+    expect(pendingNotifications(sources({ transactions: [transfer] }), TODAY)).toEqual(
+      [],
+    );
+  });
+
   it("counts a movement in any currency, since the close is read in the app", () => {
     const [notification] = pendingNotifications(
       sources({ transactions: [anExpenseOn("2026-07-12", "USD")] }),

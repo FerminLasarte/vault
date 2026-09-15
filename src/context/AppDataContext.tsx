@@ -3,10 +3,12 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { toast } from "sonner";
+import { ReportedError } from "@/lib/reportedError";
 import {
   deleteAttachment,
   deleteBudget,
@@ -276,6 +278,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
   const [isRefreshingRate, setIsRefreshingRate] = useState(false);
+  // The type in force right now, readable from inside a fetch that started
+  // under a previous one (see refreshExchangeRate). State alone cannot do that:
+  // a callback only ever sees the render it was created in.
+  const currentRateType = useRef<RateType>(DEFAULT_RATE_TYPE);
 
   const refresh = useCallback(async () => {
     await initDatabase();
@@ -336,6 +342,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setExpectedMovements(nextExpected);
     setSavingsGoals(nextGoals);
     setSavingsContributions(nextContributions);
+    currentRateType.current = activeRateType;
     setRateTypeState(activeRateType);
     setExchangeRate(cachedRate);
     setExchangeRateHistory(cachedHistory);
@@ -354,6 +361,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       try {
         const rate = await fetchRate(rateType);
         await upsertExchangeRate(rate);
+        // The user may have switched types while this was on the wire. The
+        // quote is still worth caching, but showing it now would put the old
+        // type's figure under the new type's name.
+        if (rate.rate_type !== currentRateType.current) return;
         setExchangeRate(rate);
         if (!silent) toast.success("Cotización actualizada");
       } catch (error) {
@@ -369,28 +380,28 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
 
   // Switching rates keeps whatever was already downloaded for the new one and
-  // shows it immediately, then goes to the network. Nothing is deleted: the old
-  // series stays cached, so changing back is instant rather than another
-  // multi-thousand-record download.
+  // shows it immediately. Nothing is deleted: the old series stays cached, so
+  // changing back is instant rather than another multi-thousand-record
+  // download.
+  //
+  // The network is left to the effect below that refreshes the rate: it
+  // depends on the type, so changing the type already fetches once. Fetching
+  // here as well downloaded and wrote every switch twice.
   const setRateType = useCallback(async (type: RateType) => {
     await setSetting(EXCHANGE_RATE_TYPE, type);
-    setRateTypeState(type);
 
     const [cachedRate, cachedHistory] = await Promise.all([
       getLatestExchangeRate(type),
       listExchangeRates(type),
     ]);
+
+    // Switched only once the cache is in hand, all in one render: the switch is
+    // what starts the fetch, and a cached read landing after it would replace
+    // the fresh quote with an older one.
+    currentRateType.current = type;
+    setRateTypeState(type);
     setExchangeRate(cachedRate);
     setExchangeRateHistory(cachedHistory);
-
-    try {
-      const rate = await fetchRate(type);
-      await upsertExchangeRate(rate);
-      setExchangeRate(rate);
-    } catch (error) {
-      // Offline is normal for a local-first app; the cached quote above stands.
-      console.error("Failed to fetch the newly selected rate:", error);
-    }
   }, []);
 
   const setNotificationsEnabled = useCallback(async (enabled: boolean) => {
@@ -445,7 +456,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       } catch (error) {
         console.error("Failed to save the manual exchange rate:", error);
         toast.error("No se pudo guardar la cotización");
-        throw error;
+        throw new ReportedError(error);
       }
     },
     [rateType],
@@ -479,6 +490,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   // Every mutation reloads the whole dataset, so a change made in one view is
   // immediately reflected in the statistics and in every other view.
+  //
+  // The write and the reload are reported separately. A reload that fails after
+  // the write went through is not a failed mutation: saying "No se pudo…" there
+  // invited a retry that wrote the same thing twice.
   const runMutation = useCallback(
     async (
       mutation: () => Promise<void>,
@@ -487,13 +502,24 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     ) => {
       setIsMutating(true);
       try {
-        await mutation();
-        await refresh();
+        try {
+          await mutation();
+        } catch (error) {
+          console.error(`${errorMessage}:`, error);
+          toast.error(errorMessage);
+          // Rethrown so whatever awaited it stops — a dialog stays open with
+          // what was typed — but marked, so nothing adds a second message.
+          throw new ReportedError(error);
+        }
+
         toast.success(successMessage);
-      } catch (error) {
-        console.error(`${errorMessage}:`, error);
-        toast.error(errorMessage);
-        throw error;
+
+        try {
+          await refresh();
+        } catch (error) {
+          console.error("Failed to reload the data after a mutation:", error);
+          toast.error("No se pudieron recargar los datos", { id: "app-data-reload" });
+        }
       } finally {
         setIsMutating(false);
       }

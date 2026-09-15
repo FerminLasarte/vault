@@ -1188,6 +1188,9 @@ export async function upsertExchangeRates(rates: ExchangeRate[]): Promise<number
 
 // One row per day: re-fetching on the same day refreshes it in place rather
 // than piling up duplicates, and a manual correction overwrites the fetched one.
+// A manual correction is only ever replaced by another manual one. Without the
+// guard, the download the app runs on every launch — keyed to the same day the
+// correction was saved under — silently put the provider's figure back.
 export async function upsertExchangeRate(rate: ExchangeRate): Promise<void> {
   const db = await getDb();
   await db.execute(
@@ -1197,7 +1200,8 @@ export async function upsertExchangeRate(rate: ExchangeRate): Promise<void> {
        buy = excluded.buy,
        sell = excluded.sell,
        source = excluded.source,
-       fetched_at = excluded.fetched_at`,
+       fetched_at = excluded.fetched_at
+     WHERE exchange_rates.source <> 'manual' OR excluded.source = 'manual'`,
     [rate.date, rate.rate_type, rate.buy, rate.sell, rate.source, rate.fetched_at],
   );
 }

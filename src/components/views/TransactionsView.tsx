@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   ChevronLeft,
@@ -100,7 +100,7 @@ function TransferAmount({ transaction }: { transaction: TransactionWithCategory 
   );
 }
 
-export function TransactionsView({ request }: ViewProps) {
+export function TransactionsView({ request, onRequestHandled }: ViewProps) {
   const {
     transactions,
     categories,
@@ -182,11 +182,21 @@ export function TransactionsView({ request }: ViewProps) {
   // "Nueva transacción" in the Archivo menu. Handled during render rather than
   // from an effect because opening a dialog is pure state: an effect would let
   // the view paint once without it and then pop it in a frame later.
-  const [lastRequestSeq, setLastRequestSeq] = useState(request?.seq ?? 0);
+  //
+  // Starts at 0, so a request the view mounts with counts as new — which is
+  // the usual case, since choosing the entry from another screen switches here
+  // and hands over the request in the same render.
+  const [lastRequestSeq, setLastRequestSeq] = useState(0);
   if (request !== null && request.seq !== lastRequestSeq) {
     setLastRequestSeq(request.seq);
     if (request.action === "new-transaction") openCreateDialog();
   }
+
+  // Telling App happens after the render: it clears the request there, which
+  // is another component's state and cannot be set while rendering this one.
+  useEffect(() => {
+    if (request !== null) onRequestHandled(request.seq);
+  }, [request, onRequestHandled]);
 
   function openEditDialog(transaction: TransactionWithCategory) {
     setEditing(transaction);

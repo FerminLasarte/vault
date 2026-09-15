@@ -1,4 +1,5 @@
 import { toast } from "sonner";
+import { isReported } from "@/lib/reportedError";
 
 // Error boundaries only catch what throws during render. An await that rejects
 // inside a click handler never passes through React at all, so without these
@@ -13,6 +14,9 @@ export function installGlobalErrorHandlers(): void {
   });
 
   window.addEventListener("unhandledrejection", (event) => {
+    // Already reported to the user where it happened (see ReportedError); a
+    // generic message on top would only bury the specific one.
+    if (isReported(event.reason)) return;
     console.error("Unhandled promise rejection:", event.reason);
     toast.error("Una operación no pudo completarse", { id: "global-rejection" });
   });

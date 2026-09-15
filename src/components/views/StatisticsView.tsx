@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,7 @@ import { useAppData } from "@/hooks/useAppData";
 import { usePrintRequest } from "@/hooks/usePrintRequest";
 import { Printer } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useMenuRequest } from "@/hooks/useMenuRequest";
 import { useRequestedTab } from "@/hooks/useRequestedTab";
 import { DEFAULT_STATISTICS_TAB, STATISTICS_TABS } from "@/lib/navigation";
 import type { StatisticsTab } from "@/lib/navigation";
@@ -88,7 +89,7 @@ const RECENT_PERIOD_LABEL = "Últimos 12 meses";
 const CUSTOM_PERIOD = "__custom__";
 const CUSTOM_PERIOD_LABEL = "Personalizado";
 
-export function StatisticsView({ request, tab }: ViewProps) {
+export function StatisticsView({ request, tab, onRequestHandled }: ViewProps) {
   const [currentTab, setCurrentTab] = useRequestedTab<StatisticsTab>(
     tab,
     STATISTICS_TABS,
@@ -290,18 +291,14 @@ export function StatisticsView({ request, tab }: ViewProps) {
     [transactions, categories, budgets, currency, categoryId, dateRange],
   );
 
-  // "Imprimir informe" from the Archivo menu. A ref rather than state: which
-  // click was already handled is bookkeeping and nothing renders from it.
-  const lastRequestSeq = useRef(request?.seq ?? 0);
-  useEffect(() => {
-    if (request === null || request.seq === lastRequestSeq.current) return;
-    lastRequestSeq.current = request.seq;
+  // "Imprimir informe" from the Archivo menu.
+  useMenuRequest(request, onRequestHandled, (action) => {
     // Goes through the same request the toolbar button uses rather than calling
     // `printWindow` directly: the sheet holds whichever document was last asked
     // for, so printing without naming one would print the close to a menu entry
     // that says "Imprimir informe".
-    if (request.action === "print-report") requestPrint("report");
-  }, [request, requestPrint]);
+    if (action === "print-report") requestPrint("report");
+  });
 
   const years = useMemo(() => availableYears(transactions), [transactions]);
 
