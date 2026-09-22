@@ -59,10 +59,10 @@ be updated with this direction as part of batch 1.
 | P-05 | A row that was just created or edited is lost in the list        | 4     | [x]  |
 | P-06 | Figures snap when the period or the filters change               | 4     | [x]  |
 | P-07 | Row actions are as loud as the data they belong to               | 4     | [x]  |
-| P-08 | Expanding a row opens instantly, and the pattern is duplicated   | 4     | [x]  |
-| P-09 | Focus is lost when a dialog closes                               | 5     | [ ]  |
-| P-10 | No keyboard shortcuts for search and filters                     | 5     | [ ]  |
-| P-11 | Scroll position is not kept when leaving and returning to a view | 5     | [ ]  |
+| P-08 | Expanding a row opens instantly                                  | 4     | [x]  |
+| P-09 | Focus is lost when a dialog closes                               | 5     | [x]  |
+| P-10 | No keyboard shortcuts for search and filters                     | 5     | [x]  |
+| P-11 | Scroll position is not kept when leaving and returning to a view | 5     | [x]  |
 
 ---
 
@@ -497,18 +497,65 @@ at all.
 
 ### P-09 · Focus is lost when a dialog closes
 
-After a dialog closes, focus should return to the control that opened it. Worth
-checking what the Base UI dialog already restores before writing anything.
+- **Not done, because it is not true.** This item said to check what Base UI
+  already restores before writing anything, and the answer is: all of it.
+  Opening "Nueva transacción" and closing it with Escape leaves the focus back
+  on the button that opened it, not on the body — checked in the running app.
+  Base UI keeps the element that had focus when the dialog opened, and every
+  dialog in the app is opened from a control that is still there afterwards.
+- **What was not checked:** a dialog whose trigger disappears while it is open
+  — the delete confirmation on a row that is then deleted. That needs data on
+  screen, which the browser pane has none of, and it is not worth machinery
+  built on a guess. If focus is ever seen landing on nothing, this is the entry
+  to reopen.
+- [x] Done
 
 ### P-10 · No keyboard shortcuts for search and filters
 
-`grep -rn "addEventListener(\"keydown\"" src` finds only the donation prompt
-and `TagInput`. Proposal: `/` focuses the search field of the current view and
-`Esc` clears the filters, both routed through one hook so a new view does not
-have to reinvent them, and both inert while a dialog or an input has focus.
+- **Done as:** `/` focuses the search on Transacciones, Escape clears its
+  filters. One hook, `useShortcuts`, listening at the window, because these are
+  answers the whole screen gives rather than something the focus has to be in
+  the right half of the page for.
+
+  Which keys the app may take at all is one decision, `shouldIgnoreShortcut`,
+  and it is the same for every screen that ever adds one: not while somebody is
+  writing, not while a dialog is open, and not with a modifier held. Shift is
+  deliberately not a modifier — on the keyboard this app is written for, `/` is
+  Shift+7.
+
+  Escape is the exception to the writing rule, because nobody types one:
+  clearing the filters without first having to leave the search box is the
+  whole point of it. `preventDefault` is called only once the key is certainly
+  the app's, so a `/` typed into a description stays a `/`.
+
+  One search box in the app, so one screen uses this. The shape is what makes
+  the second one a line rather than a decision.
+
+- **Tests:** seven on the guard, which is the part with the judgement in it —
+  a bare key, every kind of field, a modifier held, a dialog open, Escape from
+  inside a field, Escape with a dialog open, and a button, which is focusable
+  but not writable.
+- **Checked in the running app:** `/` from the page focuses the search box;
+  `/` dispatched at the search box is not swallowed, so the character would be
+  typed; Escape from inside the box clears the filters.
+- [x] Done
 
 ### P-11 · Scroll position is not kept when leaving and returning to a view
 
-`grep -rn "scrollTo\|scrollTop" src` returns nothing. Scrolling deep into
-Transacciones, stepping into Ajustes and coming back puts the user at the top
-again. Proposal: remember the scroll offset per view and restore it on return.
+- **Done as:** a position per view, kept by `useRememberedScroll` on the one
+  column that scrolls. Followed as it changes rather than read when a view is
+  left: by the time React has swapped the children, the column already holds
+  the new view's content and may have clamped the old position away. Restored
+  in a layout effect, so a view is never seen at the wrong height first.
+- **Found while building it:** assigning `element.scrollTop` is a mutation of
+  something passed in as far as the React compiler's lint is concerned, and it
+  is right to say so. `scrollTo` says the same thing and asks rather than
+  reaches.
+- **Tests:** four, against a stand-in for the column, because jsdom lays
+  nothing out and `scrollTop` on a real element always reads back zero — a view
+  goes back where it was left, each view is remembered separately, one never
+  seen starts at the top, and the restore does not file its own scroll against
+  the view being left.
+- **Checked in the running app:** Transacciones scrolled to 150, Cuentas at 0,
+  and back to Transacciones at 150.
+- [x] Done
