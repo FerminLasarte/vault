@@ -50,7 +50,14 @@ function AmortizationSchedule({ loan }: ScheduleProps) {
   const interest = totalInterest(loan);
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
+    // Fades and drops in rather than appearing whole: the chevron above it
+    // has already turned, and a table that arrives with no movement between
+    // the two reads as a different screen rather than as more of this one.
+    //
+    // Only on the way in. Closing unmounts the schedule, which is what keeps
+    // the app from working out an amortisation for every loan on screen in
+    // order to animate the one that is open.
+    <div className="flex animate-in flex-col gap-2 rounded-lg border border-border p-3 duration-(--duration-base) fade-in slide-in-from-top-1">
       <p className="text-xs text-muted-foreground">
         {interest === 0
           ? "Sin interés: cada cuota es capital puro."
@@ -223,7 +230,7 @@ export function LoansSection() {
                     </div>
                   </div>
 
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className="row-actions flex shrink-0 items-center gap-2">
                     <span
                       className={cn(
                         "text-sm font-medium tabular-nums",
@@ -313,7 +320,7 @@ export function LoansSection() {
                     {isSettled && <Badge variant="secondary">Saldado</Badge>}
                   </div>
 
-                  <div className="flex shrink-0 items-center gap-1">
+                  <div className="row-actions flex shrink-0 items-center gap-1">
                     <span
                       className={cn(
                         "text-sm tabular-nums",

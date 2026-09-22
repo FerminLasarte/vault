@@ -87,7 +87,7 @@ export function BudgetsSection() {
                   {entry.isExceeded && <Badge variant="destructive">Superado</Badge>}
                 </div>
 
-                <div className="flex shrink-0 items-center gap-1">
+                <div className="row-actions flex shrink-0 items-center gap-1">
                   <span className="text-sm tabular-nums text-muted-foreground">
                     {formatCurrency(entry.spent, entry.budget.currency)} /{" "}
                     {formatCurrency(entry.budget.amount, entry.budget.currency)}

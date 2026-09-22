@@ -120,7 +120,7 @@ export function SavingsView() {
                   {entry.isReached && <Badge>Alcanzado</Badge>}
                 </div>
 
-                <div className="flex shrink-0 items-center gap-1">
+                <div className="row-actions flex shrink-0 items-center gap-1">
                   <span className="text-sm tabular-nums text-muted-foreground">
                     {formatCurrency(entry.current, entry.goal.currency)} /{" "}
                     {formatCurrency(entry.goal.target_amount, entry.goal.currency)}

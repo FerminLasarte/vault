@@ -56,10 +56,10 @@ be updated with this direction as part of batch 1.
 | P-13 | The same icon moves differently depending on where it is used    | 1     | [x]  |
 | P-03 | Copying and confirming give no visible feedback                  | 2     | [x]  |
 | P-04 | First load shows the word "Cargando..." and then a full app      | 3     | [x]  |
-| P-05 | A row that was just created or edited is lost in the list        | 4     | [ ]  |
-| P-06 | Figures snap when the period or the filters change               | 4     | [ ]  |
-| P-07 | Row actions are as loud as the data they belong to               | 4     | [ ]  |
-| P-08 | Expanding a row opens instantly, and the pattern is duplicated   | 4     | [ ]  |
+| P-05 | A row that was just created or edited is lost in the list        | 4     | [x]  |
+| P-06 | Figures snap when the period or the filters change               | 4     | [x]  |
+| P-07 | Row actions are as loud as the data they belong to               | 4     | [x]  |
+| P-08 | Expanding a row opens instantly, and the pattern is duplicated   | 4     | [x]  |
 | P-09 | Focus is lost when a dialog closes                               | 5     | [ ]  |
 | P-10 | No keyboard shortcuts for search and filters                     | 5     | [ ]  |
 | P-11 | Scroll position is not kept when leaving and returning to a view | 5     | [ ]  |
@@ -412,31 +412,84 @@ be updated with this direction as part of batch 1.
 
 ### P-05 · A row that was just created or edited is lost in the list
 
-You add a transaction and land back in a table of hundreds. Nothing says where
-it went. Proposal: the affected row carries a background highlight that fades
-out over about 800ms — long enough to find, short enough not to linger.
+You add a transaction and land back in a table of hundreds, sorted by a date
+that is rarely today. Nothing says where it went.
+
+- **Done as:** the row holds a tint for 1.2 seconds and then goes quiet. Not a
+  keyframe: a tint that is simply there and then is not survives
+  `prefers-reduced-motion`, where an animation would be cut to nothing and take
+  the only answer to "where did it go" with it. The fade out is the row's own
+  `transition-colors`, the same one its hover uses, because a row should not
+  have two speeds.
+
+  Adding is the only place that ever learns the new id, so the provider notes
+  it — `useBriefly`, the same hook the answering buttons of `P-03` use, now
+  that a second thing needs to be remembered for a moment. `useJustDone` is
+  that hook wearing a boolean face, so there is one timer implementation and
+  not two.
+
+  Transactions only. That is the list where this bites; the others are short
+  enough to read.
+
+- **Tests:** four on the wiring, in the provider's own tests — the id the
+  database gave the new row, the id of an edited one, nobody before anything is
+  written, and nobody when the write failed, because pointing at a row that was
+  never written is worse than pointing at nothing. How long it is remembered
+  for is `useBriefly`'s business and is tested there, with four more.
 
 ### P-06 · Figures snap when the period or the filters change
 
-The `FigureBar` on Estadísticas replaces its numbers instantly, which reads as
-a glitch rather than a recalculation. Proposal: a crossfade at
-`--duration-fast`. Explicitly not a count-up animation: a balance counting
-upwards reads as marketing, not as money.
+The `FigureBar` on Estadísticas replaced its numbers instantly, which reads as
+a glitch rather than as a recalculation.
+
+- **Done as:** each figure is keyed by what it says, so changing the period or
+  the currency fades the new one in over `--duration-fast`. Explicitly not a
+  count-up: a balance climbing towards its value is marketing, not money.
+
+  A pleasant side effect of keying by the value rather than by the column: the
+  figures that did not change do not flicker.
+
+- **Checked in the running app:** switching ARS to USD, the total that changes
+  is a new element running the `enter` animation at 0.12s, and the two columns
+  whose text did not change are the same elements as before.
 
 ### P-07 · Row actions are as loud as the data they belong to
 
-Every row in Compromisos carries three or four icon buttons at full strength,
-competing with the amounts. Proposal: 60% opacity, full on `group-hover` and on
-`focus-within`. Opacity only — never `display: none` or `invisible`, which
-takes the buttons out of the keyboard order and hides them from a user who
-cannot hover.
+Every row carried three or four icon buttons at full strength, competing with
+the amounts they sit beside — the whole list shouting at once.
 
-### P-08 · Expanding a row opens instantly, and the pattern is duplicated
+- **Done as:** 55% until the row is under the pointer or something inside has
+  the keyboard's focus, across all fifteen groups of row controls. Opacity
+  only, never `display: none` or `invisible`, which would take the buttons out
+  of the keyboard's order and hide them from anyone who cannot hover at all. A
+  disabled control is left alone: it already carries its own half opacity.
 
-`LoansSection` rotates its chevron but its schedule appears with no transition,
-and the same expand/collapse is rebuilt per section. Proposal: pull it into one
-disclosure primitive that owns the chevron (`rotate` from the vocabulary), the
-animated height and the ARIA wiring, and use it everywhere a row expands.
+  No class on the row. Every list in the app is built out of `li` or `tr`, so
+  the rule reaches for those and a section only marks its group of buttons.
+
+- **Found while verifying:** written as an `@utility` first, which silently did
+  not work. Tailwind compiles `:is(li, tr):hover &` inside one by dropping
+  everything in front of the `&`, so every row was lit at all times and nothing
+  said so — it was only visible in the compiled stylesheet. It is plain CSS
+  now. Inside `@layer components` it came out twice, once layered and once not,
+  so it sits at the top level with the print rules.
+- **Checked in the running app:** a row built in the page to match the app's
+  markup reads `opacity: 0.55` at rest, `1` with the row hovered, and `1` again
+  with the pointer away and the button focused from the keyboard.
+
+### P-08 · Expanding a row opens instantly
+
+`LoansSection` rotates its chevron but its schedule appeared with no transition
+at all.
+
+- **Done as:** the schedule fades and drops in over `--duration-base`. On the
+  way in only: closing unmounts it, which is what keeps the app from working
+  out an amortisation for every loan on screen in order to animate the one that
+  is open.
+- **Not done, and why:** the plan called for pulling this into a shared
+  disclosure primitive, on the grounds that the pattern was rebuilt per
+  section. It is not — `grep` finds exactly one expanding row in the app. A
+  primitive with one caller is a guess about the second.
 
 ---
 

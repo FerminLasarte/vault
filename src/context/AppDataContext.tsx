@@ -114,6 +114,7 @@ import type { RateType } from "@/lib/exchangeRate";
 import { todayIsoDate } from "@/lib/format";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useToday } from "@/hooks/useToday";
+import { useBriefly } from "@/hooks/useBriefly";
 import { collectPendingCommitments } from "@/lib/pendingCommitments";
 import type { PendingCommitments } from "@/lib/pendingCommitments";
 
@@ -216,6 +217,13 @@ export interface AppData {
 export interface AppStatus {
   isMutating: boolean;
   isRefreshingRate: boolean;
+  // The transaction written a moment ago, so the list can point at it. Null
+  // the rest of the time, which is almost always.
+  //
+  // It lives here because this is where the write happens: adding one is the
+  // only place that ever learns the new id, and a screen that had to be told
+  // it would mean every dialog carrying the answer back by hand.
+  justWrittenTransaction: number | null;
 }
 
 // Everything the app can do to its data. The same functions for the life of
@@ -360,6 +368,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
   const [isRefreshingRate, setIsRefreshingRate] = useState(false);
+  // Long enough to find the row on a screen the user is only now looking at,
+  // short enough to be gone before it turns into decoration.
+  const { current: justWrittenTransaction, remember: noteWrittenTransaction } =
+    useBriefly<number>(1200);
   // The type in force right now, readable from inside a fetch that started
   // under a previous one (see refreshExchangeRate). State alone cannot do that:
   // a callback only ever sees the render it was created in.
@@ -744,8 +756,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
 
   const status = useMemo<AppStatus>(
-    () => ({ isMutating, isRefreshingRate }),
-    [isMutating, isRefreshingRate],
+    () => ({
+      isMutating,
+      isRefreshingRate,
+      justWrittenTransaction,
+    }),
+    [isMutating, isRefreshingRate, justWrittenTransaction],
   );
 
   // Built from callbacks that never change, so this object never does either.
@@ -762,7 +778,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       addTransaction: (transaction, transactionTags) =>
         runMutation(
           async () => {
-            await insertTransactionWithTags(transaction, transactionTags);
+            // The one place the new id exists. Noted here so the table can
+            // say which of its rows is the one that was just added.
+            noteWrittenTransaction(
+              await insertTransactionWithTags(transaction, transactionTags),
+            );
           },
           ["transactions"],
           "Transacción agregada",
@@ -770,7 +790,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         ),
       editTransaction: (id, transaction, transactionTags) =>
         runMutation(
-          () => updateTransactionWithTags(id, transaction, transactionTags),
+          async () => {
+            await updateTransactionWithTags(id, transaction, transactionTags);
+            noteWrittenTransaction(id);
+          },
           ["transactions"],
           "Transacción actualizada",
           "No se pudo actualizar la transacción",
@@ -1094,6 +1117,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       refreshExchangeRate,
       saveManualExchangeRate,
       backfillExchangeRates,
+      // Stable for the life of the provider, like everything else here, so
+      // naming it does not cost this object its identity.
+      noteWrittenTransaction,
       recordBackup,
       markCloseSeen,
       setNotificationsEnabled,

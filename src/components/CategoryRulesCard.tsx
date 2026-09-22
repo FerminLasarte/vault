@@ -109,7 +109,7 @@ export function CategoryRulesCard() {
                 </Badge>
               </div>
 
-              <div className="flex shrink-0 items-center gap-1">
+              <div className="row-actions flex shrink-0 items-center gap-1">
                 <ActionButton
                   type="button"
                   variant="ghost"
