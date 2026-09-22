@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { SuggestionDialog } from "@/components/SuggestionDialog";
 import { DonationCard } from "@/components/DonationCard";
 import { Button } from "@/components/ui/button";
+import { AnsweringButton } from "@/components/AnsweringButton";
 import {
   Card,
   CardContent,
@@ -148,7 +149,13 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
     setPermissionGranted(granted === "granted");
   }
 
-  async function handleExportCsv() {
+  // Both report whether a file was actually written, so the button that
+  // started them can answer in place. The user cancelling the save dialog is
+  // not a failure, but it is not something to congratulate them on either.
+  //
+  // They keep their toast as well: the Archivo menu runs the same two, and
+  // there is no button on screen to answer for them there.
+  async function handleExportCsv(): Promise<boolean> {
     setIsWorking(true);
     try {
       const saved = await saveCsvFile(
@@ -156,15 +163,17 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
         transactionsToCsv(transactions),
       );
       if (saved) toast.success(transactionCount(transactions.length, "exportada"));
+      return saved;
     } catch (error) {
       console.error("Failed to export the transactions:", error);
       toast.error(fileErrorMessage(error, "No se pudo exportar el archivo"));
+      return false;
     } finally {
       setIsWorking(false);
     }
   }
 
-  async function handleBackup() {
+  async function handleBackup(): Promise<boolean> {
     setIsWorking(true);
     try {
       const saved = await saveDatabaseCopy(`vault-${todayIsoDate()}.db`);
@@ -172,9 +181,11 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
         await recordBackup();
         toast.success("Copia de seguridad guardada");
       }
+      return saved;
     } catch (error) {
       console.error("Failed to back up the database:", error);
       toast.error(fileErrorMessage(error, "No se pudo guardar la copia"));
+      return false;
     } finally {
       setIsWorking(false);
     }
@@ -386,24 +397,26 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
           </p>
 
           <div className="flex flex-wrap gap-2">
-            <Button
+            <AnsweringButton
               type="button"
               variant="outline"
               disabled={busy}
-              onClick={handleBackup}
+              icon={HardDriveDownload}
+              answer="¡Guardada!"
+              onAction={handleBackup}
             >
-              <HardDriveDownload />
               Guardar copia de seguridad
-            </Button>
-            <Button
+            </AnsweringButton>
+            <AnsweringButton
               type="button"
               variant="outline"
               disabled={busy || transactions.length === 0}
-              onClick={handleExportCsv}
+              icon={Download}
+              answer="¡Exportadas!"
+              onAction={handleExportCsv}
             >
-              <Download />
               Exportar a CSV
-            </Button>
+            </AnsweringButton>
             <Button
               type="button"
               variant="outline"

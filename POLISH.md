@@ -54,7 +54,7 @@ be updated with this direction as part of batch 1.
 | P-02 | Icons do not react to anything                                   | 1     | [x]  |
 | P-12 | Every sidebar icon moves the same way, so none of them says much | 1     | [x]  |
 | P-13 | The same icon moves differently depending on where it is used    | 1     | [x]  |
-| P-03 | Copying and confirming give no visible feedback                  | 2     | [ ]  |
+| P-03 | Copying and confirming give no visible feedback                  | 2     | [x]  |
 | P-04 | First load shows the word "Cargando..." and then a full app      | 3     | [ ]  |
 | P-05 | A row that was just created or edited is lost in the list        | 4     | [ ]  |
 | P-06 | Figures snap when the period or the filters change               | 4     | [ ]  |
@@ -308,15 +308,44 @@ be updated with this direction as part of batch 1.
   to a `Check` for about 1.5 seconds and the label follows it ("Copiar alias" →
   "¡Copiado!"), then both return. The toast stays for the failure case, where
   there is something to explain.
-- **How it is built:** a `useActionFeedback` hook in `src/hooks` holding a
-  short-lived flag and its timer, so the timeout is cleared on unmount and the
-  behaviour cannot drift between the two donation call sites. The icon swap
-  itself is the batch 1 vocabulary, not new CSS.
-- **Tests:** the hook gets a test first, with fake timers: it turns on, it
-  turns off after the delay, a second call restarts the delay rather than
-  stacking timers, and unmounting mid-flight does not leave a timer running.
-- **Checks in the running app:** copying the alias from Ajustes and from the
-  prompt; confirming a commitment.
+- **How it is built:** a `useJustDone` hook in `src/hooks` holding the
+  short-lived flag and owning its timer, and an `AnsweringButton` around it so
+  that the swap is written once rather than at each call site. The button takes
+  the idle icon and label, the answer, and an action that reports whether
+  anything actually happened.
+- **Done as:** proposed for copying, **not** for confirming. Reading the code
+  first: the confirm buttons already show a `Check` as their idle icon, and the
+  row they sit in leaves the pending list the moment the work lands, so the
+  button is gone before it could answer. Swapping a check for a check on a
+  control that is about to unmount is not feedback. What was missing instead
+  was on the two file buttons in Ajustes, which have the same gap as the copy —
+  the work lands, the button stays, and the only signal is in the corner. So
+  `AnsweringButton` covers three: copying the alias, saving a backup, and
+  exporting to CSV.
+
+  The toasts stay. The one on the copy carries something the button cannot
+  ("pegalo al transferir"), and the backup and the export are also reachable
+  from the Archivo menu, where there is no button on screen to answer for them.
+
+  The launch invitation was left alone: it already closes itself when the copy
+  succeeds, and a notice that disappears has answered.
+
+- **Tests:** ten, written before the code. The hook, with fake timers: it turns
+  on, turns off after the delay, restarts the wait rather than stacking a
+  second timer when the action is repeated, and leaves no timer behind when the
+  control unmounts mid-answer. The button: it is ordinary until it has
+  something to report, it answers in place, it waits for an action that takes a
+  moment, it goes back, and it says nothing when the action reports that
+  nothing happened.
+- **Checked in the running app:** the failure path, live — the browser pane
+  refuses clipboard writes, so copying the alias there ends in
+  `NotAllowedError`, and the button correctly stayed "Copiar alias" with no
+  check while the error toast appeared. **Not checked:** the success path in
+  the native window. It needs the real clipboard, and driving that window by
+  screen coordinates kept landing clicks on whatever else was in front. It is
+  the one thing left to look at by hand: Ajustes → "Copiar alias" should read
+  "¡Copiado!" with a tick for a second and a half.
+- [x] Done
 
 ---
 
