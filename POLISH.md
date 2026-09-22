@@ -52,6 +52,7 @@ be updated with this direction as part of batch 1.
 | ---- | ---------------------------------------------------------------- | ----- | ---- |
 | P-01 | No motion tokens, and `prefers-reduced-motion` is ignored        | 1     | [x]  |
 | P-02 | Icons do not react to anything                                   | 1     | [x]  |
+| P-12 | Every sidebar icon moves the same way, so none of them says much | 1     | [x]  |
 | P-03 | Copying and confirming give no visible feedback                  | 2     | [ ]  |
 | P-04 | First load shows the word "Cargando..." and then a full app      | 3     | [ ]  |
 | P-05 | A row that was just created or edited is lost in the list        | 4     | [ ]  |
@@ -190,6 +191,54 @@ be updated with this direction as part of batch 1.
   IPC" ones of a plain browser. **Not checked:** the action columns under a
   pointer in the native window — motion there cannot be measured, only the
   compiled rules and the browser can.
+- [x] Done
+
+### P-12 · Every sidebar icon moves the same way, so none of them says much
+
+- **Where:** `src/components/layout/Sidebar.tsx`, `src/index.css`.
+- **Today:** after `P-02`, all eight sections lift their icon by the same 8%.
+  That is an answer, but it is the same answer everywhere, and the sidebar is
+  the one place in the app where the icon is doing the explaining — collapsed,
+  it is the only thing naming the section at all.
+- **Proposal:** a signature per section, the way Discord gives each of its
+  icons one. A second tier under the behaviours: a behaviour says what a
+  control does and any icon can have it, a signature says what one icon is and
+  travels with that icon wherever it appears.
+
+  | Section       | Signature | What moves                                               |
+  | ------------- | --------- | -------------------------------------------------------- |
+  | Estadísticas  | `chart`   | the slice comes out of the pie                           |
+  | Transacciones | `flow`    | money in and money out pull apart                        |
+  | Compromisos   | `clock`   | the hand turns a quarter, around the clock's own centre  |
+  | Categorías    | `fan`     | the front tag lifts off the one behind it, dot and all   |
+  | Cuentas       | `bank`    | the roof lifts off the columns                           |
+  | Ahorros       | `piggy`   | a nod — the whole animal, because a pig is not a diagram |
+  | Cierres       | `pages`   | the three lines write themselves, 40ms apart             |
+  | Ajustes       | `gear`    | the gear turns one tooth and the hub stays put           |
+
+- **How it is built:** the same `icon-motion` utility, with a rule per
+  signature reaching into the icon's `svg` by child position. They move at
+  `--duration-base` rather than `--duration-fast`, because they travel further
+  and through more of an arc. The stagger on `pages` is a `transition-delay`
+  set only in the hover rule, so the lines write themselves on the way in and
+  settle back together on the way out rather than unwriting.
+- **The fragile part:** those child positions belong to lucide, not to us. An
+  upgrade that reorders a path would leave a rule animating the wrong half of
+  an icon, and nothing would fail, because no test looks at a hover.
+- **Tests:** `Sidebar.test.tsx` is the tripwire for exactly that — for every
+  section it asserts the signature it carries, that no two sections share one,
+  how many children the icon has, and a distinctive fragment of the geometry of
+  each part a rule moves. It was confirmed to fail when one of those fragments
+  is changed.
+- **Checked in the running app:** each of the eight hovered in turn and read as
+  computed styles — the pie slice at `translate: 1.5px -1.5px`, the two halves
+  of the transfer arrows at `-1.5px` and `1.5px`, the clock hand at
+  `rotate: 90deg` about `16px 16px`, the front tag and its dot together, the
+  bank roof at `0 -1.5px`, the pig at `-6deg` and `1.06`, the three closing
+  lines at `1.5px` with delays of 0, 40ms and 80ms, and the gear at `45deg`
+  about `12px 12px` with the hub left alone. **Not checked:** how they read
+  under a real pointer at 16px in the native window, which is a matter of taste
+  rather than of correctness.
 - [x] Done
 
 ---

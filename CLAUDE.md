@@ -52,6 +52,8 @@ Minimalist does not mean static. The interface answers when it is touched: icons
 
 What keeps that from turning into noise is the **icon motion vocabulary** in `src/index.css` — `lift`, `nudge-*`, `turn`, `turn-back`, plus the two patterns that need no rule of their own (a disclosure chevron carrying `rotate-180`, an `animate-spin` while the app works). A screen picks a behaviour from that list with a `data-motion` attribute; it never writes a one-off transition. New behaviours are added to the vocabulary, with a reason, or not at all.
 
+Under the behaviours sits a second tier, the **signatures**: one per sidebar icon (`chart`, `flow`, `clock`, `fan`, `bank`, `piggy`, `pages`, `gear`). A behaviour says what a control does and any icon can have it; a signature says what one icon is and travels with that icon. Signatures reach into an icon's `svg` by child position, which lucide owns, so every one of them is pinned by `Sidebar.test.tsx` — add a signature, add its tripwire there.
+
 Three limits hold:
 
 - Durations come from `--duration-fast` and `--duration-base`, and nothing is slower than the latter. Motion never delays the user or blocks work.
