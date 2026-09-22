@@ -7,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { formatCurrency, formatMonthLabel, formatPercent } from "@/lib/format";
@@ -18,7 +19,15 @@ interface MonthOverviewCardsProps {
   isLoading: boolean;
 }
 
+// A figure the app worked out and found nothing to show — not one that has yet
+// to arrive. That one is a skeleton, so the two are never confused.
 const PLACEHOLDER = "—";
+
+// The height of the heading it stands in for, so the card does not resize when
+// the number lands.
+function FigureSkeleton() {
+  return <Skeleton className="my-1.5 h-5 w-32" />;
+}
 
 function MonthExpensesCard({ overview, currency, isLoading }: MonthOverviewCardsProps) {
   const { total, previousTotal, previousMonthKey, changeRatio } = overview.expenses;
@@ -31,7 +40,7 @@ function MonthExpensesCard({ overview, currency, isLoading }: MonthOverviewCards
         {/* Left in the default colour on purpose. The comparison below carries
             the judgement — a red headline every month says nothing. */}
         <CardTitle className="text-2xl">
-          {isLoading ? PLACEHOLDER : formatCurrency(total, currency)}
+          {isLoading ? <FigureSkeleton /> : formatCurrency(total, currency)}
         </CardTitle>
         <CardAction>
           <Wallet className="size-4 text-muted-foreground" />
@@ -77,9 +86,13 @@ function BudgetCard({ overview, currency, isLoading }: MonthOverviewCardsProps) 
           {isExceeded ? "Presupuesto excedido" : "Presupuesto disponible"}
         </CardDescription>
         <CardTitle className={cn("text-2xl", isExceeded && "text-negative")}>
-          {isLoading || budget === null
-            ? PLACEHOLDER
-            : formatCurrency(Math.abs(budget.remaining), currency)}
+          {isLoading ? (
+            <FigureSkeleton />
+          ) : budget === null ? (
+            PLACEHOLDER
+          ) : (
+            formatCurrency(Math.abs(budget.remaining), currency)
+          )}
         </CardTitle>
         <CardAction>
           <Target className="size-4 text-muted-foreground" />
@@ -116,9 +129,13 @@ function SavingsCard({ overview, currency, isLoading }: MonthOverviewCardsProps)
       <CardHeader>
         <CardDescription>Ahorro</CardDescription>
         <CardTitle className="text-2xl">
-          {isLoading || savings === null
-            ? PLACEHOLDER
-            : formatCurrency(savings.saved, currency)}
+          {isLoading ? (
+            <FigureSkeleton />
+          ) : savings === null ? (
+            PLACEHOLDER
+          ) : (
+            formatCurrency(savings.saved, currency)
+          )}
         </CardTitle>
         <CardAction>
           <PiggyBank className="size-4 text-muted-foreground" />

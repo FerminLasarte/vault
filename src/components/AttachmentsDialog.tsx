@@ -19,6 +19,7 @@ import { fileNameFromPath } from "@/lib/paths";
 import { isReported } from "@/lib/reportedError";
 import { formatDate } from "@/lib/format";
 import type { AttachmentMeta, TransactionWithCategory } from "@/db";
+import { Loading, LoadingRows } from "@/components/Loading";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -54,6 +55,9 @@ export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDial
   // Null while this transaction's list is still on its way.
   const attachments =
     loaded !== null && loaded.transactionId === transactionId ? loaded.attachments : null;
+  // `Loading` builds its children whether or not it renders them, so what they
+  // read has to be safe before the list arrives.
+  const files = attachments ?? [];
 
   // Only the latest query may land. Answers can come back out of order, and an
   // older one would otherwise replace the list of the transaction on screen.
@@ -150,74 +154,74 @@ export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDial
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
-          {attachments === null ? (
-            <p className="text-sm text-muted-foreground">Cargando...</p>
-          ) : attachments.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Todavía no hay comprobantes para este movimiento.
-            </p>
-          ) : (
-            <ul className="flex flex-col">
-              {attachments.map((meta) => (
-                <li
-                  key={meta.id}
-                  className="flex items-center justify-between gap-3 border-b border-border py-2 last:border-0"
-                >
-                  <div className="flex min-w-0 flex-col">
-                    <span className="truncate text-sm">
-                      {fileNameFromPath(meta.file_name)}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {formatSize(meta.byte_size)} ·{" "}
-                      {formatDate(meta.created_at.slice(0, 10))}
-                    </span>
-                  </div>
+          <Loading when={attachments === null} placeholder={<LoadingRows rows={2} />}>
+            {files.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Todavía no hay comprobantes para este movimiento.
+              </p>
+            ) : (
+              <ul className="flex flex-col">
+                {files.map((meta) => (
+                  <li
+                    key={meta.id}
+                    className="flex items-center justify-between gap-3 border-b border-border py-2 last:border-0"
+                  >
+                    <div className="flex min-w-0 flex-col">
+                      <span className="truncate text-sm">
+                        {fileNameFromPath(meta.file_name)}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {formatSize(meta.byte_size)} ·{" "}
+                        {formatDate(meta.created_at.slice(0, 10))}
+                      </span>
+                    </div>
 
-                  <div className="flex shrink-0 items-center gap-1">
-                    {meta.mime_type.startsWith("image/") && (
+                    <div className="flex shrink-0 items-center gap-1">
+                      {meta.mime_type.startsWith("image/") && (
+                        <ActionButton
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          label="Ver"
+                          onClick={() => void handlePreview(meta)}
+                        >
+                          <Eye />
+                          <span className="sr-only">
+                            Ver {fileNameFromPath(meta.file_name)}
+                          </span>
+                        </ActionButton>
+                      )}
                       <ActionButton
                         type="button"
                         variant="ghost"
                         size="icon-sm"
-                        label="Ver"
-                        onClick={() => void handlePreview(meta)}
+                        label="Guardar una copia"
+                        disabled={isBusy}
+                        onClick={() => void handleSaveCopy(meta)}
                       >
-                        <Eye />
+                        <Download />
                         <span className="sr-only">
-                          Ver {fileNameFromPath(meta.file_name)}
+                          Guardar {fileNameFromPath(meta.file_name)}
                         </span>
                       </ActionButton>
-                    )}
-                    <ActionButton
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      label="Guardar una copia"
-                      disabled={isBusy}
-                      onClick={() => void handleSaveCopy(meta)}
-                    >
-                      <Download />
-                      <span className="sr-only">
-                        Guardar {fileNameFromPath(meta.file_name)}
-                      </span>
-                    </ActionButton>
-                    <ActionButton
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      label="Eliminar"
-                      onClick={() => setPendingDeletion(meta)}
-                    >
-                      <Trash2 />
-                      <span className="sr-only">
-                        Eliminar {fileNameFromPath(meta.file_name)}
-                      </span>
-                    </ActionButton>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+                      <ActionButton
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        label="Eliminar"
+                        onClick={() => setPendingDeletion(meta)}
+                      >
+                        <Trash2 />
+                        <span className="sr-only">
+                          Eliminar {fileNameFromPath(meta.file_name)}
+                        </span>
+                      </ActionButton>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Loading>
 
           {preview && (
             <img

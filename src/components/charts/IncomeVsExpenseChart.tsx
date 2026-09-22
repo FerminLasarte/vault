@@ -13,6 +13,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { tooltipContentStyle } from "@/components/charts/chartTooltip";
 import { formatCompactAmount, formatCurrency, formatMonthLabel } from "@/lib/format";
 import type { MonthlyTrendEntry } from "@/lib/finance";
+import { Loading } from "@/components/Loading";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // A month of the trend, plus whether it has happened yet.
 interface TrendEntry extends MonthlyTrendEntry {
@@ -56,42 +58,46 @@ export function IncomeVsExpenseChart({
         <CardTitle>Ingresos vs. gastos</CardTitle>
       </CardHeader>
       <CardContent>
-        {isLoading ? (
-          <p className="text-sm text-muted-foreground">Cargando...</p>
-        ) : !hasData ? (
-          <p className="text-sm text-muted-foreground">
-            No hay movimientos en los últimos meses.
-          </p>
-        ) : (
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={chartData} barGap={4}>
-              <CartesianGrid vertical={false} stroke="var(--border)" />
-              <XAxis dataKey="month" tickLine={false} axisLine={false} tick={axisTick} />
-              <YAxis
-                tickLine={false}
-                axisLine={false}
-                tick={axisTick}
-                width={64}
-                tickFormatter={formatCompactAmount}
-              />
-              <Tooltip
-                cursor={{ fill: "var(--muted)" }}
-                formatter={(value) => formatCurrency(Number(value), currency)}
-                contentStyle={tooltipContentStyle}
-              />
-              <Legend
-                iconType="circle"
-                iconSize={8}
-                wrapperStyle={{ fontSize: "0.75rem" }}
-                // Recharts colours each label with its series, which the wrapper
-                // cannot override from the outside. The swatch is what carries
-                // the colour here; the names beside it stay as quiet as every
-                // other caption on the screen.
-                formatter={(value: string) => (
-                  <span className="text-muted-foreground">{value}</span>
-                )}
-              />
-              {/* The colour belongs on the Bar, not only on its Cells: it is
+        <Loading when={isLoading} placeholder={<Skeleton className="h-[260px]" />}>
+          {!hasData ? (
+            <p className="text-sm text-muted-foreground">
+              No hay movimientos en los últimos meses.
+            </p>
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={chartData} barGap={4}>
+                <CartesianGrid vertical={false} stroke="var(--border)" />
+                <XAxis
+                  dataKey="month"
+                  tickLine={false}
+                  axisLine={false}
+                  tick={axisTick}
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  tick={axisTick}
+                  width={64}
+                  tickFormatter={formatCompactAmount}
+                />
+                <Tooltip
+                  cursor={{ fill: "var(--muted)" }}
+                  formatter={(value) => formatCurrency(Number(value), currency)}
+                  contentStyle={tooltipContentStyle}
+                />
+                <Legend
+                  iconType="circle"
+                  iconSize={8}
+                  wrapperStyle={{ fontSize: "0.75rem" }}
+                  // Recharts colours each label with its series, which the wrapper
+                  // cannot override from the outside. The swatch is what carries
+                  // the colour here; the names beside it stay as quiet as every
+                  // other caption on the screen.
+                  formatter={(value: string) => (
+                    <span className="text-muted-foreground">{value}</span>
+                  )}
+                />
+                {/* The colour belongs on the Bar, not only on its Cells: it is
                   what recharts reads to colour the legend swatch and the
                   tooltip figure, and a series without one falls back to a
                   hardcoded black that vanishes on a dark background.
@@ -99,19 +105,20 @@ export function IncomeVsExpenseChart({
                   Same colours, faded: a month that has not happened is the
                   same kind of thing as one that has, only not yet true. A
                   different hue would read as a different measure. */}
-              <Bar dataKey="Ingresos" fill={INCOME_COLOR} radius={[4, 4, 0, 0]}>
-                {chartData.map((entry) => (
-                  <Cell key={entry.month} fillOpacity={entry.isProjected ? 0.35 : 1} />
-                ))}
-              </Bar>
-              <Bar dataKey="Gastos" fill={EXPENSE_COLOR} radius={[4, 4, 0, 0]}>
-                {chartData.map((entry) => (
-                  <Cell key={entry.month} fillOpacity={entry.isProjected ? 0.35 : 1} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        )}
+                <Bar dataKey="Ingresos" fill={INCOME_COLOR} radius={[4, 4, 0, 0]}>
+                  {chartData.map((entry) => (
+                    <Cell key={entry.month} fillOpacity={entry.isProjected ? 0.35 : 1} />
+                  ))}
+                </Bar>
+                <Bar dataKey="Gastos" fill={EXPENSE_COLOR} radius={[4, 4, 0, 0]}>
+                  {chartData.map((entry) => (
+                    <Cell key={entry.month} fillOpacity={entry.isProjected ? 0.35 : 1} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </Loading>
 
         {hasProjection && !isLoading && (
           <p className="pt-2 text-xs text-muted-foreground">

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { CategoryRulesCard } from "./CategoryRulesCard";
@@ -34,11 +34,27 @@ function renderCard(overrides: Partial<AppContext>) {
 describe("CategoryRulesCard", () => {
   // Before the first load every list is empty, and the card read that as "you
   // have no rules" for as long as the load took.
-  it("says it is loading rather than that there are no rules", () => {
-    renderCard({ isLoading: true });
+  it("does not claim there are no rules while they are still arriving", () => {
+    const { container } = renderCard({ isLoading: true });
 
-    expect(screen.getByText("Cargando...")).toBeInTheDocument();
     expect(screen.queryByText(/Todavía no hay reglas/)).not.toBeInTheDocument();
+    // Nothing at all yet: a load this young is usually over before a
+    // placeholder could be read.
+    expect(container.querySelector('[data-slot="skeleton"]')).not.toBeInTheDocument();
+  });
+
+  it("puts up the shape of the list once the load is taking a while", () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = renderCard({ isLoading: true });
+
+      act(() => void vi.advanceTimersByTime(120));
+
+      expect(container.querySelector('[data-slot="skeleton"]')).toBeInTheDocument();
+      expect(screen.queryByText(/Todavía no hay reglas/)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows the empty state once loaded", () => {

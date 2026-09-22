@@ -63,7 +63,7 @@ export function SummaryBar({
   const figures: Figure[] = COLUMNS.map(({ key, label, tone }) => ({
     key,
     label,
-    value: isLoading ? "—" : formatCurrency(values[key], currency),
+    value: formatCurrency(values[key], currency),
     valueClassName:
       tone === "positive"
         ? "text-positive"
@@ -75,7 +75,7 @@ export function SummaryBar({
             ? "text-negative"
             : "text-positive",
     sub:
-      !isLoading && convertedValues !== null ? (
+      convertedValues !== null ? (
         <Hint
           className="text-xs text-muted-foreground tabular-nums"
           label={
@@ -90,5 +90,5 @@ export function SummaryBar({
       ) : undefined,
   }));
 
-  return <FigureBar figures={figures} footer={footer} />;
+  return <FigureBar figures={figures} isLoading={isLoading} footer={footer} />;
 }
