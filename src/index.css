@@ -40,6 +40,13 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Every `transition-*` utility in the app inherits these, so the speed and
+     the curve of the whole interface are set in one place instead of being
+     re-decided per component. Tailwind's own defaults were 150ms and a
+     symmetric ease; both are replaced. */
+  --default-transition-duration: var(--duration-fast);
+  --default-transition-timing-function: var(--ease-standard);
 }
 
 :root {
@@ -67,6 +74,21 @@
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
   --radius: 0.625rem;
+
+  /* Motion.
+
+     Two durations, because the interface only ever does two things: answer a
+     pointer, or bring something on screen. Anything slower than this reads as
+     the app hesitating, which in an app about money is the wrong feeling.
+
+     The curve starts fast and settles, which is what makes a movement feel
+     like a response rather than a playback. It is deliberately not Tailwind's
+     `--ease-out`: that name is already taken by a gentler built-in curve, and
+     overriding it would change every `ease-out` in the app by surprise. */
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-accent: oklch(0.97 0 0);
@@ -136,6 +158,100 @@
   #root {
     height: 100%;
     overflow: hidden;
+  }
+}
+
+/* The icon motion vocabulary.
+
+   Every icon inside a control moves when the control is touched, and every
+   icon moves in one of a handful of ways. The closed list is the whole point:
+   a screen picks a behaviour, it never invents one, so forty buttons across
+   nine views cannot drift into forty different ideas of what a hover means.
+
+     lift        the default. This is a control, and it answers.
+     nudge-*     the icon points somewhere, so it leans that way.
+     turn        the icon has no direction, so it turns instead.
+     turn-back   the same, for an icon that already means "go back".
+
+   Two behaviours are not here because they need no rules of their own:
+
+     a disclosure chevron carries the caller's own `rotate-180` and is animated
+     by the transition below, because it tracks state rather than the pointer;
+
+     an icon that spins while the app is working carries `animate-spin`, which
+     is Tailwind's and is left alone.
+
+   The behaviour is driven from the control, not from the icon, so it also
+   fires when the control is reached by keyboard. It is applied in exactly two
+   places — the `Button` base and the sidebar's own nav button, which is not a
+   `Button` — and those two cover every icon in the app. A React wrapper per
+   icon would mean touching every call site and re-rendering on hover for a
+   transform the browser can do on its own. */
+@utility icon-motion {
+  & svg {
+    /* The individual transform properties rather than `transform`, so that a
+       behaviour here and a `rotate-*` utility written by the caller compose
+       instead of overwriting each other. */
+    transition-property: scale, translate, rotate;
+    transition-duration: var(--duration-fast);
+    transition-timing-function: var(--ease-standard);
+  }
+
+  /* Small enough to be felt rather than watched: on a 16px icon this is a
+     little over a pixel. */
+  &:is(:hover, :focus-visible) svg:is(:not([data-motion]), [data-motion="lift"]) {
+    scale: 1.08;
+  }
+
+  &:is(:hover, :focus-visible) svg[data-motion="nudge-up"] {
+    translate: 0 -1.5px;
+  }
+
+  &:is(:hover, :focus-visible) svg[data-motion="nudge-down"] {
+    translate: 0 1.5px;
+  }
+
+  &:is(:hover, :focus-visible) svg[data-motion="nudge-left"] {
+    translate: -1.5px 0;
+  }
+
+  &:is(:hover, :focus-visible) svg[data-motion="nudge-right"] {
+    translate: 1.5px 0;
+  }
+
+  &:is(:hover, :focus-visible) svg[data-motion="turn"] {
+    rotate: 90deg;
+  }
+
+  &:is(:hover, :focus-visible) svg[data-motion="turn-back"] {
+    rotate: -90deg;
+  }
+}
+
+/* Motion is a preference the system already knows about, and an app that
+   ignores it can make someone ill. Everything above is turned off here rather
+   than guarded case by case, because the guard that gets forgotten is the one
+   that matters.
+
+   Near zero rather than `none`: an animation cancelled mid-keyframe can leave
+   an element stuck at whatever it had reached, and a transition that never
+   runs never fires its `transitionend`.
+
+   The one thing that keeps moving is the spinner. It is not decoration — it is
+   the only thing saying the app is working — and a frozen spinner reads as a
+   frozen app. It is slowed instead of cut, so it turns rather than strobes. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+  }
+
+  .animate-spin {
+    animation-duration: 1.5s !important;
   }
 }
 

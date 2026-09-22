@@ -165,7 +165,7 @@ export function ClosesView() {
                       requestPrint(month.monthKey, closeDocumentTitle(month.monthKey))
                     }
                   >
-                    <FileDown />
+                    <FileDown data-motion="nudge-down" />
                     Guardar como PDF
                   </Button>
                 </div>

@@ -24,7 +24,7 @@ export function SectionIntro({
     <div className="flex flex-wrap items-center justify-between gap-3">
       <p className="text-sm text-muted-foreground">{description}</p>
       <Button type="button" disabled={disabled} onClick={onAction}>
-        <Plus />
+        <Plus data-motion="turn" />
         {actionLabel}
       </Button>
     </div>

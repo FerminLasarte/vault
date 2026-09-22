@@ -158,7 +158,7 @@ export function AccountsView() {
         description="Gestioná tus cuentas y métodos de pago."
         actions={
           <Button type="button" onClick={openCreateDialog}>
-            <Plus />
+            <Plus data-motion="turn" />
             Nueva cuenta
           </Button>
         }

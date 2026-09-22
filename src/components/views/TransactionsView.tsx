@@ -228,7 +228,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
         description="Historial completo de tus movimientos."
         actions={
           <Button type="button" onClick={openCreateDialog}>
-            <Plus />
+            <Plus data-motion="turn" />
             Nueva transacción
           </Button>
         }
@@ -509,7 +509,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
                       disabled={safePage === 0}
                       onClick={() => setPage(safePage - 1)}
                     >
-                      <ChevronLeft />
+                      <ChevronLeft data-motion="nudge-left" />
                       <span className="sr-only">Página anterior</span>
                     </ActionButton>
                     <span className="text-xs text-muted-foreground tabular-nums">
@@ -523,7 +523,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
                       disabled={safePage >= pageCount - 1}
                       onClick={() => setPage(safePage + 1)}
                     >
-                      <ChevronRight />
+                      <ChevronRight data-motion="nudge-right" />
                       <span className="sr-only">Página siguiente</span>
                     </ActionButton>
                   </div>

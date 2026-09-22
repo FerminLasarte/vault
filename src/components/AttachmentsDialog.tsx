@@ -196,7 +196,7 @@ export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDial
                       disabled={isBusy}
                       onClick={() => void handleSaveCopy(meta)}
                     >
-                      <Download />
+                      <Download data-motion="nudge-down" />
                       <span className="sr-only">
                         Guardar {fileNameFromPath(meta.file_name)}
                       </span>

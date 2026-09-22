@@ -333,12 +333,7 @@ export function LoansSection() {
                         setExpanded((current) => (current === loan.id ? null : loan.id))
                       }
                     >
-                      <ChevronDown
-                        className={cn(
-                          "transition-transform",
-                          expanded === loan.id && "rotate-180",
-                        )}
-                      />
+                      <ChevronDown className={cn(expanded === loan.id && "rotate-180")} />
                       <span className="sr-only">
                         Ver cronograma de {loan.description}
                       </span>

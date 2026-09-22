@@ -46,5 +46,16 @@ The primary design directive for this project is a **minimalist, elegant, high-e
 - Prioritize clean, uncluttered layouts with generous whitespace over dense ones.
 - Favor a restrained, neutral color palette and typography over decorative flourishes.
 - Reuse shadcn/ui primitives and existing design tokens (see `src/index.css`) instead of inventing one-off styles.
-- Motion and visual effects should be subtle and purposeful, never gratuitous.
 - When in doubt, prefer removing an element over adding one.
+
+Minimalist does not mean static. The interface answers when it is touched: icons in a control move on hover and on keyboard focus, and something that appears, expands or changes is animated rather than swapped. Notion is minimal and its icons move; that is the bar.
+
+What keeps that from turning into noise is the **icon motion vocabulary** in `src/index.css` — `lift`, `nudge-*`, `turn`, `turn-back`, plus the two patterns that need no rule of their own (a disclosure chevron carrying `rotate-180`, an `animate-spin` while the app works). A screen picks a behaviour from that list with a `data-motion` attribute; it never writes a one-off transition. New behaviours are added to the vocabulary, with a reason, or not at all.
+
+Three limits hold:
+
+- Durations come from `--duration-fast` and `--duration-base`, and nothing is slower than the latter. Motion never delays the user or blocks work.
+- Nothing bounces, springs or overshoots. This app holds someone's money.
+- `prefers-reduced-motion` is honoured globally, and the loading spinner is the only thing that survives it.
+
+The full backlog and the batch plan for this live in `POLISH.md`.

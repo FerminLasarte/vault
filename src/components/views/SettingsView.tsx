@@ -392,7 +392,7 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
               disabled={busy}
               onClick={handleBackup}
             >
-              <HardDriveDownload />
+              <HardDriveDownload data-motion="nudge-down" />
               Guardar copia de seguridad
             </Button>
             <Button
@@ -401,7 +401,7 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
               disabled={busy || transactions.length === 0}
               onClick={handleExportCsv}
             >
-              <Download />
+              <Download data-motion="nudge-down" />
               Exportar a CSV
             </Button>
             <Button
@@ -410,7 +410,7 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
               disabled={busy}
               onClick={handleImportCsv}
             >
-              <Upload />
+              <Upload data-motion="nudge-up" />
               Importar desde CSV
             </Button>
             <Button
@@ -578,7 +578,7 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
           <div>
             {updater.status === "available" ? (
               <Button type="button" onClick={() => void updater.install()}>
-                <HardDriveDownload />
+                <HardDriveDownload data-motion="nudge-down" />
                 Instalar y reiniciar
               </Button>
             ) : (

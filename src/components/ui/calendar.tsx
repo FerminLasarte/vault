@@ -136,12 +136,26 @@ function Calendar({
           );
         },
         Chevron: ({ className, orientation, ...props }) => {
+          // Stepping a month back or forward, so the arrows lean the way they
+          // point, like the month stepper on Transacciones.
           if (orientation === "left") {
-            return <ChevronLeftIcon className={cn("size-4", className)} {...props} />;
+            return (
+              <ChevronLeftIcon
+                data-motion="nudge-left"
+                className={cn("size-4", className)}
+                {...props}
+              />
+            );
           }
 
           if (orientation === "right") {
-            return <ChevronRightIcon className={cn("size-4", className)} {...props} />;
+            return (
+              <ChevronRightIcon
+                data-motion="nudge-right"
+                className={cn("size-4", className)}
+                {...props}
+              />
+            );
           }
 
           return <ChevronDownIcon className={cn("size-4", className)} {...props} />;
