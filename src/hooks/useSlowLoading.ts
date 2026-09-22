@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 
 // How long a load is allowed to take before it is worth telling the user
 // anything, and how long the placeholder stays once it has appeared.
@@ -20,7 +20,14 @@ export function useSlowLoading(isLoading: boolean): boolean {
   const [visible, setVisible] = useState(false);
   const shownAt = useRef<number | null>(null);
 
-  useEffect(() => {
+  // A layout effect, and it has to be one. Its cleanup is what cancels the
+  // wait when the load finishes, and a passive effect's cleanup does not run
+  // until after the browser has painted — leaving a window in which the
+  // content is already on screen and the timer can still fire and replace it
+  // with a placeholder. The content would flash and disappear, which is worse
+  // than anything this hook exists to prevent. A layout effect's cleanup runs
+  // inside the commit, where no timer can interleave.
+  useLayoutEffect(() => {
     if (isLoading) {
       if (visible) return;
 

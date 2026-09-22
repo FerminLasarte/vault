@@ -35,6 +35,16 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+// The list is not on screen the moment the query answers: a load that takes
+// long enough puts up a placeholder, and one that is up is held briefly so it
+// cannot flicker. That is a fraction of a second on any machine anyone uses,
+// and it was still under the default second of patience here — until CI, where
+// eight test files at once starve the timers and the whole thing lands late.
+//
+// So these two wait properly. They are the only tests in the file that read
+// the list itself; the rest watch what the dialog asks the database.
+const LOADS = { timeout: 3000 };
+
 function aTransaction(id: number): TransactionWithCategory {
   return { id, description: `Movimiento ${id}` } as TransactionWithCategory;
 }
@@ -71,7 +81,7 @@ describe("AttachmentsDialog", () => {
     const { rerender } = render(
       <AttachmentsDialog transaction={aTransaction(1)} onOpenChange={vi.fn()} />,
     );
-    expect(await screen.findByText("recibo-uno.pdf")).toBeInTheDocument();
+    expect(await screen.findByText("recibo-uno.pdf", {}, LOADS)).toBeInTheDocument();
 
     rerender(<AttachmentsDialog transaction={aTransaction(2)} onOpenChange={vi.fn()} />);
 
@@ -88,11 +98,11 @@ describe("AttachmentsDialog", () => {
 
     render(<AttachmentsDialog transaction={aTransaction(1)} onOpenChange={vi.fn()} />);
     await userEvent.click(
-      await screen.findByRole("button", { name: /Eliminar recibo-uno\.pdf/ }),
+      await screen.findByRole("button", { name: /Eliminar recibo-uno\.pdf/ }, LOADS),
     );
 
     expect(removeAttachment).not.toHaveBeenCalled();
-    expect(screen.getByText("¿Eliminar este comprobante?")).toBeInTheDocument();
+    expect(await screen.findByText("¿Eliminar este comprobante?")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Eliminar" }));
 
