@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   ChevronLeft,
@@ -43,6 +43,7 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { splitTagNames } from "@/lib/text";
 import { TRANSACTION_TYPE_LABELS } from "@/lib/labels";
 import { DEFAULT_CURRENCY } from "@/lib/currency";
+import { useShortcuts } from "@/hooks/useShortcuts";
 import { cn } from "@/lib/utils";
 import type { TransactionWithCategory } from "@/db";
 import type { ViewProps } from "@/lib/menu";
@@ -112,6 +113,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
     null,
   );
   const [attaching, setAttaching] = useState<TransactionWithCategory | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const filtered = useMemo(() => {
     const matching = applyTransactionFilters(transactions, {
@@ -222,6 +224,16 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
     minAmount !== "" ||
     maxAmount !== "";
 
+  // The two keys this screen answers. "/" is where every list with a search
+  // box puts it, and Escape undoes the filtering without having to find the
+  // button that does it.
+  useShortcuts({
+    "/": () => searchRef.current?.focus(),
+    Escape: () => {
+      if (hasActiveFilters) resetFilters();
+    },
+  });
+
   return (
     <div className="flex flex-col gap-6 sm:gap-8">
       <PageHeader
@@ -247,6 +259,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
             <div className="relative">
               <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
+                ref={searchRef}
                 id="transactions-search"
                 placeholder="Descripción..."
                 className="pl-8"

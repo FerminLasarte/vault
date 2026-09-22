@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { useAppData } from "@/hooks/useAppData";
+import { useRememberedScroll } from "@/hooks/useRememberedScroll";
 import { pendingBadges } from "@/lib/pendingBadges";
 import { StatisticsView } from "@/components/views/StatisticsView";
 import { TransactionsView } from "@/components/views/TransactionsView";
@@ -61,12 +62,17 @@ function SidebarWithBadges({
 
 function App() {
   const [view, setView] = useState<View>("statistics");
+  // The one thing that scrolls in the window, and the only place a view's
+  // position can be kept: the views themselves are swapped in and out of it.
+  const column = useRef<HTMLElement>(null);
   const { request, issue, markHandled } = usePendingMenuRequest();
   // The tab a menu entry asked for, if it asked for one. Held here rather than
   // inside each view because the request arrives from outside the view — often
   // while a different one is on screen.
   const [tab, setTab] = useState<TabRequest | null>(null);
   const CurrentView = VIEWS[view];
+
+  useRememberedScroll(column, view);
 
   // An action is answered by the view that owns it, which may not be the one on
   // screen, so navigating there is part of handling the click.
@@ -107,7 +113,7 @@ function App() {
             <AppDataProvider>
               <div className="flex h-screen bg-background text-foreground">
                 <SidebarWithBadges currentView={view} onNavigate={setView} />
-                <main className="min-w-0 flex-1 overflow-auto p-4 sm:p-8">
+                <main ref={column} className="min-w-0 flex-1 overflow-auto p-4 sm:p-8">
                   {/* Fills this column's top padding, which is the strip along
                     the window's top edge that the sidebar header and the page
                     header between them leave uncovered — and the first place a
