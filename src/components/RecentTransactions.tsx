@@ -7,6 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Loading } from "@/components/Loading";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type { TransactionWithCategory } from "@/db/schema";
@@ -49,63 +50,63 @@ export function RecentTransactions({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {isLoading ? (
-          <p className="text-sm text-muted-foreground">Cargando...</p>
-        ) : recent.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Todavía no hay movimientos en {currency}.
-          </p>
-        ) : (
-          // Divided rather than boxed: six rows of cards inside a card would be
-          // a lot of chrome for what is a short list.
-          <ul className="divide-y divide-border">
-            {recent.map((transaction) => (
-              <li
-                key={transaction.id}
-                className="flex items-center justify-between gap-4 py-2.5 first:pt-0 last:pb-0"
-              >
-                <div className="flex min-w-0 flex-col gap-0.5">
-                  <span className="truncate text-sm font-medium">
-                    {transaction.description || secondaryLabel(transaction)}
-                  </span>
-                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <span className="truncate">{secondaryLabel(transaction)}</span>
-                    <span aria-hidden>·</span>
-                    <span className="shrink-0">{formatDate(transaction.date)}</span>
-                  </span>
-                </div>
+        <Loading when={isLoading}>
+          {recent.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Todavía no hay movimientos en {currency}.
+            </p>
+          ) : (
+            // Divided rather than boxed: six rows of cards inside a card would be
+            // a lot of chrome for what is a short list.
+            <ul className="divide-y divide-border">
+              {recent.map((transaction) => (
+                <li
+                  key={transaction.id}
+                  className="flex items-center justify-between gap-4 py-2.5 first:pt-0 last:pb-0"
+                >
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <span className="truncate text-sm font-medium">
+                      {transaction.description || secondaryLabel(transaction)}
+                    </span>
+                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <span className="truncate">{secondaryLabel(transaction)}</span>
+                      <span aria-hidden>·</span>
+                      <span className="shrink-0">{formatDate(transaction.date)}</span>
+                    </span>
+                  </div>
 
-                <div className="flex shrink-0 items-center gap-2">
-                  {transaction.payment_method_name && (
-                    <Badge variant="secondary" className="hidden sm:inline-flex">
-                      {transaction.payment_method_name}
-                      {transaction.type === "transfer" &&
-                        transaction.destination_payment_method_name && (
-                          <>
-                            <ArrowRight className="size-3" />
-                            {transaction.destination_payment_method_name}
-                          </>
-                        )}
-                    </Badge>
-                  )}
-                  <span
-                    className={cn(
-                      "text-sm font-medium tabular-nums whitespace-nowrap",
-                      transaction.type === "income" && "text-positive",
-                      transaction.type === "expense" && "text-negative",
+                  <div className="flex shrink-0 items-center gap-2">
+                    {transaction.payment_method_name && (
+                      <Badge variant="secondary" className="hidden sm:inline-flex">
+                        {transaction.payment_method_name}
+                        {transaction.type === "transfer" &&
+                          transaction.destination_payment_method_name && (
+                            <>
+                              <ArrowRight className="size-3" />
+                              {transaction.destination_payment_method_name}
+                            </>
+                          )}
+                      </Badge>
                     )}
-                  >
-                    {/* A transfer moves the user's own money and is neither a
+                    <span
+                      className={cn(
+                        "text-sm font-medium tabular-nums whitespace-nowrap",
+                        transaction.type === "income" && "text-positive",
+                        transaction.type === "expense" && "text-negative",
+                      )}
+                    >
+                      {/* A transfer moves the user's own money and is neither a
                         gain nor a loss, so it carries no sign. */}
-                    {transaction.type === "income" && "+"}
-                    {transaction.type === "expense" && "-"}
-                    {formatCurrency(transaction.amount, transaction.currency)}
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+                      {transaction.type === "income" && "+"}
+                      {transaction.type === "expense" && "-"}
+                      {formatCurrency(transaction.amount, transaction.currency)}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Loading>
       </CardContent>
     </Card>
   );

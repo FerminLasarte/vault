@@ -18,6 +18,7 @@ import { useAppActions, useAppData, useAppStatus } from "@/hooks/useAppData";
 import { CATEGORY_TYPE_LABELS } from "@/lib/labels";
 import { categoryDeletionNotice } from "@/lib/deletionNotice";
 import type { Category, CategoryType, NewCategory } from "@/db";
+import { Loading } from "@/components/Loading";
 
 const GROUPS: { type: CategoryType; title: string }[] = [
   { type: "income", title: "Categorías de ingreso" },
@@ -107,76 +108,78 @@ export function CategoriesView({ tab }: ViewProps) {
             onAction={openCreateDialog}
           />
 
-          {isLoading ? (
-            <p className="text-sm text-muted-foreground">Cargando...</p>
-          ) : categories.length === 0 ? (
-            <ListCard
-              isEmpty
-              empty={{
-                message: "Todavía no tenés categorías.",
-                actionLabel: "Agregar la primera",
-                onAction: openCreateDialog,
-              }}
-            />
-          ) : (
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              {grouped.map(({ type, title, items }) => (
-                <Card key={type}>
-                  <CardHeader>
-                    <CardTitle>{title}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {items.length === 0 ? (
-                      <p className="py-2 text-sm text-muted-foreground">
-                        Sin categorías de este tipo.
-                      </p>
-                    ) : (
-                      <ul className="flex flex-col">
-                        {items.map((category) => (
-                          <li
-                            key={category.id}
-                            className="flex items-center justify-between gap-4 border-b border-border py-3 last:border-0"
-                          >
-                            <div className="flex min-w-0 items-center gap-3">
-                              <span className="text-lg leading-none">
-                                {category.icon}
-                              </span>
-                              <span className="truncate text-sm font-medium">
-                                {category.name}
-                              </span>
-                            </div>
+          <Loading when={isLoading}>
+            {categories.length === 0 ? (
+              <ListCard
+                isEmpty
+                empty={{
+                  message: "Todavía no tenés categorías.",
+                  actionLabel: "Agregar la primera",
+                  onAction: openCreateDialog,
+                }}
+              />
+            ) : (
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                {grouped.map(({ type, title, items }) => (
+                  <Card key={type}>
+                    <CardHeader>
+                      <CardTitle>{title}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {items.length === 0 ? (
+                        <p className="py-2 text-sm text-muted-foreground">
+                          Sin categorías de este tipo.
+                        </p>
+                      ) : (
+                        <ul className="flex flex-col">
+                          {items.map((category) => (
+                            <li
+                              key={category.id}
+                              className="flex items-center justify-between gap-4 border-b border-border py-3 last:border-0"
+                            >
+                              <div className="flex min-w-0 items-center gap-3">
+                                <span className="text-lg leading-none">
+                                  {category.icon}
+                                </span>
+                                <span className="truncate text-sm font-medium">
+                                  {category.name}
+                                </span>
+                              </div>
 
-                            <div className="flex shrink-0 items-center gap-1">
-                              <ActionButton
-                                type="button"
-                                variant="ghost"
-                                size="icon-sm"
-                                label="Editar"
-                                onClick={() => openEditDialog(category)}
-                              >
-                                <Pencil />
-                                <span className="sr-only">Editar {category.name}</span>
-                              </ActionButton>
-                              <ActionButton
-                                type="button"
-                                variant="ghost"
-                                size="icon-sm"
-                                label="Eliminar"
-                                onClick={() => setPendingDeletion(category)}
-                              >
-                                <Trash2 />
-                                <span className="sr-only">Eliminar {category.name}</span>
-                              </ActionButton>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
+                              <div className="flex shrink-0 items-center gap-1">
+                                <ActionButton
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  label="Editar"
+                                  onClick={() => openEditDialog(category)}
+                                >
+                                  <Pencil />
+                                  <span className="sr-only">Editar {category.name}</span>
+                                </ActionButton>
+                                <ActionButton
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  label="Eliminar"
+                                  onClick={() => setPendingDeletion(category)}
+                                >
+                                  <Trash2 />
+                                  <span className="sr-only">
+                                    Eliminar {category.name}
+                                  </span>
+                                </ActionButton>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </Loading>
 
           <CategoryRulesCard />
         </TabsContent>

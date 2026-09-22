@@ -46,6 +46,7 @@ import { DEFAULT_CURRENCY } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import type { TransactionWithCategory } from "@/db";
 import type { ViewProps } from "@/lib/menu";
+import { Loading, LoadingRows } from "@/components/Loading";
 
 // Rendering thousands of rows at once is what makes the table crawl; a page
 // worth of them is plenty for scanning and keeps the DOM small.
@@ -341,196 +342,201 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
 
       <Card>
         <CardContent>
-          {isLoading ? (
-            <p className="py-6 text-sm text-muted-foreground">Cargando...</p>
-          ) : filtered.length === 0 ? (
-            <p className="py-6 text-sm text-muted-foreground">
-              No hay transacciones que coincidan con los filtros.
-            </p>
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Fecha</TableHead>
-                      <TableHead>Descripción</TableHead>
-                      <TableHead>Categoría</TableHead>
-                      <TableHead>Cuenta</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead className="text-right">Monto</TableHead>
-                      <TableHead className="w-28">
-                        <span className="sr-only">Acciones</span>
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {visible.map((transaction) => (
-                      <TableRow key={transaction.id}>
-                        <TableCell className="whitespace-nowrap text-muted-foreground">
-                          {formatDate(transaction.date)}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col gap-1">
-                            <span>{transaction.description}</span>
-                            {splitTagNames(transaction.tag_names).length > 0 && (
-                              <div className="flex flex-wrap gap-1">
-                                {splitTagNames(transaction.tag_names).map((name) => (
-                                  <Badge
-                                    key={name}
-                                    variant="outline"
-                                    className="text-[10px]"
-                                  >
-                                    {name}
-                                  </Badge>
-                                ))}
-                              </div>
+          <Loading
+            when={isLoading}
+            placeholder={<LoadingRows rows={6} className="py-2" />}
+          >
+            {filtered.length === 0 ? (
+              <p className="py-6 text-sm text-muted-foreground">
+                No hay transacciones que coincidan con los filtros.
+              </p>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Fecha</TableHead>
+                        <TableHead>Descripción</TableHead>
+                        <TableHead>Categoría</TableHead>
+                        <TableHead>Cuenta</TableHead>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead className="text-right">Monto</TableHead>
+                        <TableHead className="w-28">
+                          <span className="sr-only">Acciones</span>
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {visible.map((transaction) => (
+                        <TableRow key={transaction.id}>
+                          <TableCell className="whitespace-nowrap text-muted-foreground">
+                            {formatDate(transaction.date)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              <span>{transaction.description}</span>
+                              {splitTagNames(transaction.tag_names).length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {splitTagNames(transaction.tag_names).map((name) => (
+                                    <Badge
+                                      key={name}
+                                      variant="outline"
+                                      className="text-[10px]"
+                                    >
+                                      {name}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {transaction.type === "transfer"
+                              ? "—"
+                              : transaction.category_name
+                                ? `${transaction.category_icon ?? ""} ${transaction.category_name}`.trim()
+                                : "Sin categoría"}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap items-center gap-1">
+                              {transaction.payment_method_name ? (
+                                <Badge variant="secondary">
+                                  {transaction.payment_method_name}
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                              {transaction.type === "transfer" && (
+                                <>
+                                  <ArrowRight className="size-3 text-muted-foreground" />
+                                  {transaction.destination_payment_method_name ? (
+                                    <Badge variant="secondary">
+                                      {transaction.destination_payment_method_name}
+                                    </Badge>
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {TRANSACTION_TYPE_LABELS[transaction.type]}
+                          </TableCell>
+                          <TableCell
+                            className={cn(
+                              "text-right font-medium whitespace-nowrap",
+                              transaction.type === "income" && "text-positive",
+                              transaction.type === "expense" && "text-negative",
                             )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {transaction.type === "transfer"
-                            ? "—"
-                            : transaction.category_name
-                              ? `${transaction.category_icon ?? ""} ${transaction.category_name}`.trim()
-                              : "Sin categoría"}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap items-center gap-1">
-                            {transaction.payment_method_name ? (
-                              <Badge variant="secondary">
-                                {transaction.payment_method_name}
-                              </Badge>
+                          >
+                            {transaction.type === "transfer" ? (
+                              <TransferAmount transaction={transaction} />
                             ) : (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                            {transaction.type === "transfer" && (
                               <>
-                                <ArrowRight className="size-3 text-muted-foreground" />
-                                {transaction.destination_payment_method_name ? (
-                                  <Badge variant="secondary">
-                                    {transaction.destination_payment_method_name}
-                                  </Badge>
-                                ) : (
-                                  <span className="text-muted-foreground">—</span>
-                                )}
+                                {transaction.type === "income" ? "+" : "-"}
+                                {formatCurrency(transaction.amount, transaction.currency)}
                               </>
                             )}
-                          </div>
-                        </TableCell>
-                        <TableCell>{TRANSACTION_TYPE_LABELS[transaction.type]}</TableCell>
-                        <TableCell
-                          className={cn(
-                            "text-right font-medium whitespace-nowrap",
-                            transaction.type === "income" && "text-positive",
-                            transaction.type === "expense" && "text-negative",
-                          )}
-                        >
-                          {transaction.type === "transfer" ? (
-                            <TransferAmount transaction={transaction} />
-                          ) : (
-                            <>
-                              {transaction.type === "income" ? "+" : "-"}
-                              {formatCurrency(transaction.amount, transaction.currency)}
-                            </>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            <ActionButton
-                              type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              label={
-                                transaction.attachment_count > 0
-                                  ? `${transaction.attachment_count} comprobante(s)`
-                                  : "Adjuntar comprobante"
-                              }
-                              className={cn(
-                                transaction.attachment_count === 0 &&
-                                  "text-muted-foreground/50",
-                              )}
-                              onClick={() => setAttaching(transaction)}
-                            >
-                              <Paperclip />
-                              <span className="sr-only">
-                                Comprobantes de {transaction.description}
-                              </span>
-                            </ActionButton>
-                            <ActionButton
-                              type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              label="Editar"
-                              onClick={() => openEditDialog(transaction)}
-                            >
-                              <Pencil />
-                              <span className="sr-only">
-                                Editar {transaction.description}
-                              </span>
-                            </ActionButton>
-                            <ActionButton
-                              type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              label="Eliminar"
-                              onClick={() => setPendingDeletion(transaction)}
-                            >
-                              <Trash2 />
-                              <span className="sr-only">
-                                Eliminar {transaction.description}
-                              </span>
-                            </ActionButton>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <ActionButton
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                label={
+                                  transaction.attachment_count > 0
+                                    ? `${transaction.attachment_count} comprobante(s)`
+                                    : "Adjuntar comprobante"
+                                }
+                                className={cn(
+                                  transaction.attachment_count === 0 &&
+                                    "text-muted-foreground/50",
+                                )}
+                                onClick={() => setAttaching(transaction)}
+                              >
+                                <Paperclip />
+                                <span className="sr-only">
+                                  Comprobantes de {transaction.description}
+                                </span>
+                              </ActionButton>
+                              <ActionButton
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                label="Editar"
+                                onClick={() => openEditDialog(transaction)}
+                              >
+                                <Pencil />
+                                <span className="sr-only">
+                                  Editar {transaction.description}
+                                </span>
+                              </ActionButton>
+                              <ActionButton
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                label="Eliminar"
+                                onClick={() => setPendingDeletion(transaction)}
+                              >
+                                <Trash2 />
+                                <span className="sr-only">
+                                  Eliminar {transaction.description}
+                                </span>
+                              </ActionButton>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-4">
-                <p className="text-xs text-muted-foreground">
-                  {filtered.length}{" "}
-                  {filtered.length === 1 ? "transacción" : "transacciones"}
-                  {pageCount > 1 &&
-                    ` · mostrando ${safePage * PAGE_SIZE + 1}-${
-                      safePage * PAGE_SIZE + visible.length
-                    }`}
-                </p>
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-4">
+                  <p className="text-xs text-muted-foreground">
+                    {filtered.length}{" "}
+                    {filtered.length === 1 ? "transacción" : "transacciones"}
+                    {pageCount > 1 &&
+                      ` · mostrando ${safePage * PAGE_SIZE + 1}-${
+                        safePage * PAGE_SIZE + visible.length
+                      }`}
+                  </p>
 
-                {pageCount > 1 && (
-                  <div className="flex items-center gap-2">
-                    <ActionButton
-                      type="button"
-                      variant="outline"
-                      size="icon-sm"
-                      label="Página anterior"
-                      disabled={safePage === 0}
-                      onClick={() => setPage(safePage - 1)}
-                    >
-                      <ChevronLeft />
-                      <span className="sr-only">Página anterior</span>
-                    </ActionButton>
-                    <span className="text-xs text-muted-foreground tabular-nums">
-                      {safePage + 1} / {pageCount}
-                    </span>
-                    <ActionButton
-                      type="button"
-                      variant="outline"
-                      size="icon-sm"
-                      label="Página siguiente"
-                      disabled={safePage >= pageCount - 1}
-                      onClick={() => setPage(safePage + 1)}
-                    >
-                      <ChevronRight />
-                      <span className="sr-only">Página siguiente</span>
-                    </ActionButton>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
+                  {pageCount > 1 && (
+                    <div className="flex items-center gap-2">
+                      <ActionButton
+                        type="button"
+                        variant="outline"
+                        size="icon-sm"
+                        label="Página anterior"
+                        disabled={safePage === 0}
+                        onClick={() => setPage(safePage - 1)}
+                      >
+                        <ChevronLeft />
+                        <span className="sr-only">Página anterior</span>
+                      </ActionButton>
+                      <span className="text-xs text-muted-foreground tabular-nums">
+                        {safePage + 1} / {pageCount}
+                      </span>
+                      <ActionButton
+                        type="button"
+                        variant="outline"
+                        size="icon-sm"
+                        label="Página siguiente"
+                        disabled={safePage >= pageCount - 1}
+                        onClick={() => setPage(safePage + 1)}
+                      >
+                        <ChevronRight />
+                        <span className="sr-only">Página siguiente</span>
+                      </ActionButton>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </Loading>
         </CardContent>
       </Card>
 

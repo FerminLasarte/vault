@@ -42,14 +42,14 @@ export function TotalBalanceCard({
     ...CURRENCY_CODES.map((code) => ({
       key: code,
       label: CURRENCY_SHORT_LABELS[code] ?? code,
-      value: isLoading ? "—" : formatCurrency(perCurrency.get(code) ?? 0, code),
+      value: formatCurrency(perCurrency.get(code) ?? 0, code),
     })),
     {
       key: "unified",
       label: "Total unificado",
-      value: isLoading || unified === null ? "—" : formatCurrency(unified, currency),
+      value: unified === null ? "—" : formatCurrency(unified, currency),
       sub:
-        isLoading || unified === null ? (
+        unified === null ? (
           <span className="text-xs text-muted-foreground">
             Traé una cotización para sumar las dos monedas
           </span>
@@ -61,5 +61,5 @@ export function TotalBalanceCard({
     },
   ];
 
-  return <FigureBar figures={figures} footer={footer} />;
+  return <FigureBar figures={figures} isLoading={isLoading} footer={footer} />;
 }

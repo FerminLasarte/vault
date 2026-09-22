@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { Plus } from "lucide-react";
+import { LoadingRows } from "@/components/Loading";
+import { useSlowLoading } from "@/hooks/useSlowLoading";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -58,6 +60,10 @@ export function ListCard({
   children,
 }: ListCardProps) {
   const showEmpty = isEmpty && !isLoading;
+  // Written out here rather than through `Loading`, because a card that is
+  // waiting also has to hold back the footer: the way out of an empty section
+  // is not something to offer to someone whose rows are still arriving.
+  const showPlaceholder = useSlowLoading(isLoading);
 
   // The empty message takes the description's place rather than joining it, so
   // a section with a title and nothing in it reads as two lines, not three.
@@ -72,12 +78,12 @@ export function ListCard({
         </CardHeader>
       )}
 
-      {isLoading ? (
+      {showPlaceholder ? (
         <CardContent>
-          <p className="text-sm text-muted-foreground">Cargando...</p>
+          <LoadingRows />
         </CardContent>
       ) : (
-        !showEmpty && <CardContent>{children}</CardContent>
+        !isLoading && !showEmpty && <CardContent>{children}</CardContent>
       )}
 
       {!isLoading &&

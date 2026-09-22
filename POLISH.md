@@ -55,7 +55,7 @@ be updated with this direction as part of batch 1.
 | P-12 | Every sidebar icon moves the same way, so none of them says much | 1     | [x]  |
 | P-13 | The same icon moves differently depending on where it is used    | 1     | [x]  |
 | P-03 | Copying and confirming give no visible feedback                  | 2     | [x]  |
-| P-04 | First load shows the word "Cargando..." and then a full app      | 3     | [ ]  |
+| P-04 | First load shows the word "Cargando..." and then a full app      | 3     | [x]  |
 | P-05 | A row that was just created or edited is lost in the list        | 4     | [ ]  |
 | P-06 | Figures snap when the period or the filters change               | 4     | [ ]  |
 | P-07 | Row actions are as loud as the data they belong to               | 4     | [ ]  |
@@ -368,11 +368,43 @@ be updated with this direction as part of batch 1.
   milliseconds. A skeleton that appears and vanishes in 40ms is a flash, which
   is worse than nothing. The skeleton only appears once loading has lasted
   beyond a threshold (~120ms), and once shown stays for a minimum (~300ms).
-- **Tests:** the delay-and-minimum logic is a pure function of elapsed time and
-  gets a unit test with fake timers, written first: it does not show for a fast
-  load, it shows for a slow one, and it does not flicker off early.
-- **Checks in the running app:** a cold start, and a cold start on a database
-  large enough to be slow.
+- **Done as:** proposed. `Skeleton` is the primitive, `LoadingRows` the shape
+  every list in the app shares — something named on the left, a figure on the
+  right — and `Loading` the component that chooses between the shape and the
+  content. All seven paragraphs are gone, and with them the flash of an empty
+  state: rendering the children early was never an option, because the data is
+  empty until it lands and a list would tell someone with two hundred
+  categories that they have none.
+
+  The figures went further than planned. They were not saying "Cargando..."
+  but "—", which is the same dash the app writes for a total it genuinely
+  cannot work out — so a balance that was merely late looked like a balance
+  that could not be computed. `FigureBar` now holds the place of each figure,
+  and its callers stopped substituting anything.
+
+- **Tests:** nine. Seven on the gate, written first, with fake timers: nothing
+  before the delay, the placeholder after it, nothing at all for a load that
+  beat the wait, held for the minimum once it is up, not held any longer than
+  that when the load was slow, the wait starting again the next time, and no
+  timer left behind on unmount. Two on the card that had the only test naming
+  "Cargando...", which now covers what it was really about — never claiming a
+  list is empty while it is still arriving.
+- **Found while building it:** two things the plan did not see. `Loading`
+  builds its children whichever branch it takes, so a list that can be `null`
+  has to be defaulted by its caller — the type checker caught the one case.
+  And the pulse of a skeleton is an infinite animation, which the global
+  reduced-motion rule would have run at 1ms and turned into a strobe. It is
+  stopped outright there now, next to the spinner that is slowed instead.
+- **Checked in the running app:** with the initial load temporarily held open,
+  the real window keeps its whole outline while it waits — the balance bar's
+  three columns, the three month cards and six transaction rows, all in the
+  place the data lands in. The delay was removed afterwards and the file is
+  back to what it was. In the browser pane, Categorías held twelve
+  placeholders mid-load and showed its empty state only once the load was
+  over. **Not checked:** how often a real cold start is slow enough to show
+  any of this at all — the database is local, and the point of the gate is
+  that most loads never reach it.
+- [x] Done
 
 ---
 

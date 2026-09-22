@@ -190,6 +190,12 @@
   .animate-spin {
     animation-duration: 1.5s !important;
   }
+
+  /* A placeholder that pulses is decoration, and at 1ms it would be a strobe.
+     It stops altogether: a plain block says the same thing. */
+  .animate-pulse {
+    animation: none !important;
+  }
 }
 
 /* Printing.
