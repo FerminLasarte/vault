@@ -181,7 +181,7 @@ export function CommitmentsView({ tab }: ViewProps) {
                         </div>
                       </div>
 
-                      <div className="flex shrink-0 items-center gap-2">
+                      <div className="row-actions flex shrink-0 items-center gap-2">
                         <span className="text-sm font-medium tabular-nums text-negative">
                           -{formatCurrency(entry.amount, entry.plan.currency)}
                         </span>
@@ -264,7 +264,7 @@ export function CommitmentsView({ tab }: ViewProps) {
                         {isSettled && <Badge variant="secondary">Saldada</Badge>}
                       </div>
 
-                      <div className="flex shrink-0 items-center gap-1">
+                      <div className="row-actions flex shrink-0 items-center gap-1">
                         <span className="text-sm tabular-nums text-muted-foreground">
                           {formatCurrency(remaining, plan.currency)} pendiente
                         </span>

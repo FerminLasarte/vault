@@ -147,7 +147,7 @@ export function RecurringSection() {
                     </div>
                   </div>
 
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className="row-actions flex shrink-0 items-center gap-2">
                     <span
                       className={cn(
                         "text-sm font-medium tabular-nums",
@@ -248,7 +248,7 @@ export function RecurringSection() {
                 </div>
               </div>
 
-              <div className="flex shrink-0 items-center gap-1">
+              <div className="row-actions flex shrink-0 items-center gap-1">
                 <span className="text-sm tabular-nums text-muted-foreground">
                   {formatCurrency(template.amount, template.currency)}
                 </span>

@@ -146,7 +146,7 @@ export function ExpectedSection() {
                     <Tags movement={movement} />
                   </div>
 
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className="row-actions flex shrink-0 items-center gap-2">
                     <Amount movement={movement} />
                     <ActionButton
                       type="button"
@@ -201,7 +201,7 @@ export function ExpectedSection() {
                 <Tags movement={movement} />
               </div>
 
-              <div className="flex shrink-0 items-center gap-1">
+              <div className="row-actions flex shrink-0 items-center gap-1">
                 {/* Muted here and coloured in the list above: something
                         still months away is information, not a call to act. */}
                 <Amount movement={movement} muted />

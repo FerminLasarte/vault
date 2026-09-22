@@ -93,8 +93,14 @@ export function FigureBar({
                   <Skeleton className="my-1 h-5 w-32" />
                 ) : (
                   <span
+                    // Keyed by what it says, so that changing the period or
+                    // the filters fades the new figure in instead of swapping
+                    // the digits where they stand, which reads as a glitch.
+                    // Deliberately not a count-up: a balance climbing towards
+                    // its value is marketing, not money.
+                    key={figure.value}
                     className={cn(
-                      "text-lg font-medium tabular-nums",
+                      "animate-in text-lg font-medium tabular-nums duration-(--duration-fast) fade-in",
                       figure.valueClassName,
                     )}
                   >

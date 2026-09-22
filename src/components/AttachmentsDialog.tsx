@@ -176,7 +176,7 @@ export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDial
                       </span>
                     </div>
 
-                    <div className="flex shrink-0 items-center gap-1">
+                    <div className="row-actions flex shrink-0 items-center gap-1">
                       {meta.mime_type.startsWith("image/") && (
                         <ActionButton
                           type="button"

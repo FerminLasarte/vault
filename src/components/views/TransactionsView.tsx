@@ -95,7 +95,7 @@ function TransferAmount({ transaction }: { transaction: TransactionWithCategory 
 export function TransactionsView({ request, onRequestHandled }: ViewProps) {
   const { transactions, categories, categoryRules, tags, paymentMethods, isLoading } =
     useAppData();
-  const { isMutating } = useAppStatus();
+  const { isMutating, justWrittenTransaction } = useAppStatus();
   const { addTransaction, editTransaction, removeTransaction } = useAppActions();
 
   const [currency, setCurrency] = useState(DEFAULT_CURRENCY);
@@ -369,7 +369,12 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
                     </TableHeader>
                     <TableBody>
                       {visible.map((transaction) => (
-                        <TableRow key={transaction.id}>
+                        <TableRow
+                          key={transaction.id}
+                          className={cn(
+                            transaction.id === justWrittenTransaction && "just-written",
+                          )}
+                        >
                           <TableCell className="whitespace-nowrap text-muted-foreground">
                             {formatDate(transaction.date)}
                           </TableCell>
@@ -441,7 +446,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
                             )}
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-1">
+                            <div className="row-actions flex items-center gap-1">
                               <ActionButton
                                 type="button"
                                 variant="ghost"

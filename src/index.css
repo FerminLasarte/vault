@@ -165,6 +165,76 @@
   }
 }
 
+/* The row that was just written.
+
+   Somebody adds a movement and lands back in a table of hundreds, sorted by a
+   date that is rarely today. Nothing on that screen says where the thing they
+   just typed ended up, and the answer is usually several rows down.
+
+   So it holds a tint for a second or so and then goes quiet. The fade out is
+   the row's own `transition-colors`, the same one its hover uses, because a
+   row should not have two speeds.
+
+   Not a flash and not an animation: a tint that is simply there and then is
+   not survives `prefers-reduced-motion`, where an animation would be cut to
+   nothing and take the only answer to "where did it go" with it. */
+@utility just-written {
+  background-color: var(--muted);
+}
+
+/* The controls that belong to one row of a list.
+
+   A row is its data — what it is, and how much. The three or four buttons
+   beside it are there for the moment someone wants them, and at full strength
+   in every row they compete with the figures for the eye, which is the whole
+   list shouting at once.
+
+   So they sit back until the row is under the pointer, or until something
+   inside them has the keyboard's focus. Opacity only: a control set to
+   `display: none` or `invisible` is out of the keyboard's order and gone for
+   anyone who cannot hover at all — it would be hiding the action rather than
+   quietening it.
+
+   The row itself needs no class. Every list in the app is built out of `li` or
+   `tr`, which is what this reaches for, so a section marks its group of
+   buttons and the row keeps its own markup.
+
+   Written as plain CSS, unlike the rest of this file, and not as an
+   `@utility`: a utility cannot be selected by an ancestor's state. Tailwind
+   compiles `:is(li, tr):hover &` inside one by dropping everything in front of
+   the `&`, which leaves every row lit at all times and says nothing about it.
+   Inside `@layer components` it came out twice, once layered and once not, so
+   it sits at the top level, where the print rules below already are.
+
+   A disabled control is left alone: it already carries its own half opacity,
+   and quietening it twice would leave it unreadable. */
+.row-actions :is(button, [role="button"]):not(:disabled) {
+  opacity: 0.55;
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+:is(li, tr):hover .row-actions :is(button, [role="button"]):not(:disabled),
+.row-actions:focus-within :is(button, [role="button"]):not(:disabled) {
+  opacity: 1;
+}
+
+/* The row that was just written.
+
+   Somebody adds a movement and lands back in a table of hundreds, sorted by a
+   date that is rarely today. Nothing on that screen says where the thing they
+   just typed ended up, and the answer is usually several rows down.
+
+   So it holds a tint for a second or so and then goes quiet. The fade out is
+   the row's own `transition-colors`, the same one its hover uses, because a
+   row should not have two speeds.
+
+   Not a flash and not an animation: a tint that is simply there and then is
+   not survives `prefers-reduced-motion`, where an animation would be cut to
+   nothing and take the only answer to "where did it go" with it. */
+@utility just-written {
+  background-color: var(--muted);
+}
+
 /* Motion is a preference the system already knows about, and an app that
    ignores it can make someone ill. Everything above is turned off here rather
    than guarded case by case, because the guard that gets forgotten is the one
