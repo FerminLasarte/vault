@@ -3,6 +3,10 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
 
+/* How every icon in the app moves. Its own file: it is one concern, and a
+   long one. */
+@import "./styles/motion.css";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -40,6 +44,13 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Every `transition-*` utility in the app inherits these, so the speed and
+     the curve of the whole interface are set in one place instead of being
+     re-decided per component. Tailwind's own defaults were 150ms and a
+     symmetric ease; both are replaced. */
+  --default-transition-duration: var(--duration-fast);
+  --default-transition-timing-function: var(--ease-standard);
 }
 
 :root {
@@ -67,6 +78,21 @@
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
   --radius: 0.625rem;
+
+  /* Motion.
+
+     Two durations, because the interface only ever does two things: answer a
+     pointer, or bring something on screen. Anything slower than this reads as
+     the app hesitating, which in an app about money is the wrong feeling.
+
+     The curve starts fast and settles, which is what makes a movement feel
+     like a response rather than a playback. It is deliberately not Tailwind's
+     `--ease-out`: that name is already taken by a gentler built-in curve, and
+     overriding it would change every `ease-out` in the app by surprise. */
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-accent: oklch(0.97 0 0);
@@ -136,6 +162,33 @@
   #root {
     height: 100%;
     overflow: hidden;
+  }
+}
+
+/* Motion is a preference the system already knows about, and an app that
+   ignores it can make someone ill. Everything above is turned off here rather
+   than guarded case by case, because the guard that gets forgotten is the one
+   that matters.
+
+   Near zero rather than `none`: an animation cancelled mid-keyframe can leave
+   an element stuck at whatever it had reached, and a transition that never
+   runs never fires its `transitionend`.
+
+   The one thing that keeps moving is the spinner. It is not decoration — it is
+   the only thing saying the app is working — and a frozen spinner reads as a
+   frozen app. It is slowed instead of cut, so it turns rather than strobes. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+  }
+
+  .animate-spin {
+    animation-duration: 1.5s !important;
   }
 }
 

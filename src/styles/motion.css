@@ -1,0 +1,310 @@
+/* How the icons move.
+
+   One rule per icon, in one file, applied by the icon's own lucide class. A
+   screen never says how its icons behave: it renders `<Trash2 />` and the lid
+   tilts, here and on every other screen, because the movement belongs to the
+   icon and not to the place it was used. Nothing to remember at a call site,
+   nothing to keep in sync, and no way for the same icon to answer differently
+   in two views.
+
+   On top of that every icon inside a control lifts slightly, which is the
+   part that says "this is a control". The signature is what says which one.
+
+   Three limits hold, and they are what keeps this from becoming noise:
+
+     nothing here lasts longer than `--duration-base`, and nothing delays the
+     user;
+
+     nothing bounces, springs or overshoots — this app holds someone's money;
+
+     `prefers-reduced-motion` turns all of it off, globally, in `index.css`.
+
+   The rules are grouped by what they do rather than by icon, so that eight
+   icons sharing a movement share one declaration. Adding an icon usually
+   means adding its class to a group, not writing a new rule.
+
+   They reach into an icon by the position of its parts, and those parts
+   belong to lucide rather than to us: an upgrade that reorders one would
+   animate the wrong half of an icon and nothing would fail, because no test
+   looks at a hover. `motion.test.tsx` is the tripwire — it reads this file,
+   and every class and every part named below has to still be there.
+
+   Lengths are user units, not screen pixels: the icons draw on a 24 unit grid
+   and render at 16px, so 1.5 units is about one pixel on screen. */
+
+@utility icon-motion {
+  & svg {
+    /* The individual transform properties rather than `transform`, so that a
+       signature and a `rotate-*` utility written by a caller compose instead
+       of overwriting each other. */
+    transition-property: scale, translate, rotate;
+    transition-duration: var(--duration-fast);
+    transition-timing-function: var(--ease-standard);
+    transform-box: view-box;
+  }
+
+  /* A part travels further, and through more of an arc, than the icon around
+     it does, so it gets the longer duration. `view-box` puts every origin
+     below in the icon's own 24 unit coordinates. */
+  & svg * {
+    transition-property: scale, translate, rotate;
+    transition-duration: var(--duration-base);
+    transition-timing-function: var(--ease-standard);
+    transform-box: view-box;
+  }
+
+  /* Hover and keyboard focus are the same event as far as this is concerned:
+     someone has reached the control and it should answer. */
+  &:is(:hover, :focus-visible) {
+    /* The lift every icon gets. Small enough to be felt rather than watched:
+       on a 16px icon this is a little over a pixel. */
+    & svg {
+      scale: 1.08;
+    }
+
+    /* A quarter turn, for an icon with no direction to lean in. */
+    & :is(.lucide-plus, .lucide-x) {
+      rotate: 90deg;
+    }
+
+    /* The same, for icons that carry their cross or plus inside something
+       else that should stay put. */
+    & .lucide-message-square-plus :is(path:nth-child(2), path:nth-child(3)) {
+      transform-origin: 12px 11px;
+      rotate: 90deg;
+    }
+
+    & .lucide-octagon-x :is(path:nth-child(1), path:nth-child(3)) {
+      transform-origin: 12px 12px;
+      rotate: 90deg;
+    }
+
+    /* An eighth of a turn, for the things that are meant to be turned: one
+       notch of a wheel rather than a spin. */
+    & .lucide-refresh-cw {
+      rotate: 45deg;
+    }
+
+    & .lucide-rotate-ccw {
+      rotate: -45deg;
+    }
+
+    & .lucide-settings path:nth-child(1) {
+      transform-origin: 12px 12px;
+      rotate: 45deg;
+    }
+
+    /* Leaning the way they point. */
+    & :is(.lucide-chevron-left) {
+      translate: -1.5px 0;
+    }
+
+    & :is(.lucide-chevron-right, .lucide-arrow-right, .lucide-play) {
+      translate: 1.5px 0;
+    }
+
+    & .lucide-chevron-up {
+      translate: 0 -1.5px;
+    }
+
+    & .lucide-chevron-down {
+      translate: 0 1.5px;
+    }
+
+    & :is(.lucide-trending-up, .lucide-pencil) {
+      translate: 1.5px -1.5px;
+    }
+
+    & .lucide-trending-down {
+      translate: 1.5px 1.5px;
+    }
+
+    /* Tilting: an object picked up rather than a mechanism turned. */
+    & .lucide-paperclip {
+      rotate: -12deg;
+    }
+
+    & .lucide-credit-card {
+      rotate: -4deg;
+    }
+
+    /* Ahorros. A nod, and the whole animal, because a pig is not a diagram. */
+    & .lucide-piggy-bank {
+      rotate: -6deg;
+      scale: 1.06;
+    }
+
+    /* The bin opens before it swallows something: the lid and its handle tip
+       back over the rim, and the bin itself does not move. */
+    & .lucide-trash2 :is(path:nth-child(4), path:nth-child(5)) {
+      transform-origin: 3px 6px;
+      rotate: -12deg;
+    }
+
+    /* The bell swings from where it hangs. */
+    & .lucide-bell path:nth-child(2) {
+      transform-origin: 12px 4px;
+      rotate: 8deg;
+    }
+
+    /* The wand moves and the sparkles it left behind stay where they are. */
+    & .lucide-wand-sparkles :is(path:nth-child(1), path:nth-child(2)) {
+      transform-origin: 12px 12px;
+      rotate: -12deg;
+    }
+
+    /* The hand of the clock, around the clock's own centre rather than the
+       icon's. */
+    & .lucide-calendar-clock path:nth-child(1) {
+      transform-origin: 16px 16px;
+      rotate: 90deg;
+    }
+
+    /* Something comes away from what it sits on: a slice out of the pie, the
+       front tag off the one behind it with its dot, a copy off the original,
+       coins into the hand. */
+    &
+      :is(
+        .lucide-chart-pie path:nth-child(1),
+        .lucide-tags :is(path:nth-child(1), circle),
+        .lucide-copy rect,
+        .lucide-hand-coins circle
+      ) {
+      translate: 1.5px -1.5px;
+    }
+
+    /* A lid, a roof, a flap, the hooks a calendar hangs from: the top lifts
+       and the body stays. */
+    &
+      :is(
+        .lucide-landmark path:nth-child(2),
+        .lucide-wallet path:nth-child(1),
+        .lucide-calendar :is(path:nth-child(1), path:nth-child(2)),
+        .lucide-calendar-days :is(path:nth-child(1), path:nth-child(2))
+      ) {
+      translate: 0 -1.5px;
+    }
+
+    /* The arrow moves and what receives it does not: down into the tray, the
+       drive or the page. */
+    &
+      :is(
+        .lucide-download :is(path:nth-child(1), path:nth-child(3)),
+        .lucide-hard-drive-download :is(path:nth-child(1), path:nth-child(2)),
+        .lucide-file-down :is(path:nth-child(3), path:nth-child(4))
+      ) {
+      translate: 0 1.5px;
+    }
+
+    /* And up, out of it. */
+    & .lucide-upload :is(path:nth-child(1), path:nth-child(2)) {
+      translate: 0 -1.5px;
+    }
+
+    /* The paper comes out of the printer. */
+    & .lucide-printer rect {
+      translate: 0 1.5px;
+    }
+
+    /* The eye looks. */
+    & .lucide-eye circle {
+      translate: 1.5px 0;
+    }
+
+    /* Two halves pull apart: money in and money out, the two arrows of a
+       loop, the two bars of a pause. */
+    &
+      :is(
+        .lucide-arrow-left-right :is(path:nth-child(1), path:nth-child(2)),
+        .lucide-repeat path:nth-child(3)
+      ) {
+      translate: -1.5px 0;
+    }
+
+    &
+      :is(
+        .lucide-arrow-left-right :is(path:nth-child(3), path:nth-child(4)),
+        .lucide-repeat path:nth-child(1)
+      ) {
+      translate: 1.5px 0;
+    }
+
+    & .lucide-pause rect:nth-child(1) {
+      translate: 1px 0;
+    }
+
+    & .lucide-pause rect:nth-child(2) {
+      translate: -1px 0;
+    }
+
+    /* The lines of a document write themselves, one after the next. The delay
+       is on the way in only — on the way out the base rule has none, so they
+       settle back together instead of unwriting. */
+    & .lucide-file-text path:nth-child(n + 3) {
+      translate: 1.5px 0;
+    }
+
+    & .lucide-file-text path:nth-child(4) {
+      transition-delay: 40ms;
+    }
+
+    & .lucide-file-text path:nth-child(5) {
+      transition-delay: 80ms;
+    }
+
+    /* What the icon is saying grows, and what it is drawn on does not: the
+       tick inside its circle, the i of an info, the mark inside a warning. */
+    &
+      :is(
+        .lucide-circle-check path:nth-child(2),
+        .lucide-info :is(path:nth-child(2), path:nth-child(3))
+      ) {
+      transform-origin: 12px 12px;
+      scale: 1.15;
+    }
+
+    & .lucide-triangle-alert :is(path:nth-child(2), path:nth-child(3)) {
+      transform-origin: 12px 13px;
+      scale: 1.15;
+    }
+
+    /* A tick and a heart are nothing but what they are saying, so the whole
+       icon is what grows. */
+    & :is(.lucide-check, .lucide-heart) {
+      scale: 1.15;
+    }
+
+    /* The search zooms, around its own lens rather than the middle of the
+       icon, so the magnifier stays where it is pointing.
+
+       As a percentage, and not the `11px 11px` the lens sits at: the origin of
+       a whole icon resolves against the box it is drawn in — 16 screen pixels
+       — while the origin of a part resolves in the icon's own 24 unit grid.
+       Every other origin in this file belongs to a part and is written in
+       those units. This one does not. */
+    & .lucide-search {
+      transform-origin: 46% 46%;
+      scale: 1.12;
+    }
+
+    /* The sight closes in: the outer ring moves most, the bullseye not at
+       all. */
+    & .lucide-target circle:nth-child(1) {
+      transform-origin: 12px 12px;
+      scale: 1.08;
+    }
+
+    & .lucide-target circle:nth-child(2) {
+      transform-origin: 12px 12px;
+      scale: 1.04;
+    }
+
+    /* The one icon that is deliberately still. It is already turning, it is
+       the only thing on screen saying the app is working, and something that
+       grows when the pointer crosses it reads as a control someone can press
+       to make the waiting stop. */
+    & .lucide-loader-circle {
+      scale: none;
+    }
+  }
+}

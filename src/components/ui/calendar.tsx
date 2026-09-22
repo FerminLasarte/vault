@@ -136,6 +136,8 @@ function Calendar({
           );
         },
         Chevron: ({ className, orientation, ...props }) => {
+          // Stepping a month back or forward, so the arrows lean the way they
+          // point, like the month stepper on Transacciones.
           if (orientation === "left") {
             return <ChevronLeftIcon className={cn("size-4", className)} {...props} />;
           }

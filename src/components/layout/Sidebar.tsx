@@ -127,7 +127,7 @@ function NavButton({ item, isCurrent, pending, onNavigate }: NavButtonProps) {
           aria-current={isCurrent ? "page" : undefined}
           onClick={() => onNavigate(view)}
           className={cn(
-            "relative flex items-center justify-center gap-3 rounded-lg px-2 py-2 text-sm transition-colors sm:justify-start sm:px-3",
+            "icon-motion relative flex items-center justify-center gap-3 rounded-lg px-2 py-2 text-sm transition-colors sm:justify-start sm:px-3",
             isCurrent
               ? "bg-sidebar-accent text-sidebar-accent-foreground"
               : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
