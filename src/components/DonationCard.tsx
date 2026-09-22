@@ -1,5 +1,6 @@
 import { Copy, Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AnsweringButton } from "@/components/AnsweringButton";
 import {
   Card,
   CardContent,
@@ -30,10 +31,15 @@ export function DonationCard() {
             <Heart />
             Donar con Mercado Pago
           </Button>
-          <Button type="button" variant="outline" onClick={() => void copyAlias()}>
-            <Copy />
+          <AnsweringButton
+            type="button"
+            variant="outline"
+            icon={Copy}
+            answer="¡Copiado!"
+            onAction={copyAlias}
+          >
             Copiar alias
-          </Button>
+          </AnsweringButton>
         </div>
         <p className="text-xs text-muted-foreground">Alias: {DONATION_ALIAS}</p>
       </CardContent>
