@@ -3,6 +3,10 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
 
+/* How every icon in the app moves. Its own file: it is one concern, and a
+   long one. */
+@import "./styles/motion.css";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -158,166 +162,6 @@
   #root {
     height: 100%;
     overflow: hidden;
-  }
-}
-
-/* The icon motion vocabulary.
-
-   Every icon inside a control moves when the control is touched, and every
-   icon moves in one of a handful of ways. The closed list is the whole point:
-   a screen picks a behaviour, it never invents one, so forty buttons across
-   nine views cannot drift into forty different ideas of what a hover means.
-
-     lift        the default. This is a control, and it answers.
-     nudge-*     the icon points somewhere, so it leans that way.
-     turn        the icon has no direction, so it turns instead.
-     turn-back   the same, for an icon that already means "go back".
-
-   Under those sits a second tier: a handful of signatures, one per icon,
-   further down this file. A behaviour says what a control does and any icon
-   can have it; a signature says what one icon is, and travels with it.
-
-   Two behaviours are not here because they need no rules of their own:
-
-     a disclosure chevron carries the caller's own `rotate-180` and is animated
-     by the transition below, because it tracks state rather than the pointer;
-
-     an icon that spins while the app is working carries `animate-spin`, which
-     is Tailwind's and is left alone.
-
-   The behaviour is driven from the control, not from the icon, so it also
-   fires when the control is reached by keyboard. It is applied in exactly two
-   places — the `Button` base and the sidebar's own nav button, which is not a
-   `Button` — and those two cover every icon in the app. A React wrapper per
-   icon would mean touching every call site and re-rendering on hover for a
-   transform the browser can do on its own. */
-@utility icon-motion {
-  & svg,
-  & svg * {
-    /* The individual transform properties rather than `transform`, so that a
-       behaviour here and a `rotate-*` utility written by the caller compose
-       instead of overwriting each other. */
-    transition-property: scale, translate, rotate;
-    transition-duration: var(--duration-fast);
-    transition-timing-function: var(--ease-standard);
-  }
-
-  /* A signature moves further than a lift does, and through more of an arc, so
-     it gets the longer duration. Set here rather than in the hover rule, so
-     that it runs at the same speed coming back. */
-  & svg[data-motion] *,
-  & svg[data-motion="piggy"] {
-    transition-duration: var(--duration-base);
-    transform-box: view-box;
-  }
-
-  /* Small enough to be felt rather than watched: on a 16px icon this is a
-     little over a pixel. */
-  &:is(:hover, :focus-visible) svg:is(:not([data-motion]), [data-motion="lift"]) {
-    scale: 1.08;
-  }
-
-  &:is(:hover, :focus-visible) svg[data-motion="nudge-up"] {
-    translate: 0 -1.5px;
-  }
-
-  &:is(:hover, :focus-visible) svg[data-motion="nudge-down"] {
-    translate: 0 1.5px;
-  }
-
-  &:is(:hover, :focus-visible) svg[data-motion="nudge-left"] {
-    translate: -1.5px 0;
-  }
-
-  &:is(:hover, :focus-visible) svg[data-motion="nudge-right"] {
-    translate: 1.5px 0;
-  }
-
-  &:is(:hover, :focus-visible) svg[data-motion="turn"] {
-    rotate: 90deg;
-  }
-
-  &:is(:hover, :focus-visible) svg[data-motion="turn-back"] {
-    rotate: -90deg;
-  }
-
-  /* The signatures.
-
-     Everything above is a behaviour: it says what a control does, and any icon
-     can have it. These say what one particular icon is, and belong to that
-     icon wherever it appears. They exist because eight identical lifts down
-     the sidebar tell the user nothing, while a pie that separates a slice and
-     a clock whose hand moves tell them what the section is about.
-
-     They move a single part of the icon, and lucide owns those parts, so each
-     one reaches into the `svg` by position. That is the fragile bit, and it is
-     why `Sidebar.test.tsx` asserts the shape of every icon a signature reaches
-     into: an upgrade that reorders a path should fail a test rather than
-     quietly animate the wrong half of an icon.
-
-     Lengths here are user units, not screen pixels — the icons draw on a 24
-     unit grid and render at 16px, so 1.5 units is about one pixel on screen. */
-
-  /* Estadísticas: the slice comes out of the pie. */
-  &:is(:hover, :focus-visible) svg[data-motion="chart"] path:nth-child(1) {
-    translate: 1.5px -1.5px;
-  }
-
-  /* Transacciones: money in and money out pull apart. */
-  &:is(:hover, :focus-visible)
-    svg[data-motion="flow"]
-    :is(path:nth-child(1), path:nth-child(2)) {
-    translate: -1.5px 0;
-  }
-
-  &:is(:hover, :focus-visible)
-    svg[data-motion="flow"]
-    :is(path:nth-child(3), path:nth-child(4)) {
-    translate: 1.5px 0;
-  }
-
-  /* Compromisos: the hand moves, because what this section holds is what has
-     not happened yet. Around the clock's own centre, not the icon's. */
-  &:is(:hover, :focus-visible) svg[data-motion="clock"] path:nth-child(1) {
-    transform-origin: 16px 16px;
-    rotate: 90deg;
-  }
-
-  /* Categorías: the front tag lifts off the one behind it, dot and all. */
-  &:is(:hover, :focus-visible) svg[data-motion="fan"] :is(path:nth-child(1), circle) {
-    translate: 1.5px -1.5px;
-  }
-
-  /* Cuentas: the roof lifts off the columns. */
-  &:is(:hover, :focus-visible) svg[data-motion="bank"] path:nth-child(2) {
-    translate: 0 -1.5px;
-  }
-
-  /* Ahorros: a nod. The whole animal, because a pig is not a diagram. */
-  &:is(:hover, :focus-visible) svg[data-motion="piggy"] {
-    rotate: -6deg;
-    scale: 1.06;
-  }
-
-  /* Cierres: the lines of the closed month write themselves, one after the
-     next. The delay is on the way in only — on the way out the base rule has
-     none, so the lines settle back together instead of unwriting. */
-  &:is(:hover, :focus-visible) svg[data-motion="pages"] path:nth-child(n + 3) {
-    translate: 1.5px 0;
-  }
-
-  &:is(:hover, :focus-visible) svg[data-motion="pages"] path:nth-child(4) {
-    transition-delay: 40ms;
-  }
-
-  &:is(:hover, :focus-visible) svg[data-motion="pages"] path:nth-child(5) {
-    transition-delay: 80ms;
-  }
-
-  /* Ajustes: the gear turns one tooth and the hub stays where it is. */
-  &:is(:hover, :focus-visible) svg[data-motion="gear"] path:nth-child(1) {
-    transform-origin: 12px 12px;
-    rotate: 45deg;
   }
 }
 

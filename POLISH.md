@@ -53,6 +53,7 @@ be updated with this direction as part of batch 1.
 | P-01 | No motion tokens, and `prefers-reduced-motion` is ignored        | 1     | [x]  |
 | P-02 | Icons do not react to anything                                   | 1     | [x]  |
 | P-12 | Every sidebar icon moves the same way, so none of them says much | 1     | [x]  |
+| P-13 | The same icon moves differently depending on where it is used    | 1     | [x]  |
 | P-03 | Copying and confirming give no visible feedback                  | 2     | [ ]  |
 | P-04 | First load shows the word "Cargando..." and then a full app      | 3     | [ ]  |
 | P-05 | A row that was just created or edited is lost in the list        | 4     | [ ]  |
@@ -239,6 +240,55 @@ be updated with this direction as part of batch 1.
   about `12px 12px` with the hub left alone. **Not checked:** how they read
   under a real pointer at 16px in the native window, which is a matter of taste
   rather than of correctness.
+- [x] Done
+
+### P-13 · The same icon moves differently depending on where it is used
+
+- **Where:** `src/styles/motion.css` (new), `src/index.css`, and the fifteen
+  call sites that carried a `data-motion` attribute.
+- **Today:** after `P-02` and `P-12`, movement is opted into per call site. The
+  `+` on Transacciones turns because someone wrote `data-motion="turn"` on it;
+  the `+` in a dialog does not, because nobody did. A `Trash2` is one of eleven
+  and none of them move. The same drawing answers differently in two views, and
+  every new screen has to remember something.
+- **Proposal:** key the movement to the icon instead. lucide puts its own class
+  on every `svg` it renders — `lucide-trash2`, `lucide-settings` — so one
+  stylesheet can say what each icon does and have it reach every place the icon
+  is used, with nothing at the call site at all. All fifteen attributes go, and
+  so does the `data-motion` mechanism: the point is that a screen cannot decide
+  this, and cannot forget it either.
+- **Done as:** proposed. `src/styles/motion.css` holds a rule for each of the
+  49 icons the app uses, grouped by movement rather than by icon so that the
+  ones sharing a movement share a declaration — the arrow of a download, a hard
+  drive download and a file down all fall into what receives them, in one rule.
+  The lift is no longer exclusive: every icon lifts, and its own movement plays
+  on top, so a printer both lifts and pushes its paper out.
+
+  The behaviours `nudge-*`, `turn` and `turn-back` are gone as names. They were
+  never really behaviours — a left chevron always leans left — so they became
+  the rules for the icons that had them.
+
+- **Tests:** `src/styles/motion.test.tsx` reads the stylesheet rather than
+  restating it. It fails when an icon the app imports has no rule (checked, by
+  removing the rule for `Heart`: it names `Heart`), when a rule names a class
+  lucide does not render (checked, by pointing one at an icon that does not
+  exist), and it snapshots the shape of every icon a rule reaches into, so that
+  a lucide upgrade which reorders a path shows up as a diff naming the part
+  instead of silently animating the wrong half of an icon. The snapshot is
+  generated from the stylesheet, so it cannot drift out of step with it.
+- **Found while verifying:** the origin of a movement on a _whole_ icon
+  resolves against the 16 screen pixels it is drawn in, not the icon's own 24
+  unit grid — the grid only applies to its parts. The zoom on `lucide-search`
+  was written as `11px 11px`, meaning the lens, and was landing well outside
+  it. It is a percentage now, and the file says why.
+- **Checked in the running app:** the printer pushing its paper out at
+  `translate: 0 1.5px` while the icon lifts at `1.08`, the pencil at
+  `1.5px -1.5px`, the rate refresh at `45deg`, and the clock hand rotating
+  `90deg` while staying on the clock face — measured as a bounding box that
+  turns from 1×2 to 2×1 and moves 2px, which is what proves a part's origin is
+  read in the icon's own grid. **Not checked:** the icons with no control on
+  screen in a browser without data — a bin, a search, a wand — which are
+  covered by the tests and by the compiled stylesheet.
 - [x] Done
 
 ---

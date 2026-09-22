@@ -85,7 +85,7 @@ export function SavingsView() {
         description="Objetivos de ahorro, con el ritmo que llevás y cuándo llegarías."
         actions={
           <Button type="button" onClick={openCreate}>
-            <Plus data-motion="turn" />
+            <Plus />
             Nuevo objetivo
           </Button>
         }

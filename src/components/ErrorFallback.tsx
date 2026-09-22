@@ -42,7 +42,7 @@ export function AppErrorFallback({ error }: FallbackProps) {
           </p>
         </div>
         <Button type="button" onClick={() => window.location.reload()}>
-          <RotateCcw data-motion="turn-back" />
+          <RotateCcw />
           Reiniciar la aplicación
         </Button>
         <ErrorDetails error={error} />
@@ -65,7 +65,7 @@ export function ViewErrorFallback({ error, retry }: FallbackProps) {
         </p>
       </div>
       <Button type="button" variant="outline" onClick={retry}>
-        <RotateCcw data-motion="turn-back" />
+        <RotateCcw />
         Reintentar
       </Button>
       <ErrorDetails error={error} />

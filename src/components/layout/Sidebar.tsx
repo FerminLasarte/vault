@@ -16,18 +16,10 @@ import { isMacOS } from "@/lib/platform";
 import type { PendingBadges } from "@/lib/pendingBadges";
 import type { View } from "@/lib/navigation";
 
-// The signature this section's icon carries, from the vocabulary in
-// `src/index.css`. One per section and never repeated: the whole reason they
-// are here is that eight identical hovers down the sidebar say nothing about
-// where each one leads.
-type IconSignature =
-  "chart" | "flow" | "clock" | "fan" | "bank" | "piggy" | "pages" | "gear";
-
 interface NavItem {
   view: View;
   label: string;
   icon: LucideIcon;
-  motion: IconSignature;
   // What the section is for, shown on hover.
   //
   // Never a restatement of the label: expanded, the label is already on screen
@@ -43,14 +35,12 @@ const MAIN_ITEMS = [
     view: "statistics",
     label: "Estadísticas",
     icon: ChartPie,
-    motion: "chart",
     description: "Tu balance, cómo venís este mes y los gráficos por período",
   },
   {
     view: "transactions",
     label: "Transacciones",
     icon: ArrowLeftRight,
-    motion: "flow",
     description: "Todos tus movimientos, con búsqueda y filtros",
   },
   // Everything the user owes or has promised: what repeats, what is being paid
@@ -60,7 +50,6 @@ const MAIN_ITEMS = [
     view: "commitments",
     label: "Compromisos",
     icon: CalendarClock,
-    motion: "clock",
     description: "Recurrentes, cuotas y préstamos esperando que los confirmes",
   },
   // Budgets live here too: a budget is a cap on a category, so the two were
@@ -69,21 +58,18 @@ const MAIN_ITEMS = [
     view: "categories",
     label: "Categorías",
     icon: Tags,
-    motion: "fan",
     description: "Cómo se clasifican tus movimientos y cuánto podés gastar en cada uno",
   },
   {
     view: "accounts",
     label: "Cuentas",
     icon: Landmark,
-    motion: "bank",
     description: "Saldos de tus cuentas y métodos de pago",
   },
   {
     view: "savings",
     label: "Ahorros",
     icon: PiggyBank,
-    motion: "piggy",
     description: "Tus objetivos, el ritmo que llevás y cuándo llegarías",
   },
 ] as const satisfies ReadonlyArray<NavItem>;
@@ -96,7 +82,6 @@ const ARCHIVE_ITEMS = [
     view: "closes",
     label: "Cierres",
     icon: FileText,
-    motion: "pages",
     description: "El resumen de cada mes terminado, listo para guardar en PDF",
   },
 ] as const satisfies ReadonlyArray<NavItem>;
@@ -108,7 +93,6 @@ const FOOTER_ITEMS = [
     view: "settings",
     label: "Ajustes",
     icon: Settings,
-    motion: "gear",
     description: "Apariencia, copias de seguridad, cotizaciones y tus datos",
   },
 ] as const satisfies ReadonlyArray<NavItem>;
@@ -122,7 +106,7 @@ interface NavButtonProps {
 }
 
 function NavButton({ item, isCurrent, pending, onNavigate }: NavButtonProps) {
-  const { view, label, description, motion, icon: Icon } = item;
+  const { view, label, description, icon: Icon } = item;
 
   // Anchored to the right because the sidebar is the left edge of the window
   // and there is nowhere else for the explanation to go.
@@ -151,7 +135,7 @@ function NavButton({ item, isCurrent, pending, onNavigate }: NavButtonProps) {
         />
       }
     >
-      <Icon data-motion={motion} className="size-4 shrink-0" />
+      <Icon className="size-4 shrink-0" />
       <span className="hidden sm:inline">{label}</span>
 
       {pending !== undefined && (

@@ -90,7 +90,7 @@ export function ListCard({
               disabled={empty.disabled}
               onClick={empty.onAction}
             >
-              <Plus data-motion="turn" />
+              <Plus />
               {empty.actionLabel}
             </Button>
           </CardFooter>
