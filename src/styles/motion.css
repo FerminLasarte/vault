@@ -241,19 +241,25 @@
       translate: -1px 0;
     }
 
-    /* The lines of a document write themselves, one after the next. The delay
-       is on the way in only — on the way out the base rule has none, so they
-       settle back together instead of unwriting. */
+    /* The lines of a document write themselves, one after the next. Each
+       line takes the short duration and starts a step behind the one above,
+       so the last one lands when a part on its own would: the stagger lives
+       inside `--duration-base` rather than on top of it.
+
+       The delay and the short duration are on the way in only — on the way
+       out the base rule applies, so the lines settle back together instead of
+       unwriting. */
     & .lucide-file-text path:nth-child(n + 3) {
       translate: 1.5px 0;
+      transition-duration: var(--duration-fast);
     }
 
     & .lucide-file-text path:nth-child(4) {
-      transition-delay: 40ms;
+      transition-delay: calc((var(--duration-base) - var(--duration-fast)) / 2);
     }
 
     & .lucide-file-text path:nth-child(5) {
-      transition-delay: 80ms;
+      transition-delay: calc(var(--duration-base) - var(--duration-fast));
     }
 
     /* What the icon is saying grows, and what it is drawn on does not: the

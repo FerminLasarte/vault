@@ -10,6 +10,7 @@ import {
   YAxis,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { chartAnimation } from "@/components/charts/chartMotion";
 import { tooltipContentStyle } from "@/components/charts/chartTooltip";
 import { formatCompactAmount, formatCurrency, formatMonthLabel } from "@/lib/format";
 import type { MonthlyTrendEntry } from "@/lib/finance";
@@ -91,6 +92,7 @@ export function IncomeVsExpenseChart({
                   cursor={{ fill: "var(--muted)" }}
                   formatter={(value) => formatCurrency(Number(value), currency)}
                   contentStyle={tooltipContentStyle}
+                  {...chartAnimation}
                 />
                 <Legend
                   iconType="circle"
@@ -112,12 +114,22 @@ export function IncomeVsExpenseChart({
                   Same colours, faded: a month that has not happened is the
                   same kind of thing as one that has, only not yet true. A
                   different hue would read as a different measure. */}
-                <Bar dataKey="Ingresos" fill={INCOME_COLOR} radius={[4, 4, 0, 0]}>
+                <Bar
+                  dataKey="Ingresos"
+                  fill={INCOME_COLOR}
+                  radius={[4, 4, 0, 0]}
+                  {...chartAnimation}
+                >
                   {chartData.map((entry) => (
                     <Cell key={entry.month} fillOpacity={entry.isProjected ? 0.35 : 1} />
                   ))}
                 </Bar>
-                <Bar dataKey="Gastos" fill={EXPENSE_COLOR} radius={[4, 4, 0, 0]}>
+                <Bar
+                  dataKey="Gastos"
+                  fill={EXPENSE_COLOR}
+                  radius={[4, 4, 0, 0]}
+                  {...chartAnimation}
+                >
                   {chartData.map((entry) => (
                     <Cell key={entry.month} fillOpacity={entry.isProjected ? 0.35 : 1} />
                   ))}

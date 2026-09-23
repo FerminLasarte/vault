@@ -139,6 +139,20 @@
     @apply font-sans;
   }
 
+  /* The curve for every `animate-in` and `animate-out` — dialogs, menus,
+     tooltips, whatever arrives. The `@theme` default above only reaches the
+     `transition-*` utilities; the enter and exit animations read `--tw-ease`
+     and fall back to a plain `ease` without it.
+
+     On every element rather than on `:root`: Tailwind registers `--tw-ease` as
+     a property that does not inherit, so set once at the top it would stop
+     there. An `ease-*` utility on an element still wins, from its own layer. */
+  *,
+  ::before,
+  ::after {
+    --tw-ease: var(--ease-standard);
+  }
+
   /* Tailwind v4 dropped the `cursor: pointer` its v3 preflight put on buttons,
      so every button in the app was showing the plain arrow and nothing looked
      clickable. Restored here rather than on each component: it has to hold for
@@ -192,7 +206,6 @@
 @utility arrive {
   @apply animate-in fade-in;
   --tw-animation-duration: var(--duration-base);
-  --tw-ease: var(--ease-standard);
 }
 
 /* The controls that belong to one row of a list.
@@ -232,6 +245,38 @@
 :is(li, tr):hover .row-actions :is(button, [role="button"]):not(:disabled),
 .row-actions:focus-within :is(button, [role="button"]):not(:disabled) {
   opacity: 1;
+}
+
+/* Toasts.
+
+   Sonner brings its own stylesheet, and by it a toast slides in over 400ms,
+   its text and buttons fade over 400ms, the stack shifts over 400ms, and a
+   toast leaving from behind the front one drops over 500ms. All of that is
+   past the ceiling, and a toast is the answer to half the actions in the app,
+   so everything sonner moves is put on the app's own duration and curve.
+
+   `!important` because sonner writes a rule per state of a toast, the one for
+   a toast leaving from behind five attributes deep, and outranking each on
+   specificity would mean copying its selectors. It is safe only inside
+   `no-preference`: under reduced motion the global rule below and sonner's own
+   both turn this off, and an `!important` there would turn it back on.
+
+   Sonner unmounts a leaving toast 200ms after it starts to go, on a timer of
+   its own, so at 400ms the exit was cut off halfway. At this duration it
+   finishes. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-sonner-toaster],
+  [data-sonner-toast],
+  [data-sonner-toast] > * {
+    transition-duration: var(--duration-base) !important;
+    transition-timing-function: var(--ease-standard) !important;
+  }
+
+  /* Swiping one away is an animation rather than a transition. */
+  [data-sonner-toast][data-swipe-out="true"] {
+    animation-duration: var(--duration-base) !important;
+    animation-timing-function: var(--ease-standard) !important;
+  }
 }
 
 /* Motion is a preference the system already knows about, and an app that

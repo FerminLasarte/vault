@@ -4,6 +4,8 @@ import { render } from "@testing-library/react";
 import type { ComponentType } from "react";
 import { describe, expect, it } from "vitest";
 import * as lucide from "lucide-react";
+import { TagInput } from "@/components/TagInput";
+import { Select, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Both paths are from the project root, which is where vitest runs.
 const MOTION_CSS = readFileSync("src/styles/motion.css", "utf8");
@@ -88,6 +90,16 @@ describe("icon motion", () => {
     expect(iconRule?.[1]).toMatch(/overflow:\s*visible/);
   });
 
+  // Nothing here may outlast `--duration-base`, and the only way to hold that
+  // while the tokens can be retuned is to time everything off them. A literal
+  // delay added to a token-long movement is how a stagger ends up running past
+  // the ceiling without anyone writing a number that looks too big.
+  it("times every movement off the duration tokens", () => {
+    const rules = MOTION_CSS.replace(/\/\*[\s\S]*?\*\//g, "");
+
+    expect(rules.match(/\d+m?s\b/g) ?? []).toEqual([]);
+  });
+
   it("names every icon by a class lucide actually renders", () => {
     for (const icon of RULED) {
       expect([...renderIcon(icon).classList]).toContain(`lucide-${icon}`);
@@ -137,5 +149,27 @@ describe("icon motion", () => {
       .filter(({ icon }) => !icon || !RULED.includes(icon));
 
     expect(missing).toEqual([]);
+  });
+
+  // `icon-motion` comes with every Button, which is why a screen never has to
+  // ask for it. A control built on anything else has to carry it itself, or
+  // its icon stands still while the same icon moves in every other view.
+  it("moves the icons of controls that are not a Button", () => {
+    const { container } = render(
+      <>
+        <TagInput value={["viaje"]} onChange={() => {}} suggestions={[]} />
+        <Select>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+        </Select>
+      </>,
+    );
+
+    for (const icon of ["x", "chevron-down"]) {
+      const control = container.querySelector(`.lucide-${icon}`)?.closest("button");
+
+      expect(control, icon).toHaveClass("icon-motion");
+    }
   });
 });

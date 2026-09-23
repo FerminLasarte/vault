@@ -1,7 +1,8 @@
-import type { ComponentProps, ReactNode } from "react";
+import { useState, type ComponentProps, type ReactNode } from "react";
 import { Check, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useJustDone } from "@/hooks/useJustDone";
+import { cn } from "@/lib/utils";
 
 interface AnsweringButtonProps extends Omit<
   ComponentProps<typeof Button>,
@@ -30,6 +31,11 @@ interface AnsweringButtonProps extends Omit<
 // The check is shared rather than passed in on purpose. A tick means the same
 // thing everywhere, and picking a different mark per screen is how four
 // buttons end up answering the same question four ways.
+//
+// Both faces are drawn at all times, stacked in one grid cell, and only one is
+// visible. The button is always as wide as the wider of the two, so the
+// buttons beside it in a row stay where they are when the label changes. The
+// face that takes over fades in, the same way both directions.
 export function AnsweringButton({
   icon: Icon,
   children,
@@ -38,18 +44,57 @@ export function AnsweringButton({
   ...props
 }: AnsweringButtonProps) {
   const { done, markDone } = useJustDone();
+  // Whether it has answered yet. Until then, the face on screen is the one the
+  // button was drawn with, which is not a change and does not fade in.
+  const [answered, setAnswered] = useState(false);
 
   return (
     <Button
       {...props}
       onClick={() => {
         void (async () => {
-          if (await onAction()) markDone();
+          if (!(await onAction())) return;
+          setAnswered(true);
+          markDone();
         })();
       }}
     >
-      {done ? <Check /> : <Icon />}
-      {done ? answer : children}
+      {/* The wrapper would otherwise stop Button's own gap, which differs by
+          size, from spacing each icon and its label. */}
+      <span className="inline-grid [gap:inherit]">
+        <Face showing={!done} fades={answered}>
+          <Icon />
+          {children}
+        </Face>
+        <Face showing={done} fades={answered}>
+          <Check />
+          {answer}
+        </Face>
+      </span>
     </Button>
+  );
+}
+
+function Face({
+  showing,
+  fades,
+  children,
+}: {
+  showing: boolean;
+  fades: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <span
+      data-slot="answering-face"
+      aria-hidden={showing ? undefined : true}
+      className={cn(
+        "col-start-1 row-start-1 inline-flex items-center justify-center [gap:inherit]",
+        !showing && "invisible",
+        showing && fades && "animate-in duration-(--duration-fast) fade-in",
+      )}
+    >
+      {children}
+    </span>
   );
 }

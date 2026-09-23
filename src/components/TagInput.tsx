@@ -66,7 +66,7 @@ export function TagInput({ id, value, onChange, suggestions }: TagInputProps) {
                   <button
                     type="button"
                     onClick={() => remove(tag)}
-                    className="rounded-sm opacity-60 transition-opacity hover:opacity-100"
+                    className="icon-motion rounded-sm opacity-60 transition-opacity hover:opacity-100"
                   />
                 }
               >
