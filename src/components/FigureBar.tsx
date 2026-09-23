@@ -8,6 +8,7 @@ import {
   CardHeader,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useLoadingGate } from "@/hooks/useLoadingGate";
 import { cn } from "@/lib/utils";
 
 export interface Figure {
@@ -54,6 +55,11 @@ export function FigureBar({
   isLoading = false,
   footer,
 }: FigureBarProps) {
+  // One gate for every figure in the bar, so they are drawn and land together.
+  const gate = useLoadingGate(isLoading);
+  // Every placeholder here is held unseen until the wait is worth drawing.
+  const held = !gate.drawn && "invisible";
+
   return (
     <Card>
       {title && (
@@ -87,10 +93,11 @@ export function FigureBar({
                 )}
               >
                 <span className="text-xs text-muted-foreground">{figure.label}</span>
-                {isLoading ? (
+                {gate.waiting ? (
                   // The height of the line it replaces, so nothing shifts when
-                  // the figure lands.
-                  <Skeleton className="my-1 h-5 w-32" />
+                  // the figure lands. Held unseen until the wait is worth
+                  // drawing, like every other placeholder.
+                  <Skeleton className={cn("my-1 h-5 w-32", held)} />
                 ) : (
                   <span
                     // Keyed by what it says, so that changing the period or
@@ -98,16 +105,31 @@ export function FigureBar({
                     // the digits where they stand, which reads as a glitch.
                     // Deliberately not a count-up: a balance climbing towards
                     // its value is marketing, not money.
+                    //
+                    // The same fade as anything else that arrives, which is
+                    // also how the figure comes in after a load: being keyed,
+                    // it is a new element then too.
                     key={figure.value}
                     className={cn(
-                      "animate-in text-lg font-medium tabular-nums duration-(--duration-fast) fade-in",
+                      "arrive text-lg font-medium tabular-nums",
                       figure.valueClassName,
                     )}
                   >
                     {figure.value}
                   </span>
                 )}
-                {!isLoading && figure.sub}
+                {figure.sub &&
+                  (gate.waiting ? (
+                    // The caller already knows whether a line sits under this
+                    // figure, even before its data is here, so its place is
+                    // held and the bar does not grow when the figure lands.
+                    <Skeleton className={cn("h-4 w-24", held)} />
+                  ) : (
+                    // Lands with the figure it qualifies. Still a column, so
+                    // the line inside keeps the width it had as the column's
+                    // own item.
+                    <div className="arrive flex flex-col">{figure.sub}</div>
+                  ))}
               </div>
             ))}
           </div>

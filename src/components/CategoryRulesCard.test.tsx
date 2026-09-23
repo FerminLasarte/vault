@@ -8,6 +8,7 @@ import type { AppActions, AppData, AppStatus } from "@/context/AppDataContext";
 // The provider's three halves, read here from one object.
 type AppContext = AppData & AppActions & AppStatus;
 import type { CategoryRuleWithCategory } from "@/db";
+import { drawnSkeletons } from "@/test/loading";
 
 const appData = vi.hoisted(() => ({ current: {} as AppContext }));
 vi.mock("@/hooks/useAppData", () => ({
@@ -38,9 +39,9 @@ describe("CategoryRulesCard", () => {
     const { container } = renderCard({ isLoading: true });
 
     expect(screen.queryByText(/Todavía no hay reglas/)).not.toBeInTheDocument();
-    // Nothing at all yet: a load this young is usually over before a
-    // placeholder could be read.
-    expect(container.querySelector('[data-slot="skeleton"]')).not.toBeInTheDocument();
+    // Nothing drawn yet: a load this young is usually over before a
+    // placeholder could be read. Its space is held, unseen.
+    expect(drawnSkeletons(container)).toHaveLength(0);
   });
 
   it("puts up the shape of the list once the load is taking a while", () => {
@@ -50,7 +51,7 @@ describe("CategoryRulesCard", () => {
 
       act(() => void vi.advanceTimersByTime(120));
 
-      expect(container.querySelector('[data-slot="skeleton"]')).toBeInTheDocument();
+      expect(drawnSkeletons(container).length).toBeGreaterThan(0);
       expect(screen.queryByText(/Todavía no hay reglas/)).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
