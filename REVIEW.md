@@ -237,6 +237,6 @@ Every dialog's X has `<span className="sr-only">Close</span>`, so VoiceOver read
 ## Suggested batches
 
 1. **Quick wins** (one small PR): M1, M9, L1, L2, L9, L10. **Done** on `fix/review-batch-1-quick-wins`. L2 took the second option: the empty paperclip is `text-muted-foreground` with no alpha, so rows with receipts still stand out.
-2. **Loading coherence**: M4, M5, L3, L4, L5. They all touch the `useSlowLoading` / `Loading` path and should share one fade and gate.
+2. **Loading coherence**: M4, M5, L3, L4, L5. They all touch the `useSlowLoading` / `Loading` path and should share one fade and gate. **Done** on `fix/review-batch-2-loading-coherence`. The gate is `useLoadingGate`, asked once per component and handed to each region through `LoadingSlot`; `Loading` is that for a single region. Before the placeholder is worth drawing it now holds its space unseen, everywhere and not only in the figures, so drawing it moves nothing. The fade is one `arrive` utility on `--duration-base`, which moves FigureBar's P-06 fade from 120 to 180 ms so the bar and the month cards land together. Content that was already there when a view opens is not faded. Added on request: the lines under the figures (FigureBar subs, month-card captions and progress bars) have placeholders too, so neither card grows when the data lands.
 3. **Motion budget**: M6, M7, M8, L6, L7, L8.
 4. **Navigation state**: M2 and M3. Both need a decision on where per-view state (page, filters, tab) lives, and M2's page jump depends on it.

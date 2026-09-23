@@ -10,8 +10,9 @@ import {
 import { tooltipContentStyle } from "@/components/charts/chartTooltip";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import type { CategoryBreakdownEntry } from "@/lib/finance";
-import { Loading } from "@/components/Loading";
+import { LoadingSlot } from "@/components/Loading";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useLoadingGate } from "@/hooks/useLoadingGate";
 
 interface CategoryBreakdownChartProps {
   data: CategoryBreakdownEntry[];
@@ -26,6 +27,9 @@ export function CategoryBreakdownChart({
 }: CategoryBreakdownChartProps) {
   const hasData = data.length > 0;
   const total = data.reduce((sum, entry) => sum + entry.total, 0);
+  // The total and the chart wait on the same load, so they are drawn and land
+  // together.
+  const gate = useLoadingGate(isLoading);
 
   return (
     <Card>
@@ -39,13 +43,21 @@ export function CategoryBreakdownChart({
         {/* The total belongs beside the title rather than buried under the
             chart: it is the figure the breakdown is a breakdown *of*. */}
         <CardAction>
-          <span className="font-heading text-xl font-semibold tabular-nums">
-            {isLoading || !hasData ? "—" : formatCurrency(total, currency)}
-          </span>
+          {/* A dash only for a period with nothing to add up. One that is
+              still arriving is a placeholder, like every late figure. */}
+          <LoadingSlot gate={gate} placeholder={<Skeleton className="my-1 h-5 w-28" />}>
+            <span className="font-heading text-xl font-semibold tabular-nums">
+              {hasData ? formatCurrency(total, currency) : "—"}
+            </span>
+          </LoadingSlot>
         </CardAction>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <Loading when={isLoading} placeholder={<Skeleton className="h-[220px]" />}>
+      <CardContent>
+        <LoadingSlot
+          gate={gate}
+          placeholder={<Skeleton className="h-[220px]" />}
+          className="flex flex-col gap-4"
+        >
           {!hasData ? (
             <p className="text-sm text-muted-foreground">
               No hay gastos registrados en este período.
@@ -109,7 +121,7 @@ export function CategoryBreakdownChart({
               </ul>
             </>
           )}
-        </Loading>
+        </LoadingSlot>
       </CardContent>
     </Card>
   );

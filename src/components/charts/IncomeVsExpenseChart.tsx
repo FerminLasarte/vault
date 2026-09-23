@@ -36,6 +36,10 @@ const EXPENSE_COLOR = "var(--negative)";
 
 const axisTick = { fontSize: 12, fill: "var(--muted-foreground)" };
 
+// Shared by the chart and the block that stands in for it, so the card does
+// not change height when one replaces the other.
+export const CHART_HEIGHT = 280;
+
 export function IncomeVsExpenseChart({
   data,
   currency,
@@ -58,13 +62,16 @@ export function IncomeVsExpenseChart({
         <CardTitle>Ingresos vs. gastos</CardTitle>
       </CardHeader>
       <CardContent>
-        <Loading when={isLoading} placeholder={<Skeleton className="h-[260px]" />}>
+        <Loading
+          when={isLoading}
+          placeholder={<Skeleton style={{ height: CHART_HEIGHT }} />}
+        >
           {!hasData ? (
             <p className="text-sm text-muted-foreground">
               No hay movimientos en los últimos meses.
             </p>
           ) : (
-            <ResponsiveContainer width="100%" height={280}>
+            <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
               <BarChart data={chartData} barGap={4}>
                 <CartesianGrid vertical={false} stroke="var(--border)" />
                 <XAxis
@@ -118,14 +125,16 @@ export function IncomeVsExpenseChart({
               </BarChart>
             </ResponsiveContainer>
           )}
-        </Loading>
 
-        {hasProjection && !isLoading && (
-          <p className="pt-2 text-xs text-muted-foreground">
-            Los meses claros son lo que ya está comprometido: cuotas, préstamos y
-            recurrentes.
-          </p>
-        )}
+          {/* Inside the wait, with the bars it explains: under a placeholder
+              there are none. */}
+          {hasProjection && (
+            <p className="pt-2 text-xs text-muted-foreground">
+              Los meses claros son lo que ya está comprometido: cuotas, préstamos y
+              recurrentes.
+            </p>
+          )}
+        </Loading>
       </CardContent>
     </Card>
   );

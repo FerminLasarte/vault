@@ -182,6 +182,19 @@
   background-color: var(--muted);
 }
 
+/* Something that was waited for, taking its place.
+
+   One fade for every region that loads — a list, a chart, a figure — so a
+   screen whose sections land at different moments still lands one way. It is
+   bringing something on screen, so it takes `--duration-base`, and it is
+   opacity alone: the placeholder before it already held the space, and
+   nothing should move now that the real thing is here. */
+@utility arrive {
+  @apply animate-in fade-in;
+  --tw-animation-duration: var(--duration-base);
+  --tw-ease: var(--ease-standard);
+}
+
 /* The controls that belong to one row of a list.
 
    A row is its data — what it is, and how much. The three or four buttons
