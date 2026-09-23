@@ -10,6 +10,9 @@ function aScrollingColumn() {
 
   return {
     scrollTop: 0,
+    // How far the content lets the column go. A browser clamps any position
+    // past it, and still reports the clamped one as a scroll.
+    maxTop: Infinity,
     addEventListener: (_type: string, listener: () => void) => listeners.add(listener),
     removeEventListener: (_type: string, listener: () => void) =>
       listeners.delete(listener),
@@ -17,7 +20,7 @@ function aScrollingColumn() {
     // pretend somebody scrolled. Both end in the same place: a new position
     // and a scroll event, which is how the browser behaves too.
     scrollTo({ top }: { top: number }) {
-      this.scrollTop = top;
+      this.scrollTop = Math.min(top, this.maxTop);
       listeners.forEach((listener) => listener());
     },
   };
@@ -70,5 +73,26 @@ describe("useRememberedScroll", () => {
     rerender({ current: "closes" });
 
     expect(column.scrollTop).toBe(0);
+  });
+
+  it("keeps a position the content was briefly too short for", () => {
+    // A view that comes back shorter than it was left (a row deleted
+    // elsewhere, a list still arriving) cannot be put back where it was, and
+    // the browser answers the restore with a scroll to wherever it could go.
+    // Taking that answer as the user's choice would lose the real position
+    // for good.
+    const column = aScrollingColumn();
+    const { rerender } = mount(column, "transactions");
+
+    column.scrollTo({ top: 820 });
+    rerender({ current: "settings" });
+    column.maxTop = 300;
+    rerender({ current: "transactions" });
+    expect(column.scrollTop).toBe(300);
+
+    column.maxTop = Infinity;
+    rerender({ current: "settings" });
+    rerender({ current: "transactions" });
+    expect(column.scrollTop).toBe(820);
   });
 });

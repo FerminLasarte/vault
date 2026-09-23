@@ -114,7 +114,6 @@ import type { RateType } from "@/lib/exchangeRate";
 import { todayIsoDate } from "@/lib/format";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useToday } from "@/hooks/useToday";
-import { useBriefly } from "@/hooks/useBriefly";
 import { collectPendingCommitments } from "@/lib/pendingCommitments";
 import type { PendingCommitments } from "@/lib/pendingCommitments";
 
@@ -217,19 +216,16 @@ export interface AppData {
 export interface AppStatus {
   isMutating: boolean;
   isRefreshingRate: boolean;
-  // The transaction written a moment ago, so the list can point at it. Null
-  // the rest of the time, which is almost always.
-  //
-  // It lives here because this is where the write happens: adding one is the
-  // only place that ever learns the new id, and a screen that had to be told
-  // it would mean every dialog carrying the answer back by hand.
-  justWrittenTransaction: number | null;
 }
 
 // Everything the app can do to its data. The same functions for the life of
 // the provider, so reading them never causes a render.
 export interface AppActions {
-  addTransaction: (transaction: NewTransaction, tags: string[]) => Promise<void>;
+  // Both leave the answer to whoever asked: the list shows where the row went,
+  // which only it can know (see TransactionsView), and says so in the same
+  // toast. Resolved once the list has been read back, so the row is there to
+  // be found; adding resolves with the id the database gave it.
+  addTransaction: (transaction: NewTransaction, tags: string[]) => Promise<number>;
   editTransaction: (
     id: number,
     transaction: NewTransaction,
@@ -368,10 +364,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
   const [isRefreshingRate, setIsRefreshingRate] = useState(false);
-  // Long enough to find the row on a screen the user is only now looking at,
-  // short enough to be gone before it turns into decoration.
-  const { current: justWrittenTransaction, remember: noteWrittenTransaction } =
-    useBriefly<number>(1200);
   // The type in force right now, readable from inside a fetch that started
   // under a previous one (see refreshExchangeRate). State alone cannot do that:
   // a callback only ever sees the render it was created in.
@@ -644,11 +636,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   // A step that hands back how to take it back gets a "Deshacer" in its toast,
   // when asked to offer one: undo instead of a confirmation in front of every
   // "Registrar" and "Descartar".
+  //
+  // No success message means the caller answers success itself, once this has
+  // resolved and the reload is done.
   const runMutation = useCallback(
     async function run(
       mutation: () => Promise<Undo | null | void>,
       touches: readonly Domain[],
-      successMessage: string,
+      successMessage: string | null,
       errorMessage: string,
       { offerUndo = false }: { offerUndo?: boolean } = {},
     ): Promise<void> {
@@ -673,7 +668,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           throw new ReportedError(error);
         }
 
-        if (offerUndo && typeof undo === "function") {
+        if (successMessage !== null && offerUndo && typeof undo === "function") {
           const takeBack = undo;
           undoToast.current = toast.success(successMessage, {
             duration: UNDO_TOAST_DURATION,
@@ -689,7 +684,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
               },
             },
           });
-        } else {
+        } else if (successMessage !== null) {
           toast.success(successMessage);
         }
 
@@ -759,9 +754,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     () => ({
       isMutating,
       isRefreshingRate,
-      justWrittenTransaction,
     }),
-    [isMutating, isRefreshingRate, justWrittenTransaction],
+    [isMutating, isRefreshingRate],
   );
 
   // Built from callbacks that never change, so this object never does either.
@@ -775,27 +769,25 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       markCloseSeen,
       setNotificationsEnabled,
 
-      addTransaction: (transaction, transactionTags) =>
-        runMutation(
+      addTransaction: async (transaction, transactionTags) => {
+        // Only ever read once the write went through: a failed one throws
+        // out of runMutation before this line is reached.
+        let id = 0;
+        await runMutation(
           async () => {
-            // The one place the new id exists. Noted here so the table can
-            // say which of its rows is the one that was just added.
-            noteWrittenTransaction(
-              await insertTransactionWithTags(transaction, transactionTags),
-            );
+            id = await insertTransactionWithTags(transaction, transactionTags);
           },
           ["transactions"],
-          "Transacción agregada",
+          null,
           "No se pudo agregar la transacción",
-        ),
+        );
+        return id;
+      },
       editTransaction: (id, transaction, transactionTags) =>
         runMutation(
-          async () => {
-            await updateTransactionWithTags(id, transaction, transactionTags);
-            noteWrittenTransaction(id);
-          },
+          () => updateTransactionWithTags(id, transaction, transactionTags),
           ["transactions"],
-          "Transacción actualizada",
+          null,
           "No se pudo actualizar la transacción",
         ),
       removeTransaction: (id) =>
@@ -1117,9 +1109,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       refreshExchangeRate,
       saveManualExchangeRate,
       backfillExchangeRates,
-      // Stable for the life of the provider, like everything else here, so
-      // naming it does not cost this object its identity.
-      noteWrittenTransaction,
       recordBackup,
       markCloseSeen,
       setNotificationsEnabled,

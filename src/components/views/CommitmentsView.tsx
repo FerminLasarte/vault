@@ -35,6 +35,7 @@ import type { InstallmentPlanWithNames, NewInstallmentPlan } from "@/db";
 
 export function CommitmentsView({ tab }: ViewProps) {
   const [current, setCurrent] = useRequestedTab<CommitmentTab>(
+    "commitments.tab",
     tab,
     COMMITMENT_TABS,
     DEFAULT_COMMITMENT_TAB,

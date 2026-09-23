@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   ChevronLeft,
@@ -9,6 +9,7 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ActionButton } from "@/components/ActionButton";
@@ -38,7 +39,14 @@ import { DateRangePicker } from "@/components/DateRangePicker";
 import { TransactionDialog } from "@/components/TransactionDialog";
 import { AttachmentsDialog } from "@/components/AttachmentsDialog";
 import { useAppActions, useAppData, useAppStatus } from "@/hooks/useAppData";
-import { applyTransactionFilters, EMPTY_DATE_RANGE, filterByTag } from "@/lib/finance";
+import { useBriefly } from "@/hooks/useBriefly";
+import { useViewState } from "@/hooks/useViewState";
+import {
+  applyTransactionFilters,
+  EMPTY_DATE_RANGE,
+  filterByTag,
+  type DateRange,
+} from "@/lib/finance";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { splitTagNames } from "@/lib/text";
 import { TRANSACTION_TYPE_LABELS } from "@/lib/labels";
@@ -56,6 +64,35 @@ const PAGE_SIZE = 50;
 // Sentinel for "no tag filter": the Select needs a concrete value, and a tag
 // can never be an empty string.
 const ALL_TAGS = "__all__";
+
+// What the filter bar narrows the table by. The currency is kept apart: there
+// is always one, so it is not something "Limpiar filtros" can clear.
+interface Filters {
+  search: string;
+  tag: string | null;
+  categoryId: number | null;
+  dateRange: DateRange;
+  // As typed, so a half-written bound stays in the box.
+  minAmount: string;
+  maxAmount: string;
+}
+
+const NO_FILTERS: Filters = {
+  search: "",
+  tag: null,
+  categoryId: null,
+  dateRange: EMPTY_DATE_RANGE,
+  minAmount: "",
+  maxAmount: "",
+};
+
+// A row that was just saved, while the table brings it on screen. It is looked
+// for once the list holds it, and is then either shown, on whichever page it
+// landed, or hidden by the filters, which the toast that announces it says.
+// `message` is that toast, and is null once it has been shown.
+type Arrival =
+  | { id: number; message: string | null; status: "seeking" | "shown" }
+  | { id: number; message: string | null; status: "hidden"; currency: string };
 
 // An empty amount input should mean "no bound", not zero.
 function parseAmountBound(value: string): number | null {
@@ -96,17 +133,18 @@ function TransferAmount({ transaction }: { transaction: TransactionWithCategory 
 export function TransactionsView({ request, onRequestHandled }: ViewProps) {
   const { transactions, categories, categoryRules, tags, paymentMethods, isLoading } =
     useAppData();
-  const { isMutating, justWrittenTransaction } = useAppStatus();
+  const { isMutating } = useAppStatus();
   const { addTransaction, editTransaction, removeTransaction } = useAppActions();
 
-  const [currency, setCurrency] = useState(DEFAULT_CURRENCY);
-  const [categoryId, setCategoryId] = useState<number | null>(null);
-  const [dateRange, setDateRange] = useState(EMPTY_DATE_RANGE);
-  const [search, setSearch] = useState("");
-  const [tag, setTag] = useState<string | null>(null);
-  const [page, setPage] = useState(0);
-  const [minAmount, setMinAmount] = useState("");
-  const [maxAmount, setMaxAmount] = useState("");
+  // Remembered, so coming back from another screen finds the same rows.
+  const [currency, setCurrency] = useViewState("transactions.currency", DEFAULT_CURRENCY);
+  const [filters, setFilters] = useViewState("transactions.filters", NO_FILTERS);
+  const [page, setPage] = useViewState("transactions.page", 0);
+  const { search, tag, categoryId, dateRange, minAmount, maxAmount } = filters;
+  const [arrival, setArrival] = useState<Arrival | null>(null);
+  // Long enough to find the row on a screen the user is only now looking at,
+  // short enough to be gone before it turns into decoration.
+  const { current: justWritten, remember: markWritten } = useBriefly<number>(1200);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editing, setEditing] = useState<TransactionWithCategory | null>(null);
   const [pendingDeletion, setPendingDeletion] = useState<TransactionWithCategory | null>(
@@ -114,19 +152,24 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
   );
   const [attaching, setAttaching] = useState<TransactionWithCategory | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const tableBody = useRef<HTMLTableSectionElement>(null);
+
+  function setFilter<K extends keyof Filters>(key: K, value: Filters[K]) {
+    setFilters((current) => ({ ...current, [key]: value }));
+  }
 
   const filtered = useMemo(() => {
     const matching = applyTransactionFilters(transactions, {
       currency,
-      search,
-      categoryId,
-      dateFrom: dateRange.from,
-      dateTo: dateRange.to,
-      minAmount: parseAmountBound(minAmount),
-      maxAmount: parseAmountBound(maxAmount),
+      search: filters.search,
+      categoryId: filters.categoryId,
+      dateFrom: filters.dateRange.from,
+      dateTo: filters.dateRange.to,
+      minAmount: parseAmountBound(filters.minAmount),
+      maxAmount: parseAmountBound(filters.maxAmount),
     });
-    return tag === null ? matching : filterByTag(matching, tag);
-  }, [transactions, currency, search, tag, categoryId, dateRange, minAmount, maxAmount]);
+    return filters.tag === null ? matching : filterByTag(matching, filters.tag);
+  }, [transactions, currency, filters]);
 
   // Any change to the filters starts the listing over at the first page.
   //
@@ -134,19 +177,32 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
   // browser has already painted, so the user would see one frame of page 7 of
   // the old results before it snapped back. Re-rendering from here happens
   // before anything is committed, so nothing flickers.
-  const filterSignature = JSON.stringify([
-    currency,
-    search,
-    tag,
-    categoryId,
-    dateRange,
-    minAmount,
-    maxAmount,
-  ]);
+  const filterSignature = JSON.stringify([currency, filters]);
   const [lastFilterSignature, setLastFilterSignature] = useState(filterSignature);
   if (filterSignature !== lastFilterSignature) {
     setLastFilterSignature(filterSignature);
     setPage(0);
+  }
+
+  // A row just saved goes to the page it landed on. After the filters above,
+  // so that clearing them on the toast's request ends up here rather than on
+  // the first page.
+  if (arrival?.status === "seeking") {
+    const index = filtered.findIndex((transaction) => transaction.id === arrival.id);
+    const written =
+      index === -1
+        ? transactions.find((transaction) => transaction.id === arrival.id)
+        : undefined;
+
+    if (written !== undefined) {
+      setArrival({ ...arrival, status: "hidden", currency: written.currency });
+    } else {
+      // Also where a row the list could not be read back lands: it was
+      // written, the failed reload has said so already, and there is nothing
+      // to go to.
+      if (index !== -1) setPage(Math.floor(index / PAGE_SIZE));
+      setArrival({ ...arrival, status: "shown" });
+    }
   }
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -189,16 +245,57 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
     setIsFormOpen(true);
   }
 
+  // Saving answers "where did it go": the table sorts by date, so the row can
+  // land on any page, and the filters can leave it out altogether. The action
+  // resolves once the list holds the row, so it is there to be looked for.
   async function handleSubmitTransaction(
     values: Parameters<typeof addTransaction>[0],
     transactionTags: string[],
   ) {
+    let arrived: Arrival;
     if (editing) {
       await editTransaction(editing.id, values, transactionTags);
+      arrived = { id: editing.id, message: "Transacción actualizada", status: "seeking" };
     } else {
-      await addTransaction(values, transactionTags);
+      const id = await addTransaction(values, transactionTags);
+      arrived = { id, message: "Transacción agregada", status: "seeking" };
     }
+    markWritten(arrived.id);
+    setArrival(arrived);
   }
+
+  // After the page holding the row has been drawn and before it is painted, so
+  // the table is never seen at the old position first.
+  useLayoutEffect(() => {
+    if (arrival === null || arrival.status === "seeking") return;
+
+    if (arrival.status === "shown") {
+      tableBody.current
+        ?.querySelector(`[data-transaction-id="${arrival.id}"]`)
+        ?.scrollIntoView({ block: "nearest" });
+    }
+
+    if (arrival.message === null) return;
+
+    toast.success(
+      arrival.message,
+      arrival.status === "hidden"
+        ? {
+            description: "Los filtros activos la ocultan.",
+            action: {
+              label: "Limpiar filtros",
+              // And the row's currency, which hides it just the same.
+              onClick: () => {
+                setFilters(NO_FILTERS);
+                setCurrency(arrival.currency);
+                markWritten(arrival.id);
+                setArrival({ id: arrival.id, message: null, status: "seeking" });
+              },
+            },
+          }
+        : undefined,
+    );
+  }, [arrival, setFilters, setCurrency, markWritten]);
 
   async function handleConfirmDelete() {
     if (!pendingDeletion) return;
@@ -207,12 +304,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
   }
 
   function resetFilters() {
-    setSearch("");
-    setTag(null);
-    setCategoryId(null);
-    setDateRange(EMPTY_DATE_RANGE);
-    setMinAmount("");
-    setMaxAmount("");
+    setFilters(NO_FILTERS);
   }
 
   const hasActiveFilters =
@@ -264,7 +356,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
                 placeholder="Descripción..."
                 className="pl-8"
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={(event) => setFilter("search", event.target.value)}
               />
             </div>
           </div>
@@ -275,7 +367,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
               id="transactions-category"
               categories={categories}
               value={categoryId}
-              onChange={setCategoryId}
+              onChange={(value) => setFilter("categoryId", value)}
               className="w-full"
             />
           </div>
@@ -290,7 +382,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
                 }}
                 value={tag ?? ALL_TAGS}
                 onValueChange={(value) =>
-                  setTag(String(value) === ALL_TAGS ? null : String(value))
+                  setFilter("tag", String(value) === ALL_TAGS ? null : String(value))
                 }
               >
                 <SelectTrigger id="transactions-tag" className="w-full">
@@ -313,7 +405,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
             <DateRangePicker
               id="transactions-dates"
               value={dateRange}
-              onChange={setDateRange}
+              onChange={(value) => setFilter("dateRange", value)}
             />
           </div>
 
@@ -327,7 +419,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
               placeholder="Sin mínimo"
               className="w-32"
               value={minAmount}
-              onChange={(event) => setMinAmount(event.target.value)}
+              onChange={(event) => setFilter("minAmount", event.target.value)}
             />
           </div>
 
@@ -341,7 +433,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
               placeholder="Sin máximo"
               className="w-32"
               value={maxAmount}
-              onChange={(event) => setMaxAmount(event.target.value)}
+              onChange={(event) => setFilter("maxAmount", event.target.value)}
             />
           </div>
 
@@ -380,12 +472,17 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
                         </TableHead>
                       </TableRow>
                     </TableHeader>
-                    <TableBody>
+                    <TableBody ref={tableBody}>
                       {visible.map((transaction) => (
                         <TableRow
                           key={transaction.id}
+                          data-transaction-id={transaction.id}
+                          // Room above and below when a saved row is brought
+                          // into view, so it does not land under the toast
+                          // that announces it.
                           className={cn(
-                            transaction.id === justWrittenTransaction && "just-written",
+                            "scroll-my-24",
+                            transaction.id === justWritten && "just-written",
                           )}
                         >
                           <TableCell className="whitespace-nowrap text-muted-foreground">

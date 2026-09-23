@@ -27,6 +27,7 @@ const GROUPS: { type: CategoryType; title: string }[] = [
 
 export function CategoriesView({ tab }: ViewProps) {
   const [current, setCurrent] = useRequestedTab<CategoryTab>(
+    "categories.tab",
     tab,
     CATEGORY_TABS,
     DEFAULT_CATEGORY_TAB,
