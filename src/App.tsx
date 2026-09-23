@@ -13,6 +13,7 @@ import { ClosesView } from "@/components/views/ClosesView";
 import { SettingsView } from "@/components/views/SettingsView";
 import { Toaster } from "@/components/ui/sonner";
 import { AppDataProvider } from "@/context/AppDataContext";
+import { ViewStateProvider } from "@/context/ViewStateContext";
 import { UpdaterProvider } from "@/context/UpdaterContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -111,10 +112,14 @@ function App() {
         <TooltipProvider delay={350}>
           <UpdaterProvider>
             <AppDataProvider>
-              <div className="flex h-screen bg-background text-foreground">
-                <SidebarWithBadges currentView={view} onNavigate={setView} />
-                <main ref={column} className="min-w-0 flex-1 overflow-auto p-4 sm:p-8">
-                  {/* Fills this column's top padding, which is the strip along
+              {/* Outside the view's error boundary, whose fallback unmounts
+                  the view: what each view was showing has to outlive that, as
+                  it outlives moving between them. */}
+              <ViewStateProvider>
+                <div className="flex h-screen bg-background text-foreground">
+                  <SidebarWithBadges currentView={view} onNavigate={setView} />
+                  <main ref={column} className="min-w-0 flex-1 overflow-auto p-4 sm:p-8">
+                    {/* Fills this column's top padding, which is the strip along
                     the window's top edge that the sidebar header and the page
                     header between them leave uncovered — and the first place a
                     hand reaches to move a window. The negative margin cancels
@@ -124,25 +129,26 @@ function App() {
                     It scrolls away with the content instead of floating above
                     it, which is the point: a fixed strip would keep taking
                     clicks meant for whatever had scrolled underneath it. */}
-                  <div
-                    aria-hidden
-                    data-tauri-drag-region
-                    className="-mt-4 h-4 sm:-mt-8 sm:h-8"
-                  />
-                  <ErrorBoundary
-                    resetKey={view}
-                    fallback={(error, retry) => (
-                      <ViewErrorFallback error={error} retry={retry} />
-                    )}
-                  >
-                    <CurrentView
-                      request={request}
-                      tab={tab}
-                      onRequestHandled={markHandled}
+                    <div
+                      aria-hidden
+                      data-tauri-drag-region
+                      className="-mt-4 h-4 sm:-mt-8 sm:h-8"
                     />
-                  </ErrorBoundary>
-                </main>
-              </div>
+                    <ErrorBoundary
+                      resetKey={view}
+                      fallback={(error, retry) => (
+                        <ViewErrorFallback error={error} retry={retry} />
+                      )}
+                    >
+                      <CurrentView
+                        request={request}
+                        tab={tab}
+                        onRequestHandled={markHandled}
+                      />
+                    </ErrorBoundary>
+                  </main>
+                </div>
+              </ViewStateProvider>
               <UpdatePrompt />
               <DonationPrompt />
               <Toaster position="bottom-right" />

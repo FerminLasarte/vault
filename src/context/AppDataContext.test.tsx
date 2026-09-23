@@ -619,50 +619,46 @@ describe("changing the dollar type", () => {
 });
 
 // Adding a movement drops the user back into a table of hundreds, sorted by a
-// date that is rarely today, with nothing saying where the row they just typed
-// ended up. The provider is the only place that learns the new id, so it is
-// the one that can answer.
-//
-// How long it is remembered for is `useBriefly`'s business and is tested
-// there; what matters here is that the right id arrives at all.
-describe("the transaction just written", () => {
-  it("is named after it is added, with the id the database gave it", async () => {
+// date that is rarely today. Only the table knows where the row went — which
+// page, or whether its filters hide it — so the provider hands it what it
+// needs to say so and leaves the saying to it.
+describe("writing a transaction", () => {
+  it("resolves with the id the database gave it, once the list holds it", async () => {
     const data = await mount();
+    const written = { id: 42, description: "Veterinario" };
     vi.mocked(db.insertTransactionWithTags).mockResolvedValueOnce(42);
+    vi.mocked(db.listTransactionsWithCategory).mockResolvedValueOnce([
+      written,
+    ] as unknown as Awaited<ReturnType<typeof db.listTransactionsWithCategory>>);
+
+    let id: number | undefined;
+    await act(async () => {
+      id = await data.current.addTransaction(aTransaction, []);
+    });
+
+    expect(id).toBe(42);
+    expect(data.current.transactions).toEqual([written]);
+  });
+
+  it("leaves the success message to the list", async () => {
+    const data = await mount();
 
     await act(async () => {
       await data.current.addTransaction(aTransaction, []);
-    });
-
-    expect(data.current.justWrittenTransaction).toBe(42);
-  });
-
-  it("is named after it is edited too, which is the same question", async () => {
-    const data = await mount();
-
-    await act(async () => {
       await data.current.editTransaction(7, aTransaction, []);
     });
 
-    expect(data.current.justWrittenTransaction).toBe(7);
+    expect(toast.success).not.toHaveBeenCalled();
   });
 
-  it("is nobody until something is written", async () => {
-    const data = await mount();
-
-    expect(data.current.justWrittenTransaction).toBeNull();
-  });
-
-  it("stays unnamed when the write failed", async () => {
-    // Pointing at a row that was never written is worse than pointing at
-    // nothing.
+  it("still says so itself when the write failed", async () => {
     const data = await mount();
     vi.mocked(db.insertTransactionWithTags).mockRejectedValueOnce(new Error("nope"));
 
     await act(async () => {
-      await data.current.addTransaction(aTransaction, []).catch(() => {});
+      await expect(data.current.addTransaction(aTransaction, [])).rejects.toThrow();
     });
 
-    expect(data.current.justWrittenTransaction).toBeNull();
+    expect(toast.error).toHaveBeenCalledWith("No se pudo agregar la transacción");
   });
 });

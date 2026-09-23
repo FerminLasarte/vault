@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,7 @@ import { Printer } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMenuRequest } from "@/hooks/useMenuRequest";
 import { useRequestedTab } from "@/hooks/useRequestedTab";
+import { useViewState } from "@/hooks/useViewState";
 import { DEFAULT_STATISTICS_TAB, STATISTICS_TABS } from "@/lib/navigation";
 import type { StatisticsTab } from "@/lib/navigation";
 import {
@@ -90,6 +91,7 @@ const CUSTOM_PERIOD_LABEL = "Personalizado";
 
 export function StatisticsView({ request, tab, onRequestHandled }: ViewProps) {
   const [currentTab, setCurrentTab] = useRequestedTab<StatisticsTab>(
+    "statistics.tab",
     tab,
     STATISTICS_TABS,
     DEFAULT_STATISTICS_TAB,
@@ -117,12 +119,17 @@ export function StatisticsView({ request, tab, onRequestHandled }: ViewProps) {
 
   const { markCloseSeen } = useAppActions();
 
-  const [currency, setCurrency] = useState(DEFAULT_CURRENCY);
-  const [categoryId, setCategoryId] = useState<number | null>(null);
+  const [currency, setCurrency] = useViewState("statistics.currency", DEFAULT_CURRENCY);
+  const [categoryId, setCategoryId] = useViewState<number | null>(
+    "statistics.categoryId",
+    null,
+  );
   // The analysis opens on a real period rather than on the whole history. Held
   // as the choice rather than as its dates, so "Últimos 12 meses" follows
   // today (see periodRange).
-  const [period, setPeriod] = useState<StatisticsPeriod>({ kind: "recent" });
+  const [period, setPeriod] = useViewState<StatisticsPeriod>("statistics.period", {
+    kind: "recent",
+  });
   const dateRange = useMemo(() => periodRange(period, today), [period, today]);
   // Every figure below that depends on the date reads this rather than the
   // clock, so it moves on at midnight with the rest.
