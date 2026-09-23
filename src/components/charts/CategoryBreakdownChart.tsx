@@ -7,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { chartAnimation } from "@/components/charts/chartMotion";
 import { tooltipContentStyle } from "@/components/charts/chartTooltip";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import type { CategoryBreakdownEntry } from "@/lib/finance";
@@ -75,6 +76,7 @@ export function CategoryBreakdownChart({
                     paddingAngle={2}
                     stroke="var(--card)"
                     strokeWidth={2}
+                    {...chartAnimation}
                   >
                     {data.map((entry) => (
                       <Cell key={entry.categoryId ?? entry.name} fill={entry.color} />
@@ -86,6 +88,7 @@ export function CategoryBreakdownChart({
                       String(name),
                     ]}
                     contentStyle={tooltipContentStyle}
+                    {...chartAnimation}
                   />
                 </PieChart>
               </ResponsiveContainer>
