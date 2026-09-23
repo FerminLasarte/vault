@@ -4,7 +4,7 @@ version = "1.4.0"
 description = "Local-first personal finance manager"
 authors = ["Fermín Lasarte <fermin.lasarte@icloud.com>"]
 license = "MIT"
-repository = "https://github.com/FerminLasarte/vault-ai"
+repository = "https://github.com/FerminLasarte/vault"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

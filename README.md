@@ -1,6 +1,93 @@
-# Vault
+# Vault: finanzas personales local-first
 
-Local-first desktop app for personal finance management, built with a Tauri (Rust) backend and a React + TypeScript frontend. All data is stored locally in SQLite — no backend server required.
+A desktop app for personal finances, built for how money works in Argentina:
+pesos and dollars side by side, purchases in _cuotas_, loans, and the MEP rate
+of the day. Everything lives in a SQLite file on your own computer — no
+account, no server, no subscription.
+
+**[Download for macOS or Windows →](https://github.com/FerminLasarte/vault/releases/latest)**
+
+![Adding an expense: the category fills itself in from a rule, and the new row is highlighted in the table](docs/images/demo.gif)
+
+The interface is in Spanish (Argentina). Every figure in these images is made up.
+
+## Features
+
+- **Pesos and dollars together.** Every account has a currency; balances, net
+  worth and reports convert at the day's MEP rate, fetched automatically and
+  editable by hand. Buying dollars is a transfer with the amount on each side.
+- **Statistics.** This month against the last one, spending by category and
+  against budget, income against expenses, and what the coming months already
+  have committed.
+- **Commitments.** Recurring movements, purchases in instalments (with the
+  surcharge over the cash price), loans in either direction with or without
+  interest, and expected one-off movements. Nothing is recorded until you
+  confirm it.
+- **Budgets and savings goals,** with the pace you are saving at and the date
+  you would reach each goal.
+- **Monthly close.** A summary of each finished month against the previous one
+  and the same month a year earlier, exportable to PDF.
+- **Import and export.** Bank statements in CSV or XLSX with a column mapping
+  that is remembered per bank, CSV export, and rules that assign the category
+  from the description.
+- **Attachments, tags, search and filters** on every transaction.
+- **Backups** to any folder, with a reminder when the last one is old.
+- **Updates itself** from the signed packages on this repository's releases.
+
+## Screenshots
+
+|                                               |                                              |
+| --------------------------------------------- | -------------------------------------------- |
+| ![Monthly overview](docs/images/overview.png) | ![Analysis](docs/images/analysis.png)        |
+| ![Transactions](docs/images/transactions.png) | ![Accounts](docs/images/accounts.png)        |
+| ![Loans](docs/images/loans.png)               | ![Instalments](docs/images/installments.png) |
+
+## Installing
+
+Download the file for your system from the
+[latest release](https://github.com/FerminLasarte/vault/releases/latest):
+
+| System                        | File                            |
+| ----------------------------- | ------------------------------- |
+| macOS (Apple Silicon & Intel) | `Vault_<version>_universal.dmg` |
+| Windows                       | `Vault_<version>_x64-setup.exe` |
+
+The installers are not signed with an Apple or Microsoft developer
+certificate, so the system warns the first time:
+
+- **macOS:** open the app once, then go to _System Settings › Privacy &
+  Security_ and choose _Open Anyway_.
+- **Windows:** on the SmartScreen notice, choose _More info › Run anyway_.
+
+After that the app keeps itself up to date: every copy checks this repository
+for a new version, and only installs updates signed with the project's key.
+
+## Privacy
+
+Your finances never leave your computer. The app makes exactly two kinds of
+network request: dollar rates — today's from [DolarApi](https://dolarapi.com)
+and past ones from [ArgentinaDatos](https://argentinadatos.com) — and the
+update check against this repository's releases. Neither sends anything about
+you. There is no analytics, telemetry or account of any kind. The database is a
+plain SQLite file whose location is shown in _Ajustes_; back it up, move it, or
+open it with any SQLite tool.
+
+## How it was built
+
+Vault is designed and directed by [Fermín Lasarte](https://github.com/FerminLasarte)
+and written together with [Claude Code](https://claude.com/claude-code), an AI
+coding agent — the co-authored commits in the history are that collaboration.
+What keeps the result trustworthy is the process around it rather than who
+typed each line:
+
+- Domain logic (balances, instalments, loans, projections, reports) is pure
+  TypeScript in `src/lib`, tested on its own, with the UI only composing it.
+- Every logic bug gets a failing test before its fix.
+- Continuous integration runs type checking, lint, formatting and the test
+  suite on the frontend, and `cargo fmt` and `clippy` on the Rust side.
+- The app went through documented review passes — [`AUDIT.md`](AUDIT.md),
+  [`POLISH.md`](POLISH.md) and [`REVIEW.md`](REVIEW.md) — each finding tracked
+  to the pull request that fixed it.
 
 ## Tech stack
 
