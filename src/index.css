@@ -207,32 +207,18 @@
    it sits at the top level, where the print rules below already are.
 
    A disabled control is left alone: it already carries its own half opacity,
-   and quietening it twice would leave it unreadable. */
+   and quietening it twice would leave it unreadable.
+
+   No transition here. The button's own `transition-all` already fades the
+   opacity on the app's speed, and being unlayered, a `transition` written here
+   would replace it outright and leave its hover and focus to snap. */
 .row-actions :is(button, [role="button"]):not(:disabled) {
   opacity: 0.55;
-  transition: opacity var(--duration-fast) var(--ease-standard);
 }
 
 :is(li, tr):hover .row-actions :is(button, [role="button"]):not(:disabled),
 .row-actions:focus-within :is(button, [role="button"]):not(:disabled) {
   opacity: 1;
-}
-
-/* The row that was just written.
-
-   Somebody adds a movement and lands back in a table of hundreds, sorted by a
-   date that is rarely today. Nothing on that screen says where the thing they
-   just typed ended up, and the answer is usually several rows down.
-
-   So it holds a tint for a second or so and then goes quiet. The fade out is
-   the row's own `transition-colors`, the same one its hover uses, because a
-   row should not have two speeds.
-
-   Not a flash and not an animation: a tint that is simply there and then is
-   not survives `prefers-reduced-motion`, where an animation would be cut to
-   nothing and take the only answer to "where did it go" with it. */
-@utility just-written {
-  background-color: var(--muted);
 }
 
 /* Motion is a preference the system already knows about, and an app that

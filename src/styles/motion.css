@@ -41,6 +41,10 @@
     transition-duration: var(--duration-fast);
     transition-timing-function: var(--ease-standard);
     transform-box: view-box;
+    /* A browser clips an svg to its view box, and lucide leaves only half a
+       stroke of room inside it. A lid that tips or a roof that lifts goes past
+       that edge, and clipped it loses its outline there. */
+    overflow: visible;
   }
 
   /* A part travels further, and through more of an arc, than the icon around

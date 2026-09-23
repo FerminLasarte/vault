@@ -77,6 +77,17 @@ describe("icon motion", () => {
     expect(shapes).toMatchSnapshot();
   });
 
+  // A browser clips an inline svg to its view box, and lucide leaves a single
+  // unit of margin inside it — exactly half a stroke. A part that moves any
+  // further than that is cut off at the edge: measured in Chromium, the handle
+  // of the bin, the roof of the bank and the hooks of both calendars all lose
+  // their outer edge on hover. The movement is the design, so the clipping goes.
+  it("does not clip a part that moves past the edge of its icon", () => {
+    const iconRule = MOTION_CSS.match(/@utility icon-motion \{\s*& svg \{([^}]*)\}/);
+
+    expect(iconRule?.[1]).toMatch(/overflow:\s*visible/);
+  });
+
   it("names every icon by a class lucide actually renders", () => {
     for (const icon of RULED) {
       expect([...renderIcon(icon).classList]).toContain(`lucide-${icon}`);

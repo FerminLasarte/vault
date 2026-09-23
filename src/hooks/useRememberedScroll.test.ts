@@ -33,6 +33,10 @@ function mount(column: ReturnType<typeof aScrollingColumn>, view: string) {
 
 describe("useRememberedScroll", () => {
   it("puts a view back where it was left", () => {
+    // The restore scrolls the column, which tells the listener the position
+    // changed. Reading the view from a ref that is set first is what keeps
+    // that from overwriting where the old view was — get it wrong and the
+    // last line here reads 0.
     const column = aScrollingColumn();
     const { rerender } = mount(column, "transactions");
 
@@ -66,19 +70,5 @@ describe("useRememberedScroll", () => {
     rerender({ current: "closes" });
 
     expect(column.scrollTop).toBe(0);
-  });
-
-  it("does not file the position it restores against the view being left", () => {
-    // The restore scrolls the column, which tells the listener the position
-    // changed. Reading the view from a ref that is set first is what keeps
-    // that from overwriting where the old view was.
-    const column = aScrollingColumn();
-    const { rerender } = mount(column, "transactions");
-
-    column.scrollTo({ top: 820 });
-    rerender({ current: "settings" });
-    rerender({ current: "transactions" });
-
-    expect(column.scrollTop).toBe(820);
   });
 });

@@ -471,7 +471,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
                                 }
                                 className={cn(
                                   transaction.attachment_count === 0 &&
-                                    "text-muted-foreground/50",
+                                    "text-muted-foreground",
                                 )}
                                 onClick={() => setAttaching(transaction)}
                               >
