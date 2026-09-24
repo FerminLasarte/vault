@@ -31,8 +31,6 @@ That Spanish is **Argentine**, the audience the app is built for:
 
 ## Code quality
 
-Every change prioritizes **good programming practices, modular code and efficient code**:
-
 - Keep domain logic pure and in `src/lib`, with its own tests. Components compose it, `src/db` only persists, and Rust does only what the webview cannot.
 - One concern per module. Reuse existing helpers, hooks and shadcn/ui primitives before adding new ones, and never duplicate a rule across screens.
 - Derive rather than store what can be computed, memoize work that walks rows, and avoid repeated passes or rebuilding formatters on every render.
