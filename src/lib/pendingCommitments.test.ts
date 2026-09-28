@@ -95,7 +95,7 @@ const everyKind = {
 };
 
 describe("collectPendingCommitments", () => {
-  // Worked out once, for the sidebar badge, the notice on Estadísticas, the
+  // Worked out once, for the sidebar badge, the notice on Resumen, the
   // notifications and each section alike: computed apart, with a "today" read
   // at different moments, they could disagree about what is waiting.
   it("collects every kind of commitment as of the same day", () => {

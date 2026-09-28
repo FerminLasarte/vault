@@ -6,7 +6,7 @@
 // space — so a menu entry has to be able to name a tab, not just a view.
 
 export type View =
-  | "statistics"
+  | "overview"
   | "transactions"
   | "commitments"
   | "categories"
@@ -31,21 +31,26 @@ export type CommitmentTab = (typeof COMMITMENT_TABS)[number];
 export const CATEGORY_TABS = ["categories", "budgets"] as const;
 export type CategoryTab = (typeof CATEGORY_TABS)[number];
 
-// The summary answers "how am I doing"; the analysis answers "what happened
+// The general tab answers "how am I doing"; the analysis answers "what happened
 // over this period". They were one screen and it read as a wall.
-export const STATISTICS_TABS = ["summary", "analysis"] as const;
-export type StatisticsTab = (typeof STATISTICS_TABS)[number];
+//
+// The section is labelled Resumen, so the first tab cannot be: it is General.
+// The id is `overview` rather than `summary` because a summary already means
+// something else in this code — the income and expenses of a period
+// (`calculateSummary`, `SummaryBar`), which is what the analysis tab shows.
+export const OVERVIEW_TABS = ["general", "analysis"] as const;
+export type OverviewTab = (typeof OVERVIEW_TABS)[number];
 
 // What the sidebar opens when the section itself is picked: the tab the user
 // is most likely to have come for.
 export const DEFAULT_COMMITMENT_TAB: CommitmentTab = "recurring";
 export const DEFAULT_CATEGORY_TAB: CategoryTab = "categories";
-export const DEFAULT_STATISTICS_TAB: StatisticsTab = "summary";
+export const DEFAULT_OVERVIEW_TAB: OverviewTab = "general";
 
 export interface Destination {
   view: View;
   // Absent when the view has no tabs, or when whichever tab is showing is fine.
-  tab?: CommitmentTab | CategoryTab | StatisticsTab;
+  tab?: CommitmentTab | CategoryTab | OverviewTab;
 }
 
 // The ids the native menu emits, mirrored from src-tauri/src/menu.rs: the seven
@@ -57,7 +62,7 @@ export interface Destination {
 // the tab entries that are specific, because being specific is the only reason
 // they exist.
 export const MENU_VIEW_IDS = [
-  "statistics",
+  "overview",
   "transactions",
   "commitments",
   "categories",
@@ -75,7 +80,7 @@ export const MENU_VIEW_IDS = [
 export type MenuViewId = (typeof MENU_VIEW_IDS)[number];
 
 export const MENU_DESTINATIONS: Record<MenuViewId, Destination> = {
-  statistics: { view: "statistics" },
+  overview: { view: "overview" },
   transactions: { view: "transactions" },
   commitments: { view: "commitments" },
   categories: { view: "categories" },
@@ -86,7 +91,7 @@ export const MENU_DESTINATIONS: Record<MenuViewId, Destination> = {
   budgets: { view: "categories", tab: "budgets" },
   installments: { view: "commitments", tab: "installments" },
   loans: { view: "commitments", tab: "loans" },
-  analysis: { view: "statistics", tab: "analysis" },
+  analysis: { view: "overview", tab: "analysis" },
   expected: { view: "commitments", tab: "expected" },
 };
 

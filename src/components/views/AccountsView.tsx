@@ -15,7 +15,7 @@ import {
   totalBalanceByCurrency,
 } from "@/lib/finance";
 import { formatCurrency } from "@/lib/format";
-import { netWorthAdjustments } from "@/lib/netWorth";
+import { consolidateNetWorth, netWorthAdjustments } from "@/lib/netWorth";
 import { PAYMENT_METHOD_TYPE_LABELS } from "@/lib/labels";
 import { accountCommitmentsNotice, accountGoalsNotice } from "@/lib/deletionNotice";
 import { cn } from "@/lib/utils";
@@ -50,29 +50,21 @@ export function AccountsView() {
 
   const currencyTotals = useMemo(() => Array.from(totalsByCurrency), [totalsByCurrency]);
 
-  const adjustments = useMemo(
-    () => netWorthAdjustments(installmentPlans, loans),
-    [installmentPlans, loans],
+  // The same figures the overview opens with, worked out by the same function.
+  // Each part is null whenever there is no usable rate yet, which the cards
+  // report instead of showing a total that silently leaves one currency out.
+  const worth = useMemo(
+    () =>
+      consolidateNetWorth(
+        totalsByCurrency,
+        netWorthAdjustments(installmentPlans, loans),
+        "ARS",
+        exchangeRate?.sell ?? 0,
+      ),
+    [totalsByCurrency, installmentPlans, loans, exchangeRate],
   );
 
-  const debtArs = useMemo(
-    () => consolidateByCurrency(adjustments.debt, "ARS", exchangeRate?.sell ?? 0),
-    [adjustments, exchangeRate],
-  );
-
-  const receivableArs = useMemo(
-    () => consolidateByCurrency(adjustments.receivable, "ARS", exchangeRate?.sell ?? 0),
-    [adjustments, exchangeRate],
-  );
-
-  // Null whenever there is no usable rate yet, which the card reports instead
-  // of showing a total that silently leaves one currency out.
-  const netWorthArs = useMemo(
-    () => consolidateByCurrency(totalsByCurrency, "ARS", exchangeRate?.sell ?? 0),
-    [totalsByCurrency, exchangeRate],
-  );
-
-  const netWorthUsd = useMemo(
+  const grossUsd = useMemo(
     () => consolidateByCurrency(totalsByCurrency, "USD", exchangeRate?.sell ?? 0),
     [totalsByCurrency, exchangeRate],
   );
@@ -181,12 +173,12 @@ export function AccountsView() {
               <CardHeader>
                 <CardDescription>Patrimonio bruto</CardDescription>
                 <CardTitle className="text-2xl">
-                  {netWorthArs === null ? "—" : formatCurrency(netWorthArs, "ARS")}
+                  {worth.gross === null ? "—" : formatCurrency(worth.gross, "ARS")}
                 </CardTitle>
                 <p className="text-xs text-muted-foreground">
-                  {netWorthUsd === null
+                  {grossUsd === null
                     ? "Necesita una cotización para consolidar"
-                    : `≈ ${formatCurrency(netWorthUsd, "USD")}`}
+                    : `≈ ${formatCurrency(grossUsd, "USD")}`}
                 </p>
               </CardHeader>
             </Card>
@@ -195,16 +187,16 @@ export function AccountsView() {
           {/* Shown only when something is owed either way: an always-visible
               pair of zeroes would add noise for anyone who never buys in
               instalments or lends money. */}
-          {debtArs !== null &&
-            receivableArs !== null &&
-            (debtArs > 0 || receivableArs > 0) && (
+          {worth.debt !== null &&
+            worth.receivable !== null &&
+            (worth.debt > 0 || worth.receivable > 0) && (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {debtArs > 0 && (
+                {worth.debt > 0 && (
                   <Card>
                     <CardHeader>
                       <CardDescription>Deuda pendiente</CardDescription>
                       <CardTitle className="text-2xl text-negative">
-                        {formatCurrency(debtArs, "ARS")}
+                        {formatCurrency(worth.debt, "ARS")}
                       </CardTitle>
                       <p className="text-xs text-muted-foreground">
                         Cuotas sin registrar y el capital de los préstamos que debés
@@ -217,14 +209,12 @@ export function AccountsView() {
                   <CardHeader>
                     <CardDescription>Patrimonio neto</CardDescription>
                     <CardTitle className="text-2xl">
-                      {netWorthArs === null
-                        ? "—"
-                        : formatCurrency(netWorthArs - debtArs + receivableArs, "ARS")}
+                      {worth.net === null ? "—" : formatCurrency(worth.net, "ARS")}
                     </CardTitle>
                     <p className="text-xs text-muted-foreground">
-                      {receivableArs === 0
+                      {worth.receivable === 0
                         ? "Bruto menos la deuda pendiente"
-                        : debtArs === 0
+                        : worth.debt === 0
                           ? "Bruto más lo que te deben"
                           : "Bruto menos la deuda, más lo que te deben"}
                     </p>

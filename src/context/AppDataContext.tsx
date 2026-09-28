@@ -626,7 +626,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [isLoading, rateType, refreshExchangeRate]);
 
   // Every mutation reads back what it touched, so a change made in one view is
-  // immediately reflected in the statistics and in every other view — and
+  // immediately reflected in the overview and in every other view — and
   // only what it touched, so the rest keep their identity and their memos.
   //
   // The write and the reload are reported separately. A reload that fails after

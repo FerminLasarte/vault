@@ -20,7 +20,7 @@ pub const ACTION_EVENT: &str = "menu://action";
 // accelerators follow the same order, so Cmd+1 is always the first item in the
 // sidebar and the two never drift apart.
 const SECTIONS: [(&str, &str); 8] = [
-    ("statistics", "Estadísticas"),
+    ("overview", "Resumen"),
     ("transactions", "Transacciones"),
     ("commitments", "Compromisos"),
     ("categories", "Categorías"),

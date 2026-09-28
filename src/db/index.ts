@@ -1640,7 +1640,7 @@ export const NOTIFICATIONS_ENABLED = "notifications_enabled";
 // The facts already announced, as a JSON array of notification ids.
 export const NOTIFIED_IDS = "notified_ids";
 // The last month whose close the user actually dealt with, so the notice on the
-// statistics screen stops asking. Separate from NOTIFIED_IDS, which tracks a
+// overview stops asking. Separate from NOTIFIED_IDS, which tracks a
 // different channel with a different idea of "already said".
 export const LAST_SEEN_CLOSE = "last_seen_close";
 // Column mappings the user has already worked out, keyed by the header row of

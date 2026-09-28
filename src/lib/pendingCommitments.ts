@@ -28,7 +28,7 @@ export interface CommitmentSources {
 }
 
 // Worked out once, in the data provider, and read by the sidebar badge, the
-// notice on Estadísticas, the notifications and each section. Computed in each
+// notice on Resumen, the notifications and each section. Computed in each
 // of those, with a "today" read at different moments, they could disagree
 // about what is waiting.
 export function collectPendingCommitments(

@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 // How every chart tooltip in the app looks.
 //
 // One definition rather than one per chart: the two charts sit side by side on
-// the statistics screen, and a popup that changes shape depending on which one
+// the overview, and a popup that changes shape depending on which one
 // the pointer is over reads as two different apps.
 export const tooltipContentStyle: CSSProperties = {
   borderRadius: "var(--radius-md)",

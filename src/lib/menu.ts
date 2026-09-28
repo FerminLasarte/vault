@@ -24,7 +24,7 @@ export const MENU_ACTION_VIEW: Record<MenuAction, View> = {
   backup: "settings",
   "export-csv": "settings",
   "import-csv": "settings",
-  "print-report": "statistics",
+  "print-report": "overview",
   "check-updates": "settings",
 };
 

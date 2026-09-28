@@ -13,7 +13,7 @@ export type PendingBadges = Partial<Record<View, number>>;
 // different question: a notification says something happened, a badge says
 // where to go. One is easy to miss and the other is always there.
 //
-// Only the sections that can actually be acted on get a count. Estadísticas
+// Only the sections that can actually be acted on get a count. Resumen
 // already spells the whole thing out in a notice of its own, and a badge on a
 // screen that is only a summary would send the user nowhere.
 export function pendingBadges(
@@ -31,7 +31,7 @@ export function pendingBadges(
 
   // Budgets moved in with the categories they cap, so this count rides on that
   // section. It counts caps at or near the limit, which is a warning rather
-  // than a queue of work — the statistics screen spells out which ones.
+  // than a queue of work — the overview spells out which ones.
   //
   // The reference date has to be the `today` given, not the system clock:
   // it decides which period the spending is measured over, and a badge that

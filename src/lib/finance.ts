@@ -144,7 +144,7 @@ export interface TransactionFilters {
 }
 
 // Applies every provided filter in sequence. Omitted or null fields are
-// treated as "no constraint", so the same function backs both the statistics
+// treated as "no constraint", so the same function backs both the analysis
 // filter bar and the transactions table's advanced panel.
 export function applyTransactionFilters<T extends Transaction>(
   transactions: T[],
@@ -569,9 +569,9 @@ export function recentMonthsRange(
 // The period the analysis shows. "Últimos 12 meses" is held as that rather
 // than as the dates it stood for when picked, so it keeps running up to today
 // with the app left open overnight.
-export type StatisticsPeriod = { kind: "recent" } | { kind: "range"; range: DateRange };
+export type AnalysisPeriod = { kind: "recent" } | { kind: "range"; range: DateRange };
 
-export function periodRange(period: StatisticsPeriod, today: string): DateRange {
+export function periodRange(period: AnalysisPeriod, today: string): DateRange {
   return period.kind === "recent"
     ? recentMonthsRange(RECENT_MONTHS, parseIsoDate(today))
     : period.range;

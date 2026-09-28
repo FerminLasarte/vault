@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { netWorthAdjustments } from "./netWorth";
+import { consolidateNetWorth, netWorthAdjustments } from "./netWorth";
 import { outstandingPrincipal } from "./loans";
 import type { LoanDirection } from "@/db";
 
@@ -96,5 +96,81 @@ describe("netWorthAdjustments", () => {
 
     expect(debt.size).toBe(0);
     expect(receivable.size).toBe(0);
+  });
+});
+
+describe("consolidateNetWorth", () => {
+  const none = { debt: new Map<string, number>(), receivable: new Map<string, number>() };
+
+  it("is what the user holds when nothing is owed either way", () => {
+    const worth = consolidateNetWorth(new Map([["ARS", 500000]]), none, "ARS", 0);
+
+    expect(worth).toEqual({ gross: 500000, debt: 0, receivable: 0, net: 500000 });
+  });
+
+  it("takes the debt off and adds back what the user is owed", () => {
+    const worth = consolidateNetWorth(
+      new Map([["ARS", 500000]]),
+      { debt: new Map([["ARS", 120000]]), receivable: new Map([["ARS", 30000]]) },
+      "ARS",
+      0,
+    );
+
+    expect(worth).toEqual({
+      gross: 500000,
+      debt: 120000,
+      receivable: 30000,
+      net: 410000,
+    });
+  });
+
+  it("converts every currency into the one asked for, at the rate given", () => {
+    const holdings = new Map([
+      ["ARS", 100000],
+      ["USD", 100],
+    ]);
+    const adjustments = { debt: new Map([["USD", 20]]), receivable: new Map() };
+
+    expect(consolidateNetWorth(holdings, adjustments, "ARS", 1000)).toEqual({
+      gross: 200000,
+      debt: 20000,
+      receivable: 0,
+      net: 180000,
+    });
+    expect(consolidateNetWorth(holdings, adjustments, "USD", 1000)).toEqual({
+      gross: 200,
+      debt: 20,
+      receivable: 0,
+      net: 180,
+    });
+  });
+
+  // A total that quietly left the dollars out would look right and be wrong.
+  it("has no net worth without a rate when two currencies are involved", () => {
+    const worth = consolidateNetWorth(
+      new Map([
+        ["ARS", 100000],
+        ["USD", 100],
+      ]),
+      none,
+      "ARS",
+      0,
+    );
+
+    expect(worth.gross).toBeNull();
+    expect(worth.net).toBeNull();
+  });
+
+  it("has no net worth when only the debt needs a rate it does not have", () => {
+    const worth = consolidateNetWorth(
+      new Map([["ARS", 100000]]),
+      { debt: new Map([["USD", 50]]), receivable: new Map() },
+      "ARS",
+      0,
+    );
+
+    expect(worth.gross).toBe(100000);
+    expect(worth.debt).toBeNull();
+    expect(worth.net).toBeNull();
   });
 });
