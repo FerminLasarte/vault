@@ -3,6 +3,7 @@ import { Controller } from "react-hook-form";
 import { z } from "zod";
 import { FormDialog } from "@/components/FormDialog";
 import { useDialogForm } from "@/hooks/useDialogForm";
+import { useAccountCurrencySync } from "@/hooks/useAccountCurrencySync";
 import { useCategoryTypeSync } from "@/hooks/useCategoryTypeSync";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,7 +18,7 @@ import { DatePicker } from "@/components/DatePicker";
 import { CURRENCY_CODES, CURRENCY_LABELS } from "@/lib/currency";
 import { frenchPayment, monthlyRate, totalCost, totalInterest } from "@/lib/loans";
 import { formatCurrency, todayIsoDate } from "@/lib/format";
-import { toSelectValue } from "@/lib/forms";
+import { onIdPicked, toSelectValue } from "@/lib/forms";
 import { LOAN_DIRECTION_LABELS } from "@/lib/labels";
 import type { Category, LoanWithNames, NewLoan, PaymentMethod } from "@/db";
 
@@ -145,10 +146,13 @@ export function LoanDialog({
     categoryTypeFor: loanCategoryType,
   });
 
-  const availableAccounts = useMemo(
-    () => paymentMethods.filter((method) => method.currency === currency),
-    [paymentMethods, currency],
-  );
+  // Declared after `useDialogForm` for the same reason.
+  const availableAccounts = useAccountCurrencySync({
+    form,
+    paymentMethods,
+    currencyField: "currency",
+    accountField: "paymentMethodId",
+  });
 
   async function onSubmit(values: LoanFormValues) {
     await onSubmitLoan(values);
@@ -320,7 +324,7 @@ export function LoanDialog({
                 ]),
               )}
               value={toSelectValue(field.value)}
-              onValueChange={(value) => field.onChange(Number(value))}
+              onValueChange={onIdPicked(field.onChange)}
             >
               <SelectTrigger id="loan-category" className="w-full">
                 <SelectValue placeholder="Sin categoría" />
@@ -348,7 +352,7 @@ export function LoanDialog({
                 availableAccounts.map((method) => [String(method.id), method.name]),
               )}
               value={toSelectValue(field.value)}
-              onValueChange={(value) => field.onChange(Number(value))}
+              onValueChange={onIdPicked(field.onChange)}
               disabled={availableAccounts.length === 0}
             >
               <SelectTrigger id="loan-account" className="w-full">

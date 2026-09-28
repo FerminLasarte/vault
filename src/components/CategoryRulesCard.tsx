@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/select";
 import { useAppActions, useAppData, useAppStatus } from "@/hooks/useAppData";
 import type { CategoryRuleWithCategory } from "@/db";
-import { toSelectValue } from "@/lib/forms";
+import { onIdPicked, toSelectValue } from "@/lib/forms";
 
 const ruleSchema = z.object({
   pattern: z.string().trim().min(2, "Escribí al menos dos caracteres"),
@@ -163,7 +163,7 @@ export function CategoryRulesCard() {
                   categories.map((category) => [String(category.id), category.name]),
                 )}
                 value={toSelectValue(field.value)}
-                onValueChange={(value) => field.onChange(Number(value))}
+                onValueChange={onIdPicked(field.onChange)}
               >
                 <SelectTrigger id="rule-category" className="w-full">
                   <SelectValue placeholder="Seleccioná una categoría" />

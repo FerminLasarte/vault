@@ -3,6 +3,7 @@ import { Controller } from "react-hook-form";
 import { z } from "zod";
 import { FormDialog } from "@/components/FormDialog";
 import { useDialogForm } from "@/hooks/useDialogForm";
+import { useAccountCurrencySync } from "@/hooks/useAccountCurrencySync";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -22,7 +23,7 @@ import type {
   NewInstallmentPlan,
   PaymentMethod,
 } from "@/db";
-import { toSelectValue } from "@/lib/forms";
+import { onIdPicked, toSelectValue } from "@/lib/forms";
 
 const planSchema = z.object({
   description: z.string().trim().min(1, "La descripción es obligatoria"),
@@ -65,13 +66,7 @@ export function InstallmentPlanDialog({
   paymentMethods,
   onSubmitPlan,
 }: InstallmentPlanDialogProps) {
-  const {
-    control,
-    register,
-    handleSubmit,
-    watch,
-    formState: { errors, isSubmitting },
-  } = useDialogForm<PlanFormInput, PlanFormValues>({
+  const form = useDialogForm<PlanFormInput, PlanFormValues>({
     schema: planSchema,
     open,
     defaultValues: {
@@ -107,6 +102,14 @@ export function InstallmentPlanDialog({
         },
   });
 
+  const {
+    control,
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors, isSubmitting },
+  } = form;
+
   const total = Number(watch("totalAmount")) || 0;
   const count = Number(watch("installmentCount")) || 0;
   const currency = watch("currency");
@@ -135,10 +138,14 @@ export function InstallmentPlanDialog({
     [categories],
   );
 
-  const availableAccounts = useMemo(
-    () => paymentMethods.filter((method) => method.currency === currency),
-    [paymentMethods, currency],
-  );
+  // Declared after `useDialogForm` so the reset that loads a plan runs before
+  // the check inside; see the hook.
+  const availableAccounts = useAccountCurrencySync({
+    form,
+    paymentMethods,
+    currencyField: "currency",
+    accountField: "paymentMethodId",
+  });
 
   async function onSubmit(values: PlanFormValues) {
     await onSubmitPlan(values);
@@ -278,7 +285,7 @@ export function InstallmentPlanDialog({
                 expenseCategories.map((category) => [String(category.id), category.name]),
               )}
               value={toSelectValue(field.value)}
-              onValueChange={(value) => field.onChange(Number(value))}
+              onValueChange={onIdPicked(field.onChange)}
             >
               <SelectTrigger id="plan-category" className="w-full">
                 <SelectValue placeholder="Sin categoría" />
@@ -306,7 +313,7 @@ export function InstallmentPlanDialog({
                 availableAccounts.map((method) => [String(method.id), method.name]),
               )}
               value={toSelectValue(field.value)}
-              onValueChange={(value) => field.onChange(Number(value))}
+              onValueChange={onIdPicked(field.onChange)}
               disabled={availableAccounts.length === 0}
             >
               <SelectTrigger id="plan-account" className="w-full">
