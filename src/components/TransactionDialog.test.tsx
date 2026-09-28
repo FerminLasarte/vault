@@ -123,18 +123,36 @@ describe("TransactionDialog when editing", () => {
     expect(screen.getByDisplayValue("50000")).toBeInTheDocument();
     expect(screen.getByText("viaje")).toBeInTheDocument();
   });
+});
 
-  it("still defaults to a usable category when creating", () => {
-    // The repair is what gives a new transaction a sensible starting category;
-    // fixing the edit case must not cost that.
+// A category picked on the user's behalf is a choice they never made, and the
+// first one on the list was easy to accept without noticing — above all when
+// the form opens already filled in from the quick entry.
+describe("TransactionDialog when creating", () => {
+  it("starts with no category rather than the first one", () => {
     renderDialog(null);
 
-    expect(selectedCategory()).toContain("Bookit");
+    expect(selectedCategory()).toContain("Seleccioná una categoría");
+  });
+
+  it("asks for a category instead of saving without one", async () => {
+    const onSubmitTransaction = vi.fn(() => Promise.resolve());
+    renderDialog(null, { onSubmitTransaction });
+
+    await userEvent.clear(screen.getByLabelText("Monto"));
+    await userEvent.type(screen.getByLabelText("Monto"), "1500");
+    await userEvent.type(screen.getByLabelText("Descripción"), "Verdulería");
+    await userEvent.click(screen.getByRole("button", { name: "Agregar transacción" }));
+
+    expect(onSubmitTransaction).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText("Seleccioná una categoría", { selector: "p" }),
+    ).toBeInTheDocument();
   });
 });
 
 // A rule sending "netflix" to Gimnasio — deliberately not the first category,
-// which the form would pick on its own anyway.
+// so a rule that did nothing could not pass for one that worked.
 const NETFLIX_TO_GIMNASIO = {
   id: 1,
   pattern: "netflix",
@@ -192,15 +210,20 @@ describe("TransactionDialog as a dialog", () => {
   it("closes itself once the transaction is saved", async () => {
     const onOpenChange = vi.fn();
     const onSubmitTransaction = vi.fn(() => Promise.resolve());
-    renderDialog(null, { onOpenChange, onSubmitTransaction });
+    // The rule chooses the category, which the form no longer does on its own.
+    renderDialog(null, {
+      onOpenChange,
+      onSubmitTransaction,
+      categoryRules: [NETFLIX_TO_GIMNASIO],
+    });
 
     await userEvent.clear(screen.getByLabelText("Monto"));
     await userEvent.type(screen.getByLabelText("Monto"), "1500");
-    await userEvent.type(screen.getByLabelText("Descripción"), "Verdulería");
+    await userEvent.type(screen.getByLabelText("Descripción"), "Netflix");
     await userEvent.click(screen.getByRole("button", { name: "Agregar transacción" }));
 
     expect(onSubmitTransaction).toHaveBeenCalledWith(
-      expect.objectContaining({ amount: 1500, description: "Verdulería", categoryId: 1 }),
+      expect.objectContaining({ amount: 1500, description: "Netflix", categoryId: 2 }),
       [],
     );
     expect(onOpenChange).toHaveBeenCalledWith(false);

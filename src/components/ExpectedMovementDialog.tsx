@@ -108,9 +108,6 @@ export function ExpectedMovementDialog({
     typeField: "type",
     categoryField: "categoryId",
     categoryTypeFor: expectedCategoryType,
-    // "Sin categoría" is a real answer here, so a selection that stops fitting
-    // is dropped rather than replaced with one the user never picked.
-    fallback: "none",
   });
 
   const availableAccounts = useMemo(

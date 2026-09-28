@@ -121,9 +121,6 @@ export function RecurringDialog({
     typeField: "type",
     categoryField: "categoryId",
     categoryTypeFor: recurringCategoryType,
-    // The category is optional here — "Sin categoría" is a real answer — so a
-    // selection that no longer fits is dropped rather than replaced.
-    fallback: "none",
   });
 
   const availableAccounts = useMemo(

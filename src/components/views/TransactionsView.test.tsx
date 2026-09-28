@@ -38,6 +38,8 @@ beforeAll(() => {
   });
 });
 
+const TODAY = "2026-09-28";
+
 function aTransaction(
   id: number,
   overrides: Partial<TransactionWithCategory> = {},
@@ -80,6 +82,7 @@ function pageIndicator(): string {
 function renderView(
   transactions: TransactionWithCategory[],
   actions: Partial<AppActions> = {},
+  data: Partial<AppData> = {},
 ) {
   appData.current = {
     transactions,
@@ -89,11 +92,13 @@ function renderView(
     ],
     categoryRules: [],
     tags: [],
+    today: TODAY,
     isLoading: false,
     isMutating: false,
     addTransaction: vi.fn(),
     editTransaction: vi.fn(),
     removeTransaction: vi.fn(),
+    ...data,
     ...actions,
   } as unknown as AppContext;
 
@@ -388,6 +393,94 @@ describe("TransactionsView after a write", () => {
       "true",
     );
     expect(screen.getByText("Movimiento 1")).toBeInTheDocument();
+  });
+});
+
+describe("The quick entry", () => {
+  const SUPER_RULE = { categoryRules: [{ id: 1, pattern: "super", category_id: 3 }] };
+
+  function quickEntry() {
+    return screen.getByRole("textbox", { name: "Carga rápida" });
+  }
+
+  it("shows what it understood before anything is saved", async () => {
+    const user = userEvent.setup();
+    renderView([], {}, SUPER_RULE as Partial<AppData>);
+
+    await user.type(quickEntry(), "super 2500");
+
+    const reading = screen.getByText(/por la regla «super»/).closest("p")!;
+    expect(reading).toHaveTextContent("Gasto");
+    expect(reading).toHaveTextContent("«super»");
+    expect(reading).toHaveTextContent("Super, por la regla «super»");
+    expect(reading).toHaveTextContent("Efectivo, por defecto");
+    expect(screen.getByText("Enter guarda · Tab abre el formulario")).toBeInTheDocument();
+  });
+
+  // The form's submit tells creating from editing by `editing`, which is still
+  // set after the edit dialog closes. Going through it, Enter here would have
+  // rewritten the row edited last instead of adding a new one.
+  it("adds a new movement on Enter, even right after a row was edited", async () => {
+    const user = userEvent.setup();
+    const addTransaction = vi.fn(() => Promise.resolve(99));
+    renderView([anEditable(1)], { addTransaction }, SUPER_RULE as Partial<AppData>);
+
+    await editAndSave(user, "Movimiento 1", (transactions) => transactions);
+    await user.type(quickEntry(), "super 2500{Enter}");
+
+    expect(addTransaction).toHaveBeenCalledExactlyOnceWith(
+      {
+        amount: 2500,
+        type: "expense",
+        categoryId: 3,
+        paymentMethodId: 1,
+        destinationPaymentMethodId: null,
+        destinationAmount: null,
+        description: "super",
+        date: TODAY,
+        currency: "ARS",
+      },
+      [],
+    );
+    expect(appData.current.editTransaction).toHaveBeenCalledOnce();
+    expect(quickEntry()).toHaveValue("");
+  });
+
+  it("hands the line to the whole form on Tab, filled in", async () => {
+    const user = userEvent.setup();
+    renderView([], {}, SUPER_RULE as Partial<AppData>);
+
+    await user.type(quickEntry(), "super 2500 ayer");
+    await user.keyboard("{Tab}");
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent("Nueva transacción");
+    expect(screen.getByLabelText("Descripción")).toHaveValue("super");
+    expect(screen.getByLabelText("Monto")).toHaveValue(2500);
+  });
+
+  // Nothing to save yet, so Enter goes where the gap can be filled.
+  it("sends a line with something missing to the form on Enter", async () => {
+    const user = userEvent.setup();
+    const addTransaction = vi.fn(() => Promise.resolve(99));
+    renderView([], { addTransaction });
+
+    await user.type(quickEntry(), "almuerzo 2500");
+    expect(screen.getByText("Sin categoría")).toBeInTheDocument();
+
+    await user.keyboard("{Enter}");
+
+    expect(addTransaction).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toHaveTextContent("Nueva transacción");
+  });
+
+  it("empties the line on Escape", async () => {
+    const user = userEvent.setup();
+    renderView([]);
+
+    await user.type(quickEntry(), "super 2500{Escape}");
+
+    expect(quickEntry()).toHaveValue("");
   });
 });
 
