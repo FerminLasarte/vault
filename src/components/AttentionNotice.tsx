@@ -6,13 +6,13 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Hint } from "@/components/Hint";
 import { cn } from "@/lib/utils";
 import type { AttentionItem, AttentionKind } from "@/lib/attention";
 
 interface AttentionNoticeProps {
   items: AttentionItem[];
-  // What an actionable row does. Keyed by kind rather than passed inside each
+  // What an actionable item does. Keyed by kind rather than passed inside each
   // item so `attention.ts` stays free of functions and testable as data.
   onAction?: (kind: AttentionKind) => void;
 }
@@ -24,59 +24,64 @@ const ICONS: Record<AttentionKind, LucideIcon> = {
   close: FileText,
 };
 
-// One block for everything the screen has to raise, however many things that
-// is. Three separate cards for three separate warnings is how the screen used
-// to open, and it pushed the first real figure below the fold.
+// Everything the screen has to raise, as one quiet line above the figures.
 //
-// The card takes a destructive frame when anything in it is critical: the
-// frame answers "is something wrong?" at a glance, and the rows answer "what".
+// It used to be a card with a row per notice, and before that a card per
+// notice. Either way the screen opened on its warnings and the first real
+// figure started halfway down. A line says the same thing and gives the
+// figures back the top of the screen: each notice is its headline, and its
+// action when it has one, side by side.
 //
-// Through `ring`, not `border`. Card draws its own edge as `ring-1
-// ring-foreground/10` and has no border width at all, so the
-// `border-destructive/50` the three separate notices used to carry only ever
-// set a colour on an edge that was never drawn — it looked deliberate in the
-// markup and did nothing on screen.
+// The detail — which budgets, where to go, what the close contains — is the
+// headline's hint, and is also in the text for a screen reader, which cannot
+// hover. The line stays in the muted colour of secondary text; with no card to
+// turn red, a critical notice is marked on the notice itself, its icon and its
+// headline taking the destructive colour.
+//
+// On a narrow window the notices wrap onto a second line rather than scroll.
 export function AttentionNotice({ items, onAction }: AttentionNoticeProps) {
   if (items.length === 0) return null;
 
-  const hasCritical = items.some((item) => item.tone === "critical");
-
   return (
-    <Card className={cn(hasCritical && "ring-destructive/40")}>
-      <CardContent className="flex flex-col divide-y divide-border">
-        {items.map((item) => {
-          const Icon = ICONS[item.kind];
+    <ul className="arrive flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+      {items.map((item) => {
+        const Icon = ICONS[item.kind];
+        const isCritical = item.tone === "critical";
 
-          return (
-            <div
-              key={item.kind}
-              className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 first:pt-0 last:pb-0"
-            >
-              <Icon
-                className={cn(
-                  "size-4 shrink-0",
-                  item.tone === "critical" ? "text-destructive" : "text-muted-foreground",
-                )}
-              />
-              <span className="text-sm font-medium">{item.title}</span>
-              <span className="text-sm text-muted-foreground">{item.detail}</span>
-              {/* Pushed to the far end so the buttons of several rows line up,
-                  and after the text so it reads before it offers. */}
-              {item.actionLabel !== undefined && onAction && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="ml-auto"
-                  onClick={() => onAction(item.kind)}
-                >
-                  {item.actionLabel}
-                </Button>
+        return (
+          <li key={item.kind} className="flex items-center gap-2">
+            <Icon
+              aria-hidden
+              className={cn(
+                "size-4 shrink-0",
+                isCritical ? "text-destructive" : "text-muted-foreground",
               )}
-            </div>
-          );
-        })}
-      </CardContent>
-    </Card>
+            />
+            <Hint label={item.detail}>
+              <span
+                className={cn(isCritical ? "text-destructive" : "text-muted-foreground")}
+              >
+                {item.title}
+              </span>
+              <span className="sr-only">. {item.detail}</span>
+            </Hint>
+            {/* After the headline, so it reads before it offers. */}
+            {item.actionLabel !== undefined && onAction && (
+              <Button
+                type="button"
+                variant="link"
+                size="xs"
+                // Underlined from the start rather than on hover: on a line of
+                // quiet text it is the one thing that can be pressed.
+                className="px-1 text-foreground underline decoration-muted-foreground/50"
+                onClick={() => onAction(item.kind)}
+              >
+                {item.actionLabel}
+              </Button>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
