@@ -42,7 +42,7 @@ export function matchCategoryId(
   return matchCategoryRule(description, rules)?.category_id ?? null;
 }
 
-// Where a movement of this kind should land, or null.
+// The rule that decides where a movement of this kind should land, or null.
 //
 // A rule names one category, and a category holds either income or expenses.
 // Only rules of the movement's own kind are considered, so "mercado pago" →
@@ -50,19 +50,31 @@ export function matchCategoryId(
 // up in the income breakdown and in the monthly close. Among those rules the
 // usual one wins, so a shorter rule of the right kind beats a longer one of the
 // wrong kind.
+export function matchCategoryRuleForType(
+  description: string,
+  rules: CategoryRule[],
+  categories: Category[],
+  type: CategoryType,
+): CategoryRule | null {
+  const ofType = new Set(
+    categories
+      .filter((category) => category.type === type)
+      .map((category) => category.id),
+  );
+  return matchCategoryRule(
+    description,
+    rules.filter((rule) => ofType.has(rule.category_id)),
+  );
+}
+
+// Where a movement of this kind should land, or null.
 export function matchCategoryIdForType(
   description: string,
   rules: CategoryRule[],
   categories: Category[],
   type: CategoryType,
 ): number | null {
-  const ofType = new Set(
-    categories
-      .filter((category) => category.type === type)
-      .map((category) => category.id),
-  );
-  return matchCategoryId(
-    description,
-    rules.filter((rule) => ofType.has(rule.category_id)),
+  return (
+    matchCategoryRuleForType(description, rules, categories, type)?.category_id ?? null
   );
 }

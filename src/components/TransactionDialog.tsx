@@ -103,6 +103,10 @@ interface TransactionDialogProps {
   onOpenChange: (open: boolean) => void;
   // `null` puts the dialog in create mode.
   editing: TransactionWithCategory | null;
+  // What a new transaction starts with instead of a blank form: the line typed
+  // into the quick entry, when the user asked for the whole form to finish it.
+  // Ignored when editing.
+  draft?: NewTransaction | null;
   categories: Category[];
   categoryRules: CategoryRuleWithCategory[];
   tags: Tag[];
@@ -137,6 +141,7 @@ export function TransactionDialog({
   tags,
   paymentMethods,
   defaultCurrency,
+  draft = null,
   onSubmitTransaction,
 }: TransactionDialogProps) {
   const isEditing = editing !== null;
@@ -158,7 +163,17 @@ export function TransactionDialog({
           date: editing.date,
           tags: splitTagNames(editing.tag_names),
         }
-      : blankForm(defaultCurrency),
+      : draft
+        ? {
+            ...blankForm(draft.currency),
+            type: draft.type,
+            amount: draft.amount,
+            paymentMethodId: draft.paymentMethodId ?? undefined,
+            categoryId: draft.categoryId,
+            description: draft.description,
+            date: draft.date,
+          }
+        : blankForm(defaultCurrency),
   });
 
   const {

@@ -37,6 +37,7 @@ import { CurrencyFilter } from "@/components/CurrencyFilter";
 import { CategorySelect } from "@/components/filters/CategorySelect";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { TransactionDialog } from "@/components/TransactionDialog";
+import { QuickEntry } from "@/components/QuickEntry";
 import { AttachmentsDialog } from "@/components/AttachmentsDialog";
 import { useAppActions, useAppData, useAppStatus } from "@/hooks/useAppData";
 import { useBriefly } from "@/hooks/useBriefly";
@@ -53,7 +54,7 @@ import { TRANSACTION_TYPE_LABELS } from "@/lib/labels";
 import { DEFAULT_CURRENCY } from "@/lib/currency";
 import { useShortcuts } from "@/hooks/useShortcuts";
 import { cn } from "@/lib/utils";
-import type { TransactionWithCategory } from "@/db";
+import type { NewTransaction, TransactionWithCategory } from "@/db";
 import type { ViewProps } from "@/lib/menu";
 import { Loading, LoadingRows } from "@/components/Loading";
 
@@ -147,6 +148,11 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
   const { current: justWritten, remember: markWritten } = useBriefly<number>(1200);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editing, setEditing] = useState<TransactionWithCategory | null>(null);
+  // What the quick entry handed over when it asked for the whole form.
+  const [draft, setDraft] = useState<NewTransaction | null>(null);
+  // Bumped once a handed-over line is saved from the form, which starts the
+  // quick entry over with an empty line.
+  const [quickEntryKey, setQuickEntryKey] = useState(0);
   const [pendingDeletion, setPendingDeletion] = useState<TransactionWithCategory | null>(
     null,
   );
@@ -218,6 +224,13 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
 
   function openCreateDialog() {
     setEditing(null);
+    setDraft(null);
+    setIsFormOpen(true);
+  }
+
+  function openDraftDialog(started: NewTransaction) {
+    setEditing(null);
+    setDraft(started);
     setIsFormOpen(true);
   }
 
@@ -248,20 +261,35 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
   // Saving answers "where did it go": the table sorts by date, so the row can
   // land on any page, and the filters can leave it out altogether. The action
   // resolves once the list holds the row, so it is there to be looked for.
-  async function handleSubmitTransaction(
-    values: Parameters<typeof addTransaction>[0],
-    transactionTags: string[],
-  ) {
-    let arrived: Arrival;
-    if (editing) {
-      await editTransaction(editing.id, values, transactionTags);
-      arrived = { id: editing.id, message: "Transacción actualizada", status: "seeking" };
-    } else {
-      const id = await addTransaction(values, transactionTags);
-      arrived = { id, message: "Transacción agregada", status: "seeking" };
-    }
+  function announce(arrived: Arrival) {
     markWritten(arrived.id);
     setArrival(arrived);
+  }
+
+  // Its own function rather than a branch of the form's submit, which decides
+  // between creating and editing from `editing` — state that outlives the edit
+  // dialog, and would turn a line saved from the quick entry into an edit of
+  // whatever row was edited last.
+  async function createTransaction(values: NewTransaction, transactionTags: string[]) {
+    const id = await addTransaction(values, transactionTags);
+    announce({ id, message: "Transacción agregada", status: "seeking" });
+  }
+
+  async function handleSubmitTransaction(
+    values: NewTransaction,
+    transactionTags: string[],
+  ) {
+    if (editing) {
+      await editTransaction(editing.id, values, transactionTags);
+      announce({ id: editing.id, message: "Transacción actualizada", status: "seeking" });
+      return;
+    }
+
+    await createTransaction(values, transactionTags);
+    if (draft !== null) {
+      setDraft(null);
+      setQuickEntryKey((key) => key + 1);
+    }
   }
 
   // After the page holding the row has been drawn and before it is painted, so
@@ -337,6 +365,13 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
             Nueva transacción
           </Button>
         }
+      />
+
+      <QuickEntry
+        key={quickEntryKey}
+        defaultCurrency={currency}
+        onSave={(transaction) => createTransaction(transaction, [])}
+        onExpand={openDraftDialog}
       />
 
       <Card>
@@ -686,6 +721,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
         tags={tags}
         paymentMethods={paymentMethods}
         defaultCurrency={currency}
+        draft={draft}
         onSubmitTransaction={handleSubmitTransaction}
       />
     </div>
