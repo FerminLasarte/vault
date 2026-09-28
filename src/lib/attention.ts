@@ -2,7 +2,7 @@ import { formatMonthLabel } from "@/lib/format";
 import type { BackupStatus } from "@/lib/backupReminder";
 import type { BudgetProgress } from "@/lib/finance";
 
-// What the statistics screen needs to tell the user before it shows them a
+// What the overview needs to tell the user before it shows them a
 // single figure.
 //
 // These used to be three separate cards stacked one on top of another, each

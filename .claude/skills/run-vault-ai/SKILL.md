@@ -25,7 +25,7 @@ view renders empty behind a "No se pudieron cargar los datos" toast. It is
 still useful — see _Inspecting the UI_ — but it proves nothing about data.
 
 The app watches `src-tauri/` and restarts on Rust changes; Vite hot-reloads on
-frontend changes. **A hot reload resets the visible view back to Estadísticas**,
+frontend changes. **A hot reload resets the visible view back to Resumen**,
 because the current view is React state. Editing or deleting any file under
 `src/` mid-session will therefore knock you off whatever screen you were on.
 

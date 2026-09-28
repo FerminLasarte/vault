@@ -26,7 +26,7 @@ interface MonthTotals {
 
 // Every month that has closed, and a way to put each one on paper.
 //
-// The notice on the statistics screen announces a close once and then stops
+// The notice on the overview announces a close once and then stops
 // asking, which is right for a nudge and wrong for an archive: a report you
 // dealt with in September is still the report of August. This is where they all
 // stay.

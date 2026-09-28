@@ -10,7 +10,7 @@ export interface PendingLoanPayment extends LoanPayment {
 }
 
 // Every loan payment awaiting confirmation across all loans, oldest first —
-// the mirror of collectPendingInstallments, so the statistics view can add the
+// the mirror of collectPendingInstallments, so the overview can add the
 // two together into one "you have commitments due" notice.
 export function collectPendingLoanPayments(
   loans: LoanWithNames[],

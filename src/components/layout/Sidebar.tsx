@@ -33,10 +33,10 @@ interface NavItem {
 // The places the user actually works in, in the order the work tends to happen.
 const MAIN_ITEMS = [
   {
-    view: "statistics",
-    label: "Estadísticas",
+    view: "overview",
+    label: "Resumen",
     icon: ChartPie,
-    description: "Tu balance, cómo venís este mes y los gráficos por período",
+    description: "Tu patrimonio, cómo venís este mes y los gráficos por período",
   },
   {
     view: "transactions",

@@ -13,7 +13,7 @@ const figures = [
 ];
 
 describe("FigureBar", () => {
-  // Estadísticas is the screen the app opens on. Drawing a skeleton for a load
+  // Resumen is the screen the app opens on. Drawing a skeleton for a load
   // that is over in a few milliseconds is the flash the slow-loading gate
   // exists to prevent, and the lists beside this bar already go through it.
   it("holds each figure's line without drawing it while the load may be quick", () => {

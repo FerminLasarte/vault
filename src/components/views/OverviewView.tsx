@@ -18,7 +18,7 @@ import {
 import { CategorySelect } from "@/components/filters/CategorySelect";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { SummaryBar } from "@/components/SummaryBar";
-import { TotalBalanceCard } from "@/components/TotalBalanceCard";
+import { NetWorthBar } from "@/components/NetWorthBar";
 import { MonthOverviewCards } from "@/components/MonthOverviewCards";
 import { AttentionNotice } from "@/components/AttentionNotice";
 import { RecentTransactions } from "@/components/RecentTransactions";
@@ -33,13 +33,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMenuRequest } from "@/hooks/useMenuRequest";
 import { useRequestedTab } from "@/hooks/useRequestedTab";
 import { useViewState } from "@/hooks/useViewState";
-import { DEFAULT_STATISTICS_TAB, STATISTICS_TABS } from "@/lib/navigation";
-import type { StatisticsTab } from "@/lib/navigation";
+import { DEFAULT_OVERVIEW_TAB, OVERVIEW_TABS } from "@/lib/navigation";
+import type { OverviewTab } from "@/lib/navigation";
 import {
   applyTransactionFilters,
   availableYears,
   calculateAccountBalances,
-  consolidateByCurrency,
   filterByCurrency,
   periodRange,
   totalBalanceByCurrency,
@@ -56,7 +55,7 @@ import {
   yearFromRange,
   yearRange,
 } from "@/lib/finance";
-import type { StatisticsPeriod } from "@/lib/finance";
+import type { AnalysisPeriod } from "@/lib/finance";
 import { DEFAULT_CURRENCY } from "@/lib/currency";
 import { buildAttentionItems } from "@/lib/attention";
 import type { AttentionKind } from "@/lib/attention";
@@ -67,6 +66,7 @@ import { calculateSavingsProgress } from "@/lib/savings";
 import { backupStatus } from "@/lib/backupReminder";
 import { parseIsoDate } from "@/lib/format";
 import { countPending } from "@/lib/pendingCommitments";
+import { consolidateNetWorth, netWorthAdjustments } from "@/lib/netWorth";
 
 // How far ahead the commitments are read. Three months is the horizon a
 // monthly schedule makes meaningful: far enough to see an instalment plan
@@ -88,12 +88,12 @@ const RECENT_PERIOD_LABEL = "Últimos 12 meses";
 const CUSTOM_PERIOD = "__custom__";
 const CUSTOM_PERIOD_LABEL = "Personalizado";
 
-export function StatisticsView({ request, tab, onRequestHandled }: ViewProps) {
-  const [currentTab, setCurrentTab] = useRequestedTab<StatisticsTab>(
-    "statistics.tab",
+export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
+  const [currentTab, setCurrentTab] = useRequestedTab<OverviewTab>(
+    "overview.tab",
     tab,
-    STATISTICS_TABS,
-    DEFAULT_STATISTICS_TAB,
+    OVERVIEW_TABS,
+    DEFAULT_OVERVIEW_TAB,
   );
 
   const {
@@ -118,15 +118,15 @@ export function StatisticsView({ request, tab, onRequestHandled }: ViewProps) {
 
   const { markCloseSeen } = useAppActions();
 
-  const [currency, setCurrency] = useViewState("statistics.currency", DEFAULT_CURRENCY);
+  const [currency, setCurrency] = useViewState("overview.currency", DEFAULT_CURRENCY);
   const [categoryId, setCategoryId] = useViewState<number | null>(
-    "statistics.categoryId",
+    "overview.categoryId",
     null,
   );
   // The analysis opens on a real period rather than on the whole history. Held
   // as the choice rather than as its dates, so "Últimos 12 meses" follows
   // today (see periodRange).
-  const [period, setPeriod] = useViewState<StatisticsPeriod>("statistics.period", {
+  const [period, setPeriod] = useViewState<AnalysisPeriod>("overview.period", {
     kind: "recent",
   });
   const dateRange = useMemo(() => periodRange(period, today), [period, today]);
@@ -157,30 +157,31 @@ export function StatisticsView({ request, tab, onRequestHandled }: ViewProps) {
     [savingsGoals, paymentMethods, transactions, savingsContributions, today],
   );
 
-  // Everything the user holds, in one figure.
+  // What the user is worth, and what that is made of.
   //
   // Taken from the account balances rather than from the transaction totals, so
-  // it counts each account's opening balance too and can never disagree with
-  // the accounts screen. Consolidated into the selected currency, because a
-  // "total" that left out the dollar accounts would not be one — and null
-  // rather than approximate when there is no quote to consolidate with.
-  const totalBalance = useMemo(() => {
-    const perCurrency = totalBalanceByCurrency(
+  // it counts each account's opening balance too, and consolidated by the same
+  // function as the accounts screen, so the two can never disagree. In the
+  // selected currency, with the other one alongside.
+  const netWorth = useMemo(() => {
+    const holdings = totalBalanceByCurrency(
       paymentMethods,
       calculateAccountBalances(paymentMethods, transactions),
     );
+    const adjustments = netWorthAdjustments(installmentPlans, loans);
     const rate = exchangeRate?.sell ?? 0;
 
     return {
-      perCurrency,
-      unified: consolidateByCurrency(perCurrency, currency, rate),
-      unifiedConverted: consolidateByCurrency(
-        perCurrency,
+      holdings,
+      worth: consolidateNetWorth(holdings, adjustments, currency, rate),
+      convertedNet: consolidateNetWorth(
+        holdings,
+        adjustments,
         currency === "ARS" ? "USD" : "ARS",
         rate,
-      ),
+      ).net,
     };
-  }, [paymentMethods, transactions, currency, exchangeRate]);
+  }, [paymentMethods, transactions, installmentPlans, loans, currency, exchangeRate]);
 
   // Like `overspent` above, built from the unfiltered list: this block is about
   // the month the user is in, not about the slice the filters select. The
@@ -238,7 +239,7 @@ export function StatisticsView({ request, tab, onRequestHandled }: ViewProps) {
     [transactions, currency, categoryId, dateRange],
   );
 
-  // The summary has no filters beyond the currency, so its list of recent
+  // The general tab has no filters beyond the currency, so its list of recent
   // movements follows that alone rather than the analysis filters.
   const recentInCurrency = useMemo(
     () => filterByCurrency(transactions, currency),
@@ -374,8 +375,8 @@ export function StatisticsView({ request, tab, onRequestHandled }: ViewProps) {
   return (
     <div className="flex flex-col gap-6 sm:gap-8">
       <PageHeader
-        title="Estadísticas"
-        description="Cómo venís este mes, y qué pasó a lo largo del tiempo."
+        title="Resumen"
+        description="Cuánto tenés, cómo venís este mes y qué pasó a lo largo del tiempo."
         actions={
           <>
             {/* The currency belongs to the whole screen rather than to either
@@ -406,33 +407,30 @@ export function StatisticsView({ request, tab, onRequestHandled }: ViewProps) {
 
       <Tabs
         value={currentTab}
-        onValueChange={(next) => setCurrentTab(String(next) as StatisticsTab)}
+        onValueChange={(next) => setCurrentTab(String(next) as OverviewTab)}
       >
         <TabsList>
-          <TabsTrigger value="summary">Resumen</TabsTrigger>
+          <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="analysis">Análisis</TabsTrigger>
         </TabsList>
 
-        {/* Where the user stands right now: what they have, how the month is
-            going, and what they last did. No period to choose, because every
+        {/* Where the user stands right now: what they are worth, how the
+            month is going, and what they last did. No period to choose, because every
             figure here already answers to one. */}
-        <TabsContent value="summary" className="flex flex-col gap-6 pt-6">
+        <TabsContent value="general" className="flex flex-col gap-6 pt-6">
           <AttentionNotice
             items={attention}
             onAction={(kind) => void handleAttentionAction(kind)}
           />
 
-          <div className="flex flex-col gap-3">
-            <h2 className="text-sm font-medium text-muted-foreground">Balance</h2>
-            <TotalBalanceCard
-              perCurrency={totalBalance.perCurrency}
-              unified={totalBalance.unified}
-              unifiedConverted={totalBalance.unifiedConverted}
-              currency={currency}
-              convertedCurrency={otherCurrency}
-              isLoading={isLoading}
-            />
-          </div>
+          <NetWorthBar
+            holdings={netWorth.holdings}
+            worth={netWorth.worth}
+            convertedNet={netWorth.convertedNet}
+            currency={currency}
+            convertedCurrency={otherCurrency}
+            isLoading={isLoading}
+          />
 
           <MonthOverviewCards
             overview={monthOverview}
@@ -458,18 +456,18 @@ export function StatisticsView({ request, tab, onRequestHandled }: ViewProps) {
             everything here is bounded by the period above it. */}
         <TabsContent value="analysis" className="flex flex-col gap-6 pt-6">
           <div className="flex flex-wrap items-center gap-3">
-            <Label htmlFor="statistics-category" className="sr-only">
+            <Label htmlFor="analysis-category" className="sr-only">
               Categoría
             </Label>
             <CategorySelect
-              id="statistics-category"
+              id="analysis-category"
               categories={categories}
               value={categoryId}
               onChange={setCategoryId}
               className="min-w-52"
             />
 
-            <Label htmlFor="statistics-period" className="sr-only">
+            <Label htmlFor="analysis-period" className="sr-only">
               Período
             </Label>
             <Select
@@ -493,7 +491,7 @@ export function StatisticsView({ request, tab, onRequestHandled }: ViewProps) {
                 )
               }
             >
-              <SelectTrigger id="statistics-period" className="min-w-44">
+              <SelectTrigger id="analysis-period" className="min-w-44">
                 <SelectValue placeholder={RECENT_PERIOD_LABEL} />
               </SelectTrigger>
               <SelectContent>
@@ -511,11 +509,11 @@ export function StatisticsView({ request, tab, onRequestHandled }: ViewProps) {
               </SelectContent>
             </Select>
 
-            <Label htmlFor="statistics-dates" className="sr-only">
+            <Label htmlFor="analysis-dates" className="sr-only">
               Rango de fechas
             </Label>
             <DateRangePicker
-              id="statistics-dates"
+              id="analysis-dates"
               value={dateRange}
               onChange={(range) =>
                 // Clearing the dates means "back to the default window", not

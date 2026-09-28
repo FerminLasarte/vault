@@ -216,7 +216,7 @@ describe("pendingBadges", () => {
       TODAY,
     );
 
-    // Estadísticas is a summary; sending the user there would be a dead end.
+    // Resumen is a summary; sending the user there would be a dead end.
     expect(Object.keys(badges)).toEqual(["commitments"]);
   });
 

@@ -9,8 +9,7 @@ import {
 } from "@/lib/finance";
 import type { SavingsProgress } from "@/lib/savings";
 
-// The month at a glance, for the three cards that sit above the filters on the
-// statistics screen.
+// The month at a glance, for the three cards on the overview's general tab.
 //
 // Everything here is deliberately about the month the user is living in, not
 // about whatever slice the filters happen to select: "gasté demasiado este mes"

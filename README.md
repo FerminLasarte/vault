@@ -16,9 +16,9 @@ The interface is in Spanish (Argentina). Every figure in these images is made up
 - **Pesos and dollars together.** Every account has a currency; balances, net
   worth and reports convert at the day's MEP rate, fetched automatically and
   editable by hand. Buying dollars is a transfer with the amount on each side.
-- **Statistics.** This month against the last one, spending by category and
-  against budget, income against expenses, and what the coming months already
-  have committed.
+- **Overview.** Your net worth first, then this month against the last one,
+  spending by category and against budget, income against expenses, and what
+  the coming months already have committed.
 - **Commitments.** Recurring movements, purchases in instalments (with the
   surcharge over the cash price), loans in either direction with or without
   interest, and expected one-off movements. Nothing is recorded until you

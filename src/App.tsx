@@ -4,7 +4,7 @@ import { ExchangeRateStatus } from "@/components/ExchangeRateStatus";
 import { useAppData } from "@/hooks/useAppData";
 import { useRememberedScroll } from "@/hooks/useRememberedScroll";
 import { pendingBadges } from "@/lib/pendingBadges";
-import { StatisticsView } from "@/components/views/StatisticsView";
+import { OverviewView } from "@/components/views/OverviewView";
 import { TransactionsView } from "@/components/views/TransactionsView";
 import { CategoriesView } from "@/components/views/CategoriesView";
 import { AccountsView } from "@/components/views/AccountsView";
@@ -32,7 +32,7 @@ import type { Destination, TabRequest, View } from "@/lib/navigation";
 // that declares no props is still assignable here — so only the views that
 // answer a menu entry or hold tabs have to know any of this exists.
 const VIEWS: Record<View, (props: ViewProps) => React.JSX.Element> = {
-  statistics: StatisticsView,
+  overview: OverviewView,
   transactions: TransactionsView,
   commitments: CommitmentsView,
   categories: CategoriesView,
@@ -71,7 +71,7 @@ function SidebarWithBadges({
 }
 
 function App() {
-  const [view, setView] = useState<View>("statistics");
+  const [view, setView] = useState<View>("overview");
   // The one thing that scrolls in the window, and the only place a view's
   // position can be kept: the views themselves are swapped in and out of it.
   const column = useRef<HTMLElement>(null);
