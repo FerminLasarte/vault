@@ -4,13 +4,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ActionButton } from "@/components/ActionButton";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { getAttachmentContent, listAttachments } from "@/db";
 import { useAppActions, useAppStatus } from "@/hooks/useAppData";
 import { fileErrorMessage } from "@/lib/fileErrors";
@@ -27,13 +20,13 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-interface AttachmentsDialogProps {
-  // `null` closes the dialog; anything else opens it for that transaction.
-  transaction: TransactionWithCategory | null;
-  onOpenChange: (open: boolean) => void;
+interface TransactionAttachmentsProps {
+  transaction: TransactionWithCategory;
 }
 
-export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDialogProps) {
+// The receipts of one transaction, as a section of the inspector. They used to
+// be a dialog of their own, opened from the row, on top of everything else.
+export function TransactionAttachments({ transaction }: TransactionAttachmentsProps) {
   const { isMutating } = useAppStatus();
   const { addAttachment, removeAttachment } = useAppActions();
 
@@ -50,7 +43,7 @@ export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDial
   const [isBusy, setIsBusy] = useState(false);
   const [pendingDeletion, setPendingDeletion] = useState<AttachmentMeta | null>(null);
 
-  const transactionId = transaction?.id ?? null;
+  const transactionId = transaction.id;
 
   // Null while this transaction's list is still on its way.
   const attachments =
@@ -64,7 +57,6 @@ export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDial
   const latestRequest = useRef(0);
 
   const refresh = useCallback(async () => {
-    if (transactionId === null) return;
     const request = ++latestRequest.current;
     const rows = await listAttachments(transactionId);
     if (request === latestRequest.current)
@@ -73,7 +65,7 @@ export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDial
 
   // Clearing the preview belongs in the render pass, not in an effect: an
   // effect would let the previous transaction's receipt stay on screen for a
-  // frame after the dialog has already switched to another one.
+  // frame after the inspector has already switched to another one.
   const [lastTransactionId, setLastTransactionId] = useState(transactionId);
   if (transactionId !== lastTransactionId) {
     setLastTransactionId(transactionId);
@@ -88,7 +80,6 @@ export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDial
   }, [refresh]);
 
   async function handleAttach() {
-    if (transactionId === null) return;
     setIsBusy(true);
     try {
       const picked = await pickAttachment();
@@ -143,125 +134,125 @@ export function AttachmentsDialog({ transaction, onOpenChange }: AttachmentsDial
   }
 
   return (
-    <Dialog open={transaction !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Comprobantes</DialogTitle>
-          <DialogDescription>
-            {transaction?.description} · se guardan dentro de la base, así que la copia de
-            seguridad los incluye.
-          </DialogDescription>
-        </DialogHeader>
+    <section
+      aria-labelledby="transaction-attachments-title"
+      className="flex flex-col gap-3"
+    >
+      <div className="flex flex-col gap-1">
+        <h3 id="transaction-attachments-title" className="text-sm font-medium">
+          Comprobantes
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          Se guardan dentro de la base, así que la copia de seguridad los incluye.
+        </p>
+      </div>
 
-        <div className="flex flex-col gap-4">
-          <Loading when={attachments === null} placeholder={<LoadingRows rows={2} />}>
-            {files.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Todavía no hay comprobantes para este movimiento.
-              </p>
-            ) : (
-              <ul className="flex flex-col">
-                {files.map((meta) => (
-                  <li
-                    key={meta.id}
-                    className="flex items-center justify-between gap-3 border-b border-border py-2 last:border-0"
-                  >
-                    <div className="flex min-w-0 flex-col">
-                      <span className="truncate text-sm">
-                        {fileNameFromPath(meta.file_name)}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {formatSize(meta.byte_size)} ·{" "}
-                        {formatDate(meta.created_at.slice(0, 10))}
-                      </span>
-                    </div>
+      <div className="flex flex-col gap-4">
+        <Loading when={attachments === null} placeholder={<LoadingRows rows={2} />}>
+          {files.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Todavía no hay comprobantes para este movimiento.
+            </p>
+          ) : (
+            <ul className="flex flex-col">
+              {files.map((meta) => (
+                <li
+                  key={meta.id}
+                  className="flex items-center justify-between gap-3 border-b border-border py-2 last:border-0"
+                >
+                  <div className="flex min-w-0 flex-col">
+                    <span className="truncate text-sm">
+                      {fileNameFromPath(meta.file_name)}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {formatSize(meta.byte_size)} ·{" "}
+                      {formatDate(meta.created_at.slice(0, 10))}
+                    </span>
+                  </div>
 
-                    <div className="row-actions flex shrink-0 items-center gap-1">
-                      {meta.mime_type.startsWith("image/") && (
-                        <ActionButton
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          label="Ver"
-                          onClick={() => void handlePreview(meta)}
-                        >
-                          <Eye />
-                          <span className="sr-only">
-                            Ver {fileNameFromPath(meta.file_name)}
-                          </span>
-                        </ActionButton>
-                      )}
+                  <div className="row-actions flex shrink-0 items-center gap-1">
+                    {meta.mime_type.startsWith("image/") && (
                       <ActionButton
                         type="button"
                         variant="ghost"
                         size="icon-sm"
-                        label="Guardar una copia"
-                        disabled={isBusy}
-                        onClick={() => void handleSaveCopy(meta)}
+                        label="Ver"
+                        onClick={() => void handlePreview(meta)}
                       >
-                        <Download />
+                        <Eye />
                         <span className="sr-only">
-                          Guardar {fileNameFromPath(meta.file_name)}
+                          Ver {fileNameFromPath(meta.file_name)}
                         </span>
                       </ActionButton>
-                      <ActionButton
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        label="Eliminar"
-                        onClick={() => setPendingDeletion(meta)}
-                      >
-                        <Trash2 />
-                        <span className="sr-only">
-                          Eliminar {fileNameFromPath(meta.file_name)}
-                        </span>
-                      </ActionButton>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Loading>
-
-          {preview && (
-            <img
-              src={preview.url}
-              alt={fileNameFromPath(preview.meta.file_name)}
-              className="max-h-72 w-full rounded-lg border border-border object-contain"
-            />
+                    )}
+                    <ActionButton
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      label="Guardar una copia"
+                      disabled={isBusy}
+                      onClick={() => void handleSaveCopy(meta)}
+                    >
+                      <Download />
+                      <span className="sr-only">
+                        Guardar {fileNameFromPath(meta.file_name)}
+                      </span>
+                    </ActionButton>
+                    <ActionButton
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      label="Eliminar"
+                      onClick={() => setPendingDeletion(meta)}
+                    >
+                      <Trash2 />
+                      <span className="sr-only">
+                        Eliminar {fileNameFromPath(meta.file_name)}
+                      </span>
+                    </ActionButton>
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
+        </Loading>
 
-          <div>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={isBusy || isMutating}
-              onClick={() => void handleAttach()}
-            >
-              <Paperclip />
-              Adjuntar archivo
-            </Button>
-          </div>
+        {preview && (
+          <img
+            src={preview.url}
+            alt={fileNameFromPath(preview.meta.file_name)}
+            className="max-h-72 w-full rounded-lg border border-border object-contain"
+          />
+        )}
+
+        <div>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isBusy || isMutating}
+            onClick={() => void handleAttach()}
+          >
+            <Paperclip />
+            Adjuntar archivo
+          </Button>
         </div>
+      </div>
 
-        {/* Inside the content rather than beside it, so it opens as a child of
-            this dialog: a sibling would count as a click outside and close it. */}
-        <ConfirmDeleteDialog
-          open={pendingDeletion !== null}
-          onClose={() => setPendingDeletion(null)}
-          title="¿Eliminar este comprobante?"
-          description={
-            <>
-              Se eliminará «
-              {pendingDeletion ? fileNameFromPath(pendingDeletion.file_name) : ""}». La
-              única copia está en la base de Vault, así que solo se puede recuperar desde
-              una copia de seguridad.
-            </>
-          }
-          onConfirm={handleConfirmDelete}
-          isMutating={isMutating}
-        />
-      </DialogContent>
-    </Dialog>
+      <ConfirmDeleteDialog
+        open={pendingDeletion !== null}
+        onClose={() => setPendingDeletion(null)}
+        title="¿Eliminar este comprobante?"
+        description={
+          <>
+            Se eliminará «
+            {pendingDeletion ? fileNameFromPath(pendingDeletion.file_name) : ""}». La
+            única copia está en la base de Vault, así que solo se puede recuperar desde
+            una copia de seguridad.
+          </>
+        }
+        onConfirm={handleConfirmDelete}
+        isMutating={isMutating}
+      />
+    </section>
   );
 }
