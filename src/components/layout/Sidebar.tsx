@@ -9,6 +9,7 @@ import {
   PiggyBank,
   type LucideIcon,
 } from "lucide-react";
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Hint } from "@/components/Hint";
 import { VaultLogo } from "@/components/VaultLogo";
@@ -162,10 +163,13 @@ function NavButton({ item, isCurrent, pending, onNavigate }: NavButtonProps) {
 interface SidebarProps {
   currentView: View;
   badges: PendingBadges;
+  // The quote, drawn above Ajustes. Handed in rather than read here, like the
+  // badges, so the sidebar stays a component that only draws what it is given.
+  exchangeRate: ReactNode;
   onNavigate: (view: View) => void;
 }
 
-export function Sidebar({ currentView, badges, onNavigate }: SidebarProps) {
+export function Sidebar({ currentView, badges, exchangeRate, onNavigate }: SidebarProps) {
   return (
     <aside className="flex h-screen w-16 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground sm:w-60">
       {/* On macOS the title bar is an overlay, so the traffic lights float over
@@ -222,6 +226,7 @@ export function Sidebar({ currentView, badges, onNavigate }: SidebarProps) {
       </nav>
 
       <div className="flex flex-col gap-1 px-2 pb-4 sm:px-3">
+        {exchangeRate}
         {FOOTER_ITEMS.map((item) => (
           <NavButton
             key={item.view}

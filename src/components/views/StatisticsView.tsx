@@ -23,7 +23,6 @@ import { MonthOverviewCards } from "@/components/MonthOverviewCards";
 import { AttentionNotice } from "@/components/AttentionNotice";
 import { RecentTransactions } from "@/components/RecentTransactions";
 import { UpcomingMonths } from "@/components/UpcomingMonths";
-import { ExchangeRateBar } from "@/components/ExchangeRateBar";
 import { CategoryBreakdownChart } from "@/components/charts/CategoryBreakdownChart";
 import { IncomeVsExpenseChart } from "@/components/charts/IncomeVsExpenseChart";
 import { useAppActions, useAppData } from "@/hooks/useAppData";
@@ -432,7 +431,6 @@ export function StatisticsView({ request, tab, onRequestHandled }: ViewProps) {
               currency={currency}
               convertedCurrency={otherCurrency}
               isLoading={isLoading}
-              footer={<ExchangeRateBar />}
             />
           </div>
 
@@ -539,7 +537,6 @@ export function StatisticsView({ request, tab, onRequestHandled }: ViewProps) {
             currency={currency}
             isLoading={isLoading}
             usesHistoricalRates={exchangeRateHistory.length > 0}
-            footer={<ExchangeRateBar />}
           />
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

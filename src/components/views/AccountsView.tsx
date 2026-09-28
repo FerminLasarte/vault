@@ -8,7 +8,6 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PaymentMethodDialog } from "@/components/PaymentMethodDialog";
-import { ExchangeRateBar } from "@/components/ExchangeRateBar";
 import { useAppActions, useAppData, useAppStatus } from "@/hooks/useAppData";
 import {
   calculateAccountBalances,
@@ -233,8 +232,6 @@ export function AccountsView() {
                 </Card>
               </div>
             )}
-
-          <ExchangeRateBar />
         </div>
       )}
 

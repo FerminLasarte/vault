@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { FigureBar, type Figure } from "@/components/FigureBar";
 import { formatCurrency } from "@/lib/format";
 import { CURRENCY_CODES, CURRENCY_SHORT_LABELS } from "@/lib/currency";
@@ -13,7 +12,6 @@ interface TotalBalanceCardProps {
   currency: string;
   convertedCurrency: string;
   isLoading: boolean;
-  footer?: ReactNode;
 }
 
 // What the user has, all in — and in each currency on its own.
@@ -36,7 +34,6 @@ export function TotalBalanceCard({
   currency,
   convertedCurrency,
   isLoading,
-  footer,
 }: TotalBalanceCardProps) {
   const figures: Figure[] = [
     ...CURRENCY_CODES.map((code) => ({
@@ -61,5 +58,5 @@ export function TotalBalanceCard({
     },
   ];
 
-  return <FigureBar figures={figures} isLoading={isLoading} footer={footer} />;
+  return <FigureBar figures={figures} isLoading={isLoading} />;
 }

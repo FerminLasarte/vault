@@ -3,7 +3,9 @@ import { Pencil, RefreshCw } from "lucide-react";
 import { z } from "zod";
 import { ActionButton } from "@/components/ActionButton";
 import { FormDialog } from "@/components/FormDialog";
+import { Hint } from "@/components/Hint";
 import { useDialogForm } from "@/hooks/useDialogForm";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAppActions, useAppData, useAppStatus } from "@/hooks/useAppData";
@@ -19,7 +21,18 @@ const rateSchema = z.object({
 type RateFormInput = z.input<typeof rateSchema>;
 type RateFormValues = z.output<typeof rateSchema>;
 
-export function ExchangeRateBar() {
+// The quote every conversion in the app is made with, at the foot of the
+// sidebar.
+//
+// It used to be a line repeated under the balance, under the analysis figures
+// and on the accounts screen: three copies of one fact, and none of them in
+// sight from anywhere else. The quote belongs to the whole app rather than to
+// any one screen, so it lives where the whole app is always visible.
+//
+// Collapsed, the sidebar has room for one button and no text, so the refresh
+// button stays and carries the quote in its hint; correcting it by hand waits
+// for a window wide enough to show what is being corrected.
+export function ExchangeRateStatus() {
   const { rateType, exchangeRate } = useAppData();
   const { isRefreshingRate } = useAppStatus();
   const { refreshExchangeRate, saveManualExchangeRate } = useAppActions();
@@ -42,40 +55,63 @@ export function ExchangeRateBar() {
     setIsEditing(false);
   }
 
-  const isManual = exchangeRate?.source === MANUAL_RATE_SOURCE;
+  const label = `Dólar ${RATE_TYPE_LABELS[rateType]}`;
+  const value = exchangeRate ? formatCurrency(exchangeRate.sell, "ARS") : null;
+  const detail = exchangeRate
+    ? `${formatDate(exchangeRate.date)}${exchangeRate.source === MANUAL_RATE_SOURCE ? " · cargada a mano" : ""}`
+    : "Conectate a internet o cargala a mano.";
 
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-      {exchangeRate ? (
-        <span>
-          Dólar {RATE_TYPE_LABELS[rateType]} {formatCurrency(exchangeRate.sell, "ARS")} ·{" "}
-          {formatDate(exchangeRate.date)}
-          {isManual && " · cargado a mano"}
+    <div className="flex items-center justify-center gap-1 py-2 sm:justify-start sm:pr-1 sm:pl-3">
+      <div className="hidden min-w-0 flex-1 flex-col sm:flex">
+        <span className="text-xs text-sidebar-foreground/70">{label}</span>
+        <span
+          // Keyed by what it says, so a refreshed quote fades in rather than
+          // swapping its digits in place — the same as the figures it feeds.
+          key={value}
+          className="arrive text-sm font-medium tabular-nums"
+        >
+          {value ?? "Sin cotización"}
         </span>
-      ) : (
-        <span>
-          Sin cotización de {RATE_TYPE_LABELS[rateType].toLowerCase()} todavía. Conectate
-          a internet o cargala a mano.
-        </span>
-      )}
+        <span className="text-xs text-sidebar-foreground/70">{detail}</span>
+      </div>
 
-      <ActionButton
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        label="Actualizar cotización"
-        disabled={isRefreshingRate}
-        onClick={() => void refreshExchangeRate()}
+      <Hint
+        anchor="element"
+        side="right"
+        // Collapsed, this hint is the only place the quote is shown, so it
+        // leads, on a line of its own above what the button does; expanded, it
+        // is already on screen beside the button.
+        label={
+          <span className="flex flex-col">
+            <span className="sm:hidden">
+              {label}: {value ?? "sin cotización"}
+              {exchangeRate && ` · ${detail}`}
+            </span>
+            <span>Actualizar cotización</span>
+          </span>
+        }
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            disabled={isRefreshingRate}
+            onClick={() => void refreshExchangeRate()}
+          />
+        }
       >
         <RefreshCw className={cn(isRefreshingRate && "animate-spin")} />
         <span className="sr-only">Actualizar cotización</span>
-      </ActionButton>
+      </Hint>
 
       <ActionButton
         type="button"
         variant="ghost"
         size="icon-sm"
         label="Corregir cotización"
+        side="right"
+        className="hidden sm:inline-flex"
         onClick={() => setIsEditing(true)}
       >
         <Pencil />
