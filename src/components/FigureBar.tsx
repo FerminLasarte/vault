@@ -34,8 +34,6 @@ interface FigureBarProps {
   // Sits opposite the title, and is styled here rather than by the caller so
   // that two titled bars cannot end up with two different icons.
   icon?: LucideIcon;
-  // Rendered as a last row inside the same card, under a rule.
-  footer?: ReactNode;
 }
 
 // A row of figures that belong to one question.
@@ -53,7 +51,6 @@ export function FigureBar({
   title,
   icon: Icon,
   isLoading = false,
-  footer,
 }: FigureBarProps) {
   // One gate for every figure in the bar, so they are drawn and land together.
   const gate = useLoadingGate(isLoading);
@@ -74,67 +71,63 @@ export function FigureBar({
       )}
 
       <CardContent>
-        <div className="flex flex-col gap-3">
-          <div
-            className={cn(
-              "grid grid-cols-1 gap-3 sm:gap-0 sm:divide-x sm:divide-border",
-              figures.length === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2",
-            )}
-          >
-            {figures.map((figure, index) => (
-              <div
-                key={figure.key}
-                className={cn(
-                  "flex flex-col gap-0.5",
-                  // The dividers do the separating, so only the inner columns
-                  // need the breathing room around them.
-                  index > 0 && "sm:pl-4",
-                  index < figures.length - 1 && "sm:pr-4",
-                )}
-              >
-                <span className="text-xs text-muted-foreground">{figure.label}</span>
-                {gate.waiting ? (
-                  // The height of the line it replaces, so nothing shifts when
-                  // the figure lands. Held unseen until the wait is worth
-                  // drawing, like every other placeholder.
-                  <Skeleton className={cn("my-1 h-5 w-32", held)} />
+        <div
+          className={cn(
+            "grid grid-cols-1 gap-3 sm:gap-0 sm:divide-x sm:divide-border",
+            figures.length === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2",
+          )}
+        >
+          {figures.map((figure, index) => (
+            <div
+              key={figure.key}
+              className={cn(
+                "flex flex-col gap-0.5",
+                // The dividers do the separating, so only the inner columns
+                // need the breathing room around them.
+                index > 0 && "sm:pl-4",
+                index < figures.length - 1 && "sm:pr-4",
+              )}
+            >
+              <span className="text-xs text-muted-foreground">{figure.label}</span>
+              {gate.waiting ? (
+                // The height of the line it replaces, so nothing shifts when
+                // the figure lands. Held unseen until the wait is worth
+                // drawing, like every other placeholder.
+                <Skeleton className={cn("my-1 h-5 w-32", held)} />
+              ) : (
+                <span
+                  // Keyed by what it says, so that changing the period or
+                  // the filters fades the new figure in instead of swapping
+                  // the digits where they stand, which reads as a glitch.
+                  // Deliberately not a count-up: a balance climbing towards
+                  // its value is marketing, not money.
+                  //
+                  // The same fade as anything else that arrives, which is
+                  // also how the figure comes in after a load: being keyed,
+                  // it is a new element then too.
+                  key={figure.value}
+                  className={cn(
+                    "arrive text-lg font-medium tabular-nums",
+                    figure.valueClassName,
+                  )}
+                >
+                  {figure.value}
+                </span>
+              )}
+              {figure.sub &&
+                (gate.waiting ? (
+                  // The caller already knows whether a line sits under this
+                  // figure, even before its data is here, so its place is
+                  // held and the bar does not grow when the figure lands.
+                  <Skeleton className={cn("h-4 w-24", held)} />
                 ) : (
-                  <span
-                    // Keyed by what it says, so that changing the period or
-                    // the filters fades the new figure in instead of swapping
-                    // the digits where they stand, which reads as a glitch.
-                    // Deliberately not a count-up: a balance climbing towards
-                    // its value is marketing, not money.
-                    //
-                    // The same fade as anything else that arrives, which is
-                    // also how the figure comes in after a load: being keyed,
-                    // it is a new element then too.
-                    key={figure.value}
-                    className={cn(
-                      "arrive text-lg font-medium tabular-nums",
-                      figure.valueClassName,
-                    )}
-                  >
-                    {figure.value}
-                  </span>
-                )}
-                {figure.sub &&
-                  (gate.waiting ? (
-                    // The caller already knows whether a line sits under this
-                    // figure, even before its data is here, so its place is
-                    // held and the bar does not grow when the figure lands.
-                    <Skeleton className={cn("h-4 w-24", held)} />
-                  ) : (
-                    // Lands with the figure it qualifies. Still a column, so
-                    // the line inside keeps the width it had as the column's
-                    // own item.
-                    <div className="arrive flex flex-col">{figure.sub}</div>
-                  ))}
-              </div>
-            ))}
-          </div>
-
-          {footer && <div className="border-t border-border pt-3">{footer}</div>}
+                  // Lands with the figure it qualifies. Still a column, so
+                  // the line inside keeps the width it had as the column's
+                  // own item.
+                  <div className="arrive flex flex-col">{figure.sub}</div>
+                ))}
+            </div>
+          ))}
         </div>
       </CardContent>
     </Card>

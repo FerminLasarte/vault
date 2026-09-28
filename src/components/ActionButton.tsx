@@ -11,6 +11,9 @@ interface ActionButtonProps extends Omit<ComponentProps<typeof Button>, "title">
   // disabled and this replaces `label` as the hover text — a greyed-out button
   // with no explanation reads as broken.
   disabledReason?: string | null;
+  // Where the hint sits. Above by default; the sidebar, which is the left edge
+  // of the window, puts it to the right like its own buttons.
+  side?: ComponentProps<typeof Hint>["side"];
 }
 
 // A button that says what it does on hover. Nothing but a `Hint` around a
@@ -18,6 +21,7 @@ interface ActionButtonProps extends Omit<ComponentProps<typeof Button>, "title">
 export function ActionButton({
   label,
   disabledReason,
+  side,
   children,
   ...props
 }: ActionButtonProps) {
@@ -29,6 +33,7 @@ export function ActionButton({
       <Hint
         label={disabledReason}
         anchor="element"
+        side={side}
         render={
           <span
             tabIndex={0}
@@ -44,7 +49,7 @@ export function ActionButton({
   }
 
   return (
-    <Hint label={label} anchor="element" render={<Button {...props} />}>
+    <Hint label={label} anchor="element" side={side} render={<Button {...props} />}>
       {children}
     </Hint>
   );

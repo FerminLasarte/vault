@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { ExchangeRateStatus } from "@/components/ExchangeRateStatus";
 import { useAppData } from "@/hooks/useAppData";
 import { useRememberedScroll } from "@/hooks/useRememberedScroll";
 import { pendingBadges } from "@/lib/pendingBadges";
@@ -43,7 +44,8 @@ const VIEWS: Record<View, (props: ViewProps) => React.JSX.Element> = {
 
 // The sidebar is a child of the data provider while App itself renders it, so
 // App cannot read the data. This wrapper sits on the inside and does, which
-// keeps Sidebar a presentational component that simply takes counts.
+// keeps Sidebar a presentational component that simply takes what to draw: the
+// counts, and the quote at its foot.
 function SidebarWithBadges({
   currentView,
   onNavigate,
@@ -58,7 +60,14 @@ function SidebarWithBadges({
     [pending, budgets, transactions, today],
   );
 
-  return <Sidebar currentView={currentView} badges={badges} onNavigate={onNavigate} />;
+  return (
+    <Sidebar
+      currentView={currentView}
+      badges={badges}
+      exchangeRate={<ExchangeRateStatus />}
+      onNavigate={onNavigate}
+    />
+  );
 }
 
 function App() {

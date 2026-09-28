@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { FigureBar, type Figure } from "@/components/FigureBar";
 import { Hint } from "@/components/Hint";
 import { formatCurrency } from "@/lib/format";
@@ -16,7 +15,6 @@ interface SummaryBarProps {
   // Whether the conversion used the historical series or just today's quote,
   // so the figures never imply more precision than they have.
   usesHistoricalRates: boolean;
-  footer?: ReactNode;
 }
 
 // Income first, then what went out, then what is left of it: the order the
@@ -43,7 +41,6 @@ export function SummaryBar({
   convertedSummary,
   convertedCurrency,
   usesHistoricalRates,
-  footer,
 }: SummaryBarProps) {
   const values: Record<(typeof COLUMNS)[number]["key"], number> = {
     income: summary.income,
@@ -90,5 +87,5 @@ export function SummaryBar({
       ) : undefined,
   }));
 
-  return <FigureBar figures={figures} isLoading={isLoading} footer={footer} />;
+  return <FigureBar figures={figures} isLoading={isLoading} />;
 }
