@@ -225,9 +225,6 @@ export function TransactionDialog({
     typeField: "type",
     categoryField: "categoryId",
     categoryTypeFor: transactionCategoryType,
-    // Income and expenses require a category, so one that no longer fits is
-    // replaced rather than left empty.
-    fallback: "first",
   });
 
   // Only accounts held in the transaction's own currency can pay for it. For a

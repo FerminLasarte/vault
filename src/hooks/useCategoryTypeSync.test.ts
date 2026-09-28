@@ -27,12 +27,11 @@ const categoryTypeFor = (type: Values["type"]) => (type === "transfer" ? null : 
 interface HarnessProps {
   row: Values;
   categories: Category[];
-  fallback: "first" | "none";
 }
 
 // Stands in for the dialogs: a form, an effect that loads a row into it, and
 // the sync declared after that effect — the order the hook relies on.
-function useHarness({ row, categories, fallback }: HarnessProps) {
+function useHarness({ row, categories }: HarnessProps) {
   const form = useForm<Values>({
     defaultValues: { type: "expense", categoryId: null },
   });
@@ -48,7 +47,6 @@ function useHarness({ row, categories, fallback }: HarnessProps) {
     typeField: "type",
     categoryField: "categoryId",
     categoryTypeFor,
-    fallback,
   });
 
   return { form, available };
@@ -59,7 +57,6 @@ function renderSync(props: Partial<HarnessProps> = {}) {
     initialProps: {
       row: { type: "expense", categoryId: 3 },
       categories: CATEGORIES,
-      fallback: "none",
       ...props,
     } satisfies HarnessProps,
   });
@@ -74,13 +71,11 @@ describe("useCategoryTypeSync", () => {
     const { result, rerender } = renderSync({
       row: { type: "expense", categoryId: 3 },
       categories: [],
-      fallback: "first",
     });
 
     rerender({
       row: { type: "income", categoryId: 5 },
       categories: CATEGORIES,
-      fallback: "first",
     });
 
     expect(result.current.form.getValues("categoryId")).toBe(5);
@@ -94,16 +89,6 @@ describe("useCategoryTypeSync", () => {
     });
 
     expect(result.current.form.getValues("categoryId")).toBeNull();
-  });
-
-  it("replaces it instead when the form requires a category", () => {
-    const { result } = renderSync({ fallback: "first" });
-
-    act(() => {
-      result.current.form.setValue("type", "income");
-    });
-
-    expect(result.current.form.getValues("categoryId")).toBe(4);
   });
 
   it("leaves an empty optional category empty", () => {
@@ -121,7 +106,7 @@ describe("useCategoryTypeSync", () => {
   });
 
   it("empties the field for a type that takes no category at all", () => {
-    const { result } = renderSync({ fallback: "first" });
+    const { result } = renderSync();
 
     act(() => {
       result.current.form.setValue("type", "transfer");

@@ -32,10 +32,6 @@ interface CategoryTypeSyncOptions<
   categoryTypeFor: (
     value: FieldPathValue<TFieldValues, TTypePath>,
   ) => CategoryType | null;
-  // What to leave behind when the selection stops fitting: "first" where the
-  // form requires a category, "none" where leaving it empty is a legitimate
-  // answer and picking one for the user would invent a choice they never made.
-  fallback: "first" | "none";
 }
 
 // Ties a category field to the type toggle that governs it: returns the
@@ -55,7 +51,6 @@ export function useCategoryTypeSync<
   typeField,
   categoryField,
   categoryTypeFor,
-  fallback,
 }: CategoryTypeSyncOptions<TFieldValues, TTypePath, TCategoryPath>): Category[] {
   const { watch, getValues, setValue } = form;
 
@@ -91,17 +86,18 @@ export function useCategoryTypeSync<
     const wanted = categoryTypeFor(getValues(typeField));
     const selected = getValues(categoryField) as number | null;
 
-    let replacement: number | null = null;
-
-    if (wanted !== null) {
-      const available = categories.filter((category) => category.type === wanted);
-      if (available.some((category) => category.id === selected)) return;
-      if (fallback === "first") replacement = available[0]?.id ?? null;
+    // A selection that stops fitting is emptied rather than replaced. Picking
+    // one on the user's behalf would invent a choice they never made; where the
+    // form requires a category, its validation asks for one instead.
+    if (
+      wanted !== null &&
+      categories.some((category) => category.type === wanted && category.id === selected)
+    ) {
+      return;
     }
+    if (selected === null) return;
 
-    if (replacement === selected) return;
-
-    setValue(categoryField, replacement as FieldPathValue<TFieldValues, TCategoryPath>, {
+    setValue(categoryField, null as FieldPathValue<TFieldValues, TCategoryPath>, {
       shouldValidate: false,
     });
     // Triggered by the watched values changing, but deliberately read fresh
@@ -113,7 +109,6 @@ export function useCategoryTypeSync<
     typeField,
     categoryField,
     categoryTypeFor,
-    fallback,
     getValues,
     setValue,
   ]);

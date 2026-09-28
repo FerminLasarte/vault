@@ -143,9 +143,6 @@ export function LoanDialog({
     typeField: "direction",
     categoryField: "categoryId",
     categoryTypeFor: loanCategoryType,
-    // The category is optional here — "Sin categoría" is a real answer — so a
-    // selection that no longer fits is dropped rather than replaced.
-    fallback: "none",
   });
 
   const availableAccounts = useMemo(
