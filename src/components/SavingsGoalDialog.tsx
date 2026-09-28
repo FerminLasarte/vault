@@ -1,9 +1,9 @@
-import { useMemo } from "react";
 import { Controller } from "react-hook-form";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { FormDialog } from "@/components/FormDialog";
 import { useDialogForm } from "@/hooks/useDialogForm";
+import { useAccountCurrencySync } from "@/hooks/useAccountCurrencySync";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -22,7 +22,7 @@ import type {
   SavingsGoalWithNames,
   SavingsTrackingMode,
 } from "@/db";
-import { toSelectValue } from "@/lib/forms";
+import { onIdPicked, toSelectValue } from "@/lib/forms";
 
 const goalSchema = z
   .object({
@@ -68,13 +68,7 @@ export function SavingsGoalDialog({
   paymentMethods,
   onSubmitGoal,
 }: SavingsGoalDialogProps) {
-  const {
-    control,
-    register,
-    handleSubmit,
-    watch,
-    formState: { errors, isSubmitting },
-  } = useDialogForm<GoalFormInput, GoalFormValues>({
+  const form = useDialogForm<GoalFormInput, GoalFormValues>({
     schema: goalSchema,
     open,
     defaultValues: {
@@ -104,13 +98,25 @@ export function SavingsGoalDialog({
         },
   });
 
+  const {
+    control,
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors, isSubmitting },
+  } = form;
+
   const trackingMode = watch("trackingMode");
   const currency = watch("currency");
 
-  const availableAccounts = useMemo(
-    () => paymentMethods.filter((method) => method.currency === currency),
-    [paymentMethods, currency],
-  );
+  // Declared after `useDialogForm` so the reset that loads a goal runs before
+  // the check inside; see the hook.
+  const availableAccounts = useAccountCurrencySync({
+    form,
+    paymentMethods,
+    currencyField: "currency",
+    accountField: "paymentMethodId",
+  });
 
   async function onSubmit(values: GoalFormValues) {
     await onSubmitGoal(values);
@@ -208,7 +214,7 @@ export function SavingsGoalDialog({
                   availableAccounts.map((method) => [String(method.id), method.name]),
                 )}
                 value={toSelectValue(field.value)}
-                onValueChange={(value) => field.onChange(Number(value))}
+                onValueChange={onIdPicked(field.onChange)}
                 disabled={availableAccounts.length === 0}
               >
                 <SelectTrigger id="goal-account" className="w-full">

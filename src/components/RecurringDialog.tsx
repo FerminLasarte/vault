@@ -1,8 +1,8 @@
-import { useMemo } from "react";
 import { Controller } from "react-hook-form";
 import { z } from "zod";
 import { FormDialog } from "@/components/FormDialog";
 import { useDialogForm } from "@/hooks/useDialogForm";
+import { useAccountCurrencySync } from "@/hooks/useAccountCurrencySync";
 import { useCategoryTypeSync } from "@/hooks/useCategoryTypeSync";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,7 +28,7 @@ import type {
   PaymentMethod,
   RecurringTransactionWithNames,
 } from "@/db";
-import { toSelectValue } from "@/lib/forms";
+import { onIdPicked, toSelectValue } from "@/lib/forms";
 
 const recurringSchema = z.object({
   description: z.string().trim().min(1, "La descripción es obligatoria"),
@@ -107,11 +107,8 @@ export function RecurringDialog({
     control,
     register,
     handleSubmit,
-    watch,
     formState: { errors, isSubmitting },
   } = form;
-
-  const selectedCurrency = watch("currency");
 
   // Declared after `useDialogForm` so the reset that loads a template runs
   // before the check inside; see the hook.
@@ -123,10 +120,13 @@ export function RecurringDialog({
     categoryTypeFor: recurringCategoryType,
   });
 
-  const availableAccounts = useMemo(
-    () => paymentMethods.filter((method) => method.currency === selectedCurrency),
-    [paymentMethods, selectedCurrency],
-  );
+  // Declared after `useDialogForm` for the same reason.
+  const availableAccounts = useAccountCurrencySync({
+    form,
+    paymentMethods,
+    currencyField: "currency",
+    accountField: "paymentMethodId",
+  });
 
   async function onSubmit(values: RecurringFormValues) {
     await onSubmitRecurring({
@@ -264,7 +264,7 @@ export function RecurringDialog({
                 ]),
               )}
               value={toSelectValue(field.value)}
-              onValueChange={(value) => field.onChange(Number(value))}
+              onValueChange={onIdPicked(field.onChange)}
             >
               <SelectTrigger id="recurring-category" className="w-full">
                 <SelectValue placeholder="Sin categoría" />
@@ -292,7 +292,7 @@ export function RecurringDialog({
                 availableAccounts.map((method) => [String(method.id), method.name]),
               )}
               value={toSelectValue(field.value)}
-              onValueChange={(value) => field.onChange(Number(value))}
+              onValueChange={onIdPicked(field.onChange)}
               disabled={availableAccounts.length === 0}
             >
               <SelectTrigger id="recurring-account" className="w-full">
