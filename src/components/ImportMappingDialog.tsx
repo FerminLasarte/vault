@@ -33,7 +33,7 @@ import {
 import { CURRENCIES } from "@/lib/currency";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { TRANSACTION_TYPE_LABELS } from "@/lib/labels";
-import { toSelectValue } from "@/lib/forms";
+import { idSelectProps } from "@/lib/forms";
 import { cn } from "@/lib/utils";
 import type { AmountLayout, ColumnMapping } from "@/lib/importMapping";
 import type { ImportContext, ImportPlan } from "@/lib/csv";
@@ -308,11 +308,13 @@ export function ImportMappingDialog({
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="import-account">Cuenta</Label>
               <Select
-                items={Object.fromEntries(
-                  availableAccounts.map((method) => [String(method.id), method.name]),
+                {...idSelectProps(
+                  Object.fromEntries(
+                    availableAccounts.map((method) => [String(method.id), method.name]),
+                  ),
+                  mapping.paymentMethodId,
+                  (id) => set("paymentMethodId", id),
                 )}
-                value={toSelectValue(mapping.paymentMethodId)}
-                onValueChange={(next) => set("paymentMethodId", Number(next))}
                 disabled={availableAccounts.length === 0}
               >
                 <SelectTrigger id="import-account" className="w-full">
