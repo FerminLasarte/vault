@@ -173,26 +173,23 @@ function duplicateKey(transaction: NewTransaction): string {
   ].join("|");
 }
 
-// Switches the mapping to another currency, emptying the account unless it
-// holds that currency.
+// Empties the mapping's account unless it is one of `accounts` and holds the
+// mapping's currency: after the currency changes, and when a remembered mapping
+// comes back after its account was deleted or moved to another currency.
 //
-// The account list only offers accounts in the mapping's currency, so an
-// account left behind would show as "Sin cuenta" while the import went on
-// writing the new currency against it. It is emptied rather than replaced:
-// picking one would invent a choice the user never made.
-export function withMappingCurrency(
+// The account list only offers existing accounts in the mapping's currency, so
+// an account that no longer fits would show as "Sin cuenta" while the import
+// went on writing to it. It is emptied rather than replaced: picking one would
+// invent a choice the user never made.
+export function withFittingAccount(
   mapping: ColumnMapping,
-  currency: string,
   accounts: readonly PaymentMethod[],
 ): ColumnMapping {
-  const keepsAccount = accounts.some(
-    (account) => account.id === mapping.paymentMethodId && account.currency === currency,
+  const fits = accounts.some(
+    (account) =>
+      account.id === mapping.paymentMethodId && account.currency === mapping.currency,
   );
-  return {
-    ...mapping,
-    currency,
-    paymentMethodId: keepsAccount ? mapping.paymentMethodId : null,
-  };
+  return fits ? mapping : { ...mapping, paymentMethodId: null };
 }
 
 export function isMappingComplete(mapping: ColumnMapping): boolean {

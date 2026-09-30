@@ -5,7 +5,7 @@ import {
   isMappingComplete,
   parseFlexibleAmount,
   parseFlexibleDate,
-  withMappingCurrency,
+  withFittingAccount,
 } from "./importMapping";
 import type { ColumnMapping } from "./importMapping";
 import { detectDelimiter, parseCsv } from "@/lib/csv";
@@ -116,7 +116,7 @@ describe("isMappingComplete", () => {
   });
 });
 
-describe("withMappingCurrency", () => {
+describe("withFittingAccount", () => {
   const ACCOUNTS: PaymentMethod[] = [
     { id: 1, name: "Efectivo", type: "cash", currency: "ARS", initial_balance: 0 },
     { id: 2, name: "Banco ARS", type: "bank", currency: "ARS", initial_balance: 0 },
@@ -129,7 +129,7 @@ describe("withMappingCurrency", () => {
   it("drops an account in another currency", () => {
     const mapping = { ...EMPTY_MAPPING, currency: "ARS", paymentMethodId: 2 };
 
-    expect(withMappingCurrency(mapping, "USD", ACCOUNTS)).toEqual({
+    expect(withFittingAccount({ ...mapping, currency: "USD" }, ACCOUNTS)).toEqual({
       ...mapping,
       currency: "USD",
       paymentMethodId: null,
@@ -139,7 +139,9 @@ describe("withMappingCurrency", () => {
   it("keeps an account that holds the new currency", () => {
     const mapping = { ...EMPTY_MAPPING, currency: "USD", paymentMethodId: 2 };
 
-    expect(withMappingCurrency(mapping, "ARS", ACCOUNTS).paymentMethodId).toBe(2);
+    expect(
+      withFittingAccount({ ...mapping, currency: "ARS" }, ACCOUNTS).paymentMethodId,
+    ).toBe(2);
   });
 
   it("leaves an empty account empty", () => {
@@ -147,7 +149,9 @@ describe("withMappingCurrency", () => {
     // behalf, not even the only account in the new currency.
     const mapping = { ...EMPTY_MAPPING, currency: "ARS", paymentMethodId: null };
 
-    expect(withMappingCurrency(mapping, "USD", ACCOUNTS).paymentMethodId).toBeNull();
+    expect(
+      withFittingAccount({ ...mapping, currency: "USD" }, ACCOUNTS).paymentMethodId,
+    ).toBeNull();
   });
 });
 

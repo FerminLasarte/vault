@@ -1,4 +1,7 @@
+import { EMPTY_MAPPING, withFittingAccount } from "@/lib/importMapping";
+import { CURRENCY_CODES } from "@/lib/currency";
 import type { ColumnMapping } from "@/lib/importMapping";
+import type { PaymentMethod } from "@/db/schema";
 
 // A bank's export has the same header row every month, so the header itself
 // identifies the format well enough to recognise it again — no naming, no
@@ -72,4 +75,20 @@ export function findProfile(
   }
 
   return null;
+}
+
+// The mapping a statement opens with: one worked out before for this bank's
+// format, so the second import of the same export is one click, or an empty
+// one to fill in.
+//
+// A remembered account is checked against the accounts as they are now; one
+// deleted or moved to another currency since would otherwise be written to.
+export function startingMapping(
+  profiles: ImportProfiles,
+  rows: readonly (readonly string[])[],
+  accounts: readonly PaymentMethod[],
+): ColumnMapping {
+  const found = findProfile(profiles, rows);
+  if (found === null) return { ...EMPTY_MAPPING, currency: CURRENCY_CODES[0] };
+  return withFittingAccount({ ...found.mapping, headerRow: found.headerRow }, accounts);
 }

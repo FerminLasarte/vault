@@ -28,7 +28,7 @@ import {
 import {
   buildMappedImportPlan,
   isMappingComplete,
-  withMappingCurrency,
+  withFittingAccount,
 } from "@/lib/importMapping";
 import { CURRENCIES } from "@/lib/currency";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -285,7 +285,10 @@ export function ImportMappingDialog({
                 onValueChange={(next) =>
                   next &&
                   onMappingChange(
-                    withMappingCurrency(mapping, String(next), paymentMethods),
+                    withFittingAccount(
+                      { ...mapping, currency: String(next) },
+                      paymentMethods,
+                    ),
                   )
                 }
               >
