@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select";
 import { CURRENCY_CODES } from "@/lib/currency";
 import { BUDGET_PERIODS, BUDGET_PERIOD_LABELS } from "@/lib/labels";
-import { onIdPicked, toSelectValue } from "@/lib/forms";
+import { idSelectProps } from "@/lib/forms";
 import type { BudgetWithCategory, Category, NewBudget } from "@/db";
 
 const budgetSchema = z.object({
@@ -92,11 +92,13 @@ export function BudgetDialog({
           name="categoryId"
           render={({ field }) => (
             <Select
-              items={Object.fromEntries(
-                categories.map((category) => [String(category.id), category.name]),
+              {...idSelectProps(
+                Object.fromEntries(
+                  categories.map((category) => [String(category.id), category.name]),
+                ),
+                field.value,
+                field.onChange,
               )}
-              value={toSelectValue(field.value)}
-              onValueChange={onIdPicked(field.onChange)}
             >
               <SelectTrigger id="budget-category" className="w-full">
                 <SelectValue placeholder="Seleccioná una categoría" />

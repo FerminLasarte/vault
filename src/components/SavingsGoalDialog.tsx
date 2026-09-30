@@ -22,7 +22,7 @@ import type {
   SavingsGoalWithNames,
   SavingsTrackingMode,
 } from "@/db";
-import { onIdPicked, toSelectValue } from "@/lib/forms";
+import { idSelectProps } from "@/lib/forms";
 
 const goalSchema = z
   .object({
@@ -210,11 +210,13 @@ export function SavingsGoalDialog({
             name="paymentMethodId"
             render={({ field }) => (
               <Select
-                items={Object.fromEntries(
-                  availableAccounts.map((method) => [String(method.id), method.name]),
+                {...idSelectProps(
+                  Object.fromEntries(
+                    availableAccounts.map((method) => [String(method.id), method.name]),
+                  ),
+                  field.value,
+                  field.onChange,
                 )}
-                value={toSelectValue(field.value)}
-                onValueChange={onIdPicked(field.onChange)}
                 disabled={availableAccounts.length === 0}
               >
                 <SelectTrigger id="goal-account" className="w-full">

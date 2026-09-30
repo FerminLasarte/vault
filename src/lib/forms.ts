@@ -2,12 +2,11 @@
 // those fields as `unknown` — which is honest: at the moment the select renders,
 // nothing has proven the value is a number yet.
 //
-// Every select in the app then has to turn that value into the string the
-// component expects, and `String(unknown)` would quietly render "[object
-// Object]" if the shape ever changed. This narrows first and returns the empty
-// string for anything that has no sensible textual form, which is exactly what
-// a select needs to show "nothing selected".
-export function toSelectValue(value: unknown): string {
+// A Select of ids then has to turn that value into the string its items are
+// keyed by, and `String(unknown)` would quietly render "[object Object]" if the
+// shape ever changed. This narrows first and returns the empty string for
+// anything that has no sensible textual form, which no item is keyed by.
+function toSelectValue(value: unknown): string {
   if (value === null || value === undefined || value === "") return "";
   if (typeof value === "string") return value;
   if (typeof value === "number") return Number.isFinite(value) ? String(value) : "";
@@ -15,21 +14,33 @@ export function toSelectValue(value: unknown): string {
   return "";
 }
 
-// What a Select of ids hands to the form field it edits.
+// The props of a Select whose items are ids: the items, the value it shows,
+// and what it hands back to the form field it edits.
 //
-// Besides what the user picks, base-ui's Select reports a value of its own
-// when the one it holds drops out of its items: `null`, or whatever it held
-// when it mounted. Read as a number, that null was id 0, recorded as a change
-// the user made. It carries no news either: the lists that narrow while a form
-// is open — accounts by currency, categories by type — are kept in step by the
-// form itself (useFittingSelection), whether or not the Select has noticed. So
-// the null is ignored on every Select of ids, even where the field may be
-// empty: none of them offers "none" as an item to pick.
+// base-ui's Select, once its list has been opened, reports a value of its own
+// whenever the one it holds drops out of its items: the value it held when it
+// mounted, if that is still listed, and null otherwise. The mount value cannot
+// be told apart from a pick, and it is stale: a dialog mounts before its row is
+// loaded, and the inspector stays mounted from one row to the next, so it came
+// back as an earlier row's account or category. The Select skips all of it
+// while its value is null, so it is only ever handed an id among its items, or
+// null. An id the form holds that is not listed is shown as nothing selected,
+// and the form empties it itself (useFittingSelection).
 //
-// The other value, the one from mount, cannot be told apart from a pick and
-// still goes through.
-export function onIdPicked(onChange: (id: number) => void) {
-  return (value: string | null) => {
-    if (value !== null) onChange(Number(value));
+// The null guard stays for what the Select may still report on its own: read
+// as a number, a null was id 0, recorded as a change the user made. None of
+// these lists offers "none" as an item to pick.
+export function idSelectProps(
+  items: Record<string, string>,
+  value: unknown,
+  onChange: (id: number) => void,
+) {
+  const selected = toSelectValue(value);
+  return {
+    items,
+    value: Object.hasOwn(items, selected) ? selected : null,
+    onValueChange: (picked: string | null) => {
+      if (picked !== null) onChange(Number(picked));
+    },
   };
 }

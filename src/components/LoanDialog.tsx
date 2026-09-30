@@ -18,7 +18,7 @@ import { DatePicker } from "@/components/DatePicker";
 import { CURRENCY_CODES, CURRENCY_LABELS } from "@/lib/currency";
 import { frenchPayment, monthlyRate, totalCost, totalInterest } from "@/lib/loans";
 import { formatCurrency, todayIsoDate } from "@/lib/format";
-import { onIdPicked, toSelectValue } from "@/lib/forms";
+import { idSelectProps } from "@/lib/forms";
 import { LOAN_DIRECTION_LABELS } from "@/lib/labels";
 import type { Category, LoanWithNames, NewLoan, PaymentMethod } from "@/db";
 
@@ -317,14 +317,16 @@ export function LoanDialog({
           name="categoryId"
           render={({ field }) => (
             <Select
-              items={Object.fromEntries(
-                relevantCategories.map((category) => [
-                  String(category.id),
-                  category.name,
-                ]),
+              {...idSelectProps(
+                Object.fromEntries(
+                  relevantCategories.map((category) => [
+                    String(category.id),
+                    category.name,
+                  ]),
+                ),
+                field.value,
+                field.onChange,
               )}
-              value={toSelectValue(field.value)}
-              onValueChange={onIdPicked(field.onChange)}
             >
               <SelectTrigger id="loan-category" className="w-full">
                 <SelectValue placeholder="Sin categoría" />
@@ -348,11 +350,13 @@ export function LoanDialog({
           name="paymentMethodId"
           render={({ field }) => (
             <Select
-              items={Object.fromEntries(
-                availableAccounts.map((method) => [String(method.id), method.name]),
+              {...idSelectProps(
+                Object.fromEntries(
+                  availableAccounts.map((method) => [String(method.id), method.name]),
+                ),
+                field.value,
+                field.onChange,
               )}
-              value={toSelectValue(field.value)}
-              onValueChange={onIdPicked(field.onChange)}
               disabled={availableAccounts.length === 0}
             >
               <SelectTrigger id="loan-account" className="w-full">

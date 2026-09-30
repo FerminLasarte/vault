@@ -282,6 +282,29 @@ describe("TransactionInspector, saving", () => {
     });
   });
 
+  // base-ui's Select, once its list has been opened, answers a value that
+  // drops out of its items by going back to the one it held when it mounted.
+  // The inspector stays mounted from one row to the next, so that value is an
+  // earlier row's account, and it came back as if the user had picked it.
+  it("does not bring back an earlier row's account", async () => {
+    const earlier = aTransaction({ id: 9, payment_method_id: 2 });
+    const { rerender } = renderInspector(earlier);
+    rerender(<TransactionInspector transaction={aTransaction()} onClose={vi.fn()} />);
+
+    await userEvent.click(screen.getByLabelText("Método de pago"));
+    await userEvent.keyboard("{Escape}");
+    for (const currency of [/Dólar/, /Peso/]) {
+      await userEvent.click(screen.getByLabelText("Moneda"));
+      await userEvent.click(await screen.findByRole("option", { name: currency }));
+    }
+    await aPause();
+
+    expect(document.querySelector("#inspector-payment-method")?.textContent).toContain(
+      "Seleccioná un método de pago",
+    );
+    expect(editTransaction).not.toHaveBeenCalled();
+  });
+
   it("saves what was still waiting when it closes", async () => {
     const { unmount } = renderInspector();
 

@@ -17,7 +17,7 @@ import type {
 } from "@/hooks/useTransactionFields";
 import { TRANSACTION_TYPE_LABELS } from "@/lib/labels";
 import { CURRENCY_LABELS } from "@/lib/currency";
-import { onIdPicked, toSelectValue } from "@/lib/forms";
+import { idSelectProps } from "@/lib/forms";
 import { cn } from "@/lib/utils";
 import type { Tag } from "@/db";
 
@@ -173,9 +173,7 @@ export function TransactionFields({
             name="categoryId"
             render={({ field }) => (
               <Select
-                items={categorySelectItems}
-                value={toSelectValue(field.value)}
-                onValueChange={onIdPicked((categoryId) => {
+                {...idSelectProps(categorySelectItems, field.value, (categoryId) => {
                   markCategoryChosen();
                   field.onChange(categoryId);
                 })}
@@ -209,9 +207,7 @@ export function TransactionFields({
           name="paymentMethodId"
           render={({ field }) => (
             <Select
-              items={originSelectItems}
-              value={toSelectValue(field.value)}
-              onValueChange={onIdPicked(field.onChange)}
+              {...idSelectProps(originSelectItems, field.value, field.onChange)}
               disabled={originAccounts.length === 0}
             >
               <SelectTrigger id={id("payment-method")} className="w-full">
@@ -246,9 +242,7 @@ export function TransactionFields({
             name="destinationPaymentMethodId"
             render={({ field }) => (
               <Select
-                items={destinationSelectItems}
-                value={toSelectValue(field.value)}
-                onValueChange={onIdPicked(field.onChange)}
+                {...idSelectProps(destinationSelectItems, field.value, field.onChange)}
                 disabled={destinationAccounts.length === 0}
               >
                 <SelectTrigger id={id("destination")} className="w-full">

@@ -28,7 +28,7 @@ import type {
   PaymentMethod,
   RecurringTransactionWithNames,
 } from "@/db";
-import { onIdPicked, toSelectValue } from "@/lib/forms";
+import { idSelectProps } from "@/lib/forms";
 
 const recurringSchema = z.object({
   description: z.string().trim().min(1, "La descripción es obligatoria"),
@@ -257,14 +257,16 @@ export function RecurringDialog({
           name="categoryId"
           render={({ field }) => (
             <Select
-              items={Object.fromEntries(
-                availableCategories.map((category) => [
-                  String(category.id),
-                  category.name,
-                ]),
+              {...idSelectProps(
+                Object.fromEntries(
+                  availableCategories.map((category) => [
+                    String(category.id),
+                    category.name,
+                  ]),
+                ),
+                field.value,
+                field.onChange,
               )}
-              value={toSelectValue(field.value)}
-              onValueChange={onIdPicked(field.onChange)}
             >
               <SelectTrigger id="recurring-category" className="w-full">
                 <SelectValue placeholder="Sin categoría" />
@@ -288,11 +290,13 @@ export function RecurringDialog({
           name="paymentMethodId"
           render={({ field }) => (
             <Select
-              items={Object.fromEntries(
-                availableAccounts.map((method) => [String(method.id), method.name]),
+              {...idSelectProps(
+                Object.fromEntries(
+                  availableAccounts.map((method) => [String(method.id), method.name]),
+                ),
+                field.value,
+                field.onChange,
               )}
-              value={toSelectValue(field.value)}
-              onValueChange={onIdPicked(field.onChange)}
               disabled={availableAccounts.length === 0}
             >
               <SelectTrigger id="recurring-account" className="w-full">
