@@ -21,6 +21,12 @@ vi.mock("@/hooks/useAppData", () => ({
   useAppStatus: () => appData.current,
 }));
 
+// The receipts section in the inspector talks to the database on its own; it
+// has tests of its own.
+vi.mock("@/components/TransactionAttachments", () => ({
+  TransactionAttachments: () => null,
+}));
+
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
@@ -134,24 +140,30 @@ function anEditable(
   });
 }
 
-// Saving from the edit dialog, with the database's answer standing in: the
-// action resolves once the list has been read back, so the new list is in
-// place by the time the view hears about it.
-async function editAndSave(
+const SUPER_RULE = { categoryRules: [{ id: 1, pattern: "super", category_id: 3 }] };
+
+function quickEntry() {
+  return screen.getByRole("textbox", { name: "Carga rápida" });
+}
+
+// Adding a row through the quick entry, with the database's answer standing
+// in: the action resolves once the list has been read back, so the new list is
+// in place by the time the view hears about it.
+async function addFromQuickEntry(
   user: ReturnType<typeof userEvent.setup>,
-  description: string,
+  line: string,
   written: (transactions: TransactionWithCategory[]) => TransactionWithCategory[],
+  id = 500,
 ) {
-  vi.mocked(appData.current.editTransaction).mockImplementation(() => {
+  vi.mocked(appData.current.addTransaction).mockImplementation(() => {
     appData.current = {
       ...appData.current,
       transactions: written(appData.current.transactions),
     };
-    return Promise.resolve();
+    return Promise.resolve(id);
   });
 
-  await user.click(screen.getByRole("button", { name: `Editar ${description}` }));
-  await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+  await user.type(quickEntry(), `${line}{Enter}`);
 }
 
 function successToast() {
@@ -325,42 +337,50 @@ describe("TransactionsView when the user comes back to it", () => {
   });
 });
 
-describe("TransactionsView after a write", () => {
+describe("TransactionsView after adding a row", () => {
   // The table sorts by date, so a row that was just written can land on any
   // page, and the filters can leave it out altogether. Saving has to answer
   // "where did it go" wherever that is.
   it("goes to the page the row landed on and brings it into view", async () => {
     const user = userEvent.setup();
     const scrolled = vi.spyOn(Element.prototype, "scrollIntoView");
-    renderView(Array.from({ length: 120 }, (_, index) => anEditable(index + 1)));
+    renderView(
+      Array.from({ length: 120 }, (_, index) => anEditable(index + 1)),
+      {},
+      SUPER_RULE as Partial<AppData>,
+    );
 
-    // Re-dated so that seventy rows now sort above it: page two.
-    await editAndSave(user, "Movimiento 1", ([edited, ...rest]) => [
-      ...rest.slice(0, 70),
-      { ...edited, date: "2026-01-01" },
-      ...rest.slice(70),
+    // Dated so that seventy rows sort above it: page two.
+    await addFromQuickEntry(user, "super 2500", (transactions) => [
+      ...transactions.slice(0, 70),
+      anEditable(500, { description: "Super nuevo" }),
+      ...transactions.slice(70),
     ]);
 
     expect(pageIndicator()).toBe("2 / 3");
-    const row = screen.getByText("Movimiento 1").closest("tr");
+    const row = screen.getByText("Super nuevo").closest("tr");
     expect(row).toHaveClass("just-written");
     expect(scrolled.mock.contexts).toContain(row);
-    expect(successToast()).toEqual(["Transacción actualizada", undefined]);
+    expect(successToast()).toEqual(["Transacción agregada", undefined]);
   });
 
   it("says so when the filters hide it, and clears them on request", async () => {
     const user = userEvent.setup();
-    renderView([anEditable(1), anEditable(2), anEditable(3)]);
+    renderView(
+      [anEditable(1), anEditable(2), anEditable(3)],
+      {},
+      SUPER_RULE as Partial<AppData>,
+    );
 
     await user.type(screen.getByLabelText("Buscar"), "Movimiento 1");
-    await editAndSave(user, "Movimiento 1", ([edited, ...rest]) => [
-      { ...edited, description: "Kiosco" },
-      ...rest,
+    await addFromQuickEntry(user, "super 2500", (transactions) => [
+      anEditable(500, { description: "Kiosco" }),
+      ...transactions,
     ]);
 
     expect(screen.queryByText("Kiosco")).not.toBeInTheDocument();
     const [message, options] = successToast()!;
-    expect(message).toBe("Transacción actualizada");
+    expect(message).toBe("Transacción agregada");
     expect(options).toMatchObject({
       description: "Los filtros activos la ocultan.",
       action: { label: "Limpiar filtros" },
@@ -377,14 +397,14 @@ describe("TransactionsView after a write", () => {
     // bar — there is always one — but a row in dollars stays out of sight on
     // the pesos tab however many filters are cleared.
     const user = userEvent.setup();
-    renderView([anEditable(1), anEditable(2)]);
+    renderView([anEditable(1)], {}, SUPER_RULE as Partial<AppData>);
 
-    await editAndSave(user, "Movimiento 1", ([edited, ...rest]) => [
-      { ...edited, currency: "USD" },
-      ...rest,
+    await addFromQuickEntry(user, "super 2500", (transactions) => [
+      anEditable(500, { description: "Duty free", currency: "USD" }),
+      ...transactions,
     ]);
 
-    expect(screen.queryByText("Movimiento 1")).not.toBeInTheDocument();
+    expect(screen.queryByText("Duty free")).not.toBeInTheDocument();
 
     act(() => clickAction(successToast()![1]));
 
@@ -392,17 +412,82 @@ describe("TransactionsView after a write", () => {
       "aria-selected",
       "true",
     );
-    expect(screen.getByText("Movimiento 1")).toBeInTheDocument();
+    expect(screen.getByText("Duty free")).toBeInTheDocument();
+  });
+});
+
+describe("The inspector", () => {
+  function inspector() {
+    return screen.queryByRole("complementary");
+  }
+
+  it("opens a row clicked in the list", async () => {
+    const user = userEvent.setup();
+    renderView([anEditable(1), anEditable(2)]);
+
+    const row = screen.getByText("Movimiento 2").closest("tr")!;
+    await user.click(row);
+
+    expect(inspector()).toHaveTextContent("Movimiento 2");
+    expect(row).toHaveAttribute("data-selected", "true");
+  });
+
+  it("opens from the row's pencil, and gives the keyboard back on closing", async () => {
+    const user = userEvent.setup();
+    renderView([anEditable(1)]);
+
+    const pencil = screen.getByRole("button", { name: "Editar Movimiento 1" });
+    await user.click(pencil);
+    expect(inspector()).toHaveTextContent("Movimiento 1");
+
+    await user.click(screen.getByRole("button", { name: "Cerrar" }));
+
+    expect(inspector()).toBeNull();
+    expect(pencil).toHaveFocus();
+  });
+
+  // Escape closes what is in front before it touches the filters behind.
+  it("closes on Escape, and only then does Escape clear the filters", async () => {
+    const user = userEvent.setup();
+    renderView([anEditable(1), anEditable(2)]);
+
+    await user.type(screen.getByLabelText("Buscar"), "Movimiento");
+    await user.click(screen.getByText("Movimiento 1"));
+    await user.keyboard("{Escape}");
+
+    expect(inspector()).toBeNull();
+    expect(screen.getByLabelText("Buscar")).toHaveValue("Movimiento");
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.getByLabelText("Buscar")).toHaveValue("");
+  });
+
+  it("does not open a row whose delete button was pressed", async () => {
+    const user = userEvent.setup();
+    renderView([anEditable(1)]);
+
+    await user.click(screen.getByRole("button", { name: "Eliminar Movimiento 1" }));
+
+    expect(inspector()).toBeNull();
+    expect(screen.getByRole("alertdialog")).toHaveTextContent(
+      "¿Eliminar esta transacción?",
+    );
+  });
+
+  it("closes on its own when the row it shows is gone", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderView([anEditable(1), anEditable(2)]);
+
+    await user.click(screen.getByText("Movimiento 1"));
+    appData.current = { ...appData.current, transactions: [anEditable(2)] };
+    rerender(<TransactionsView request={null} tab={null} onRequestHandled={vi.fn()} />);
+
+    expect(inspector()).toBeNull();
   });
 });
 
 describe("The quick entry", () => {
-  const SUPER_RULE = { categoryRules: [{ id: 1, pattern: "super", category_id: 3 }] };
-
-  function quickEntry() {
-    return screen.getByRole("textbox", { name: "Carga rápida" });
-  }
-
   it("shows what it understood before anything is saved", async () => {
     const user = userEvent.setup();
     renderView([], {}, SUPER_RULE as Partial<AppData>);
@@ -417,15 +502,12 @@ describe("The quick entry", () => {
     expect(screen.getByText("Enter guarda · Tab abre el formulario")).toBeInTheDocument();
   });
 
-  // The form's submit tells creating from editing by `editing`, which is still
-  // set after the edit dialog closes. Going through it, Enter here would have
-  // rewritten the row edited last instead of adding a new one.
-  it("adds a new movement on Enter, even right after a row was edited", async () => {
+  it("adds a new movement on Enter, even with a row open in the inspector", async () => {
     const user = userEvent.setup();
     const addTransaction = vi.fn(() => Promise.resolve(99));
     renderView([anEditable(1)], { addTransaction }, SUPER_RULE as Partial<AppData>);
 
-    await editAndSave(user, "Movimiento 1", (transactions) => transactions);
+    await user.click(screen.getByText("Movimiento 1"));
     await user.type(quickEntry(), "super 2500{Enter}");
 
     expect(addTransaction).toHaveBeenCalledExactlyOnceWith(
@@ -442,7 +524,7 @@ describe("The quick entry", () => {
       },
       [],
     );
-    expect(appData.current.editTransaction).toHaveBeenCalledOnce();
+    expect(appData.current.editTransaction).not.toHaveBeenCalled();
     expect(quickEntry()).toHaveValue("");
   });
 

@@ -3,12 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { TransactionDialog } from "./TransactionDialog";
-import type {
-  Category,
-  CategoryRuleWithCategory,
-  PaymentMethod,
-  TransactionWithCategory,
-} from "@/db";
+import type { Category, CategoryRuleWithCategory, PaymentMethod } from "@/db";
 
 beforeAll(() => {
   Object.defineProperty(Element.prototype, "scrollIntoView", {
@@ -32,43 +27,19 @@ const ACCOUNTS: PaymentMethod[] = [
   { id: 1, name: "Efectivo ARS", type: "cash", currency: "ARS", initial_balance: 0 },
 ];
 
-function aTransaction(
-  overrides: Partial<TransactionWithCategory> = {},
-): TransactionWithCategory {
-  return {
-    id: 10,
-    amount: 50000,
-    type: "expense",
-    category_id: 3,
-    payment_method_id: 1,
-    destination_payment_method_id: null,
-    destination_amount: null,
-    description: "Mensual (abril)",
-    date: "2025-05-15",
-    currency: "ARS",
-    category_name: "Padel",
-    category_color: "#222",
-    category_icon: "🎾",
-    payment_method_name: "Efectivo ARS",
-    destination_payment_method_name: null,
-    destination_currency: null,
-    tag_names: null,
-    attachment_count: 0,
-    ...overrides,
-  };
-}
-
 // The option list is rendered into the DOM alongside the trigger, so matching
 // on text alone finds the option too. Only the trigger says what is *selected*.
 // Looked up in the document rather than the render container: the dialog is
 // portalled to the end of <body>.
 function selectedCategory(): string {
-  const trigger = document.querySelector("#transaction-category");
-  return trigger?.textContent?.trim() ?? "";
+  return selectedIn("#transaction-category");
+}
+
+function selectedIn(trigger: string): string {
+  return document.querySelector(trigger)?.textContent?.trim() ?? "";
 }
 
 function renderDialog(
-  editing: TransactionWithCategory | null,
   handlers: {
     onOpenChange?: (open: boolean) => void;
     onSubmitTransaction?: () => Promise<void>;
@@ -79,7 +50,6 @@ function renderDialog(
     <TransactionDialog
       open
       onOpenChange={handlers.onOpenChange ?? vi.fn()}
-      editing={editing}
       categories={CATEGORIES}
       categoryRules={handlers.categoryRules ?? []}
       tags={[]}
@@ -90,54 +60,29 @@ function renderDialog(
   );
 }
 
-describe("TransactionDialog when editing", () => {
-  it("shows the category the transaction actually has", () => {
-    // The regression: opening a transaction for editing replaced its category
-    // with the first one on the list, so saving silently reassigned it.
-    renderDialog(aTransaction());
-
-    expect(selectedCategory()).toContain("Padel");
-    expect(selectedCategory()).not.toContain("Bookit");
-  });
-
-  it("shows the right category for an income too", () => {
-    // Income reads from a different list, and the stale value it was compared
-    // against came from the expense one.
-    renderDialog(
-      aTransaction({
-        type: "income",
-        category_id: 5,
-        category_name: "Venta",
-        description: "Ropa",
-      }),
-    );
-
-    expect(selectedCategory()).toContain("Venta");
-    expect(selectedCategory()).not.toContain("Abuelo");
-  });
-
-  it("keeps the rest of the transaction intact", () => {
-    renderDialog(aTransaction({ tag_names: "viaje" }));
-
-    expect(screen.getByDisplayValue("Mensual (abril)")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("50000")).toBeInTheDocument();
-    expect(screen.getByText("viaje")).toBeInTheDocument();
-  });
-});
-
 // A category picked on the user's behalf is a choice they never made, and the
 // first one on the list was easy to accept without noticing — above all when
 // the form opens already filled in from the quick entry.
 describe("TransactionDialog when creating", () => {
   it("starts with no category rather than the first one", () => {
-    renderDialog(null);
+    renderDialog();
 
     expect(selectedCategory()).toContain("Seleccioná una categoría");
   });
 
+  // The same holds for the account: with a single account in the currency it
+  // was easy to take the one offered for the one meant.
+  it("starts with no account rather than the first one", () => {
+    renderDialog();
+
+    expect(selectedIn("#transaction-payment-method")).toContain(
+      "Seleccioná un método de pago",
+    );
+  });
+
   it("asks for a category instead of saving without one", async () => {
     const onSubmitTransaction = vi.fn(() => Promise.resolve());
-    renderDialog(null, { onSubmitTransaction });
+    renderDialog({ onSubmitTransaction });
 
     await userEvent.clear(screen.getByLabelText("Monto"));
     await userEvent.type(screen.getByLabelText("Monto"), "1500");
@@ -162,30 +107,8 @@ const NETFLIX_TO_GIMNASIO = {
 } as CategoryRuleWithCategory;
 
 describe("TransactionDialog and category rules", () => {
-  it("keeps the saved category when a rule of another category matches", () => {
-    // The regression: opening the transaction ran the rules over its saved
-    // description, and saving then reassigned its category without a word.
-    renderDialog(aTransaction({ description: "Netflix" }), {
-      categoryRules: [NETFLIX_TO_GIMNASIO],
-    });
-
-    expect(selectedCategory()).toContain("Padel");
-  });
-
-  it("applies the rules to an edited transaction once its description changes", async () => {
-    renderDialog(aTransaction({ description: "Cuota del club" }), {
-      categoryRules: [NETFLIX_TO_GIMNASIO],
-    });
-
-    const description = screen.getByLabelText("Descripción");
-    await userEvent.clear(description);
-    await userEvent.type(description, "Netflix");
-
-    expect(selectedCategory()).toContain("Gimnasio");
-  });
-
   it("fills in the category of a new transaction as its description is typed", async () => {
-    renderDialog(null, { categoryRules: [NETFLIX_TO_GIMNASIO] });
+    renderDialog({ categoryRules: [NETFLIX_TO_GIMNASIO] });
 
     await userEvent.type(screen.getByLabelText("Descripción"), "Netflix");
 
@@ -198,7 +121,7 @@ describe("TransactionDialog and category rules", () => {
 describe("TransactionDialog as a dialog", () => {
   it("says what it is for and offers Cancelar", async () => {
     const onOpenChange = vi.fn();
-    renderDialog(null, { onOpenChange });
+    renderDialog({ onOpenChange });
 
     expect(screen.getByText(/no cuenta como ingreso ni como gasto/)).toBeInTheDocument();
 
@@ -211,7 +134,7 @@ describe("TransactionDialog as a dialog", () => {
     const onOpenChange = vi.fn();
     const onSubmitTransaction = vi.fn(() => Promise.resolve());
     // The rule chooses the category, which the form no longer does on its own.
-    renderDialog(null, {
+    renderDialog({
       onOpenChange,
       onSubmitTransaction,
       categoryRules: [NETFLIX_TO_GIMNASIO],
@@ -220,10 +143,17 @@ describe("TransactionDialog as a dialog", () => {
     await userEvent.clear(screen.getByLabelText("Monto"));
     await userEvent.type(screen.getByLabelText("Monto"), "1500");
     await userEvent.type(screen.getByLabelText("Descripción"), "Netflix");
+    await userEvent.click(screen.getByLabelText("Método de pago"));
+    await userEvent.click(await screen.findByRole("option", { name: "Efectivo ARS" }));
     await userEvent.click(screen.getByRole("button", { name: "Agregar transacción" }));
 
     expect(onSubmitTransaction).toHaveBeenCalledWith(
-      expect.objectContaining({ amount: 1500, description: "Netflix", categoryId: 2 }),
+      expect.objectContaining({
+        amount: 1500,
+        description: "Netflix",
+        categoryId: 2,
+        paymentMethodId: 1,
+      }),
       [],
     );
     expect(onOpenChange).toHaveBeenCalledWith(false);

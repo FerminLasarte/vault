@@ -38,7 +38,7 @@ import { CategorySelect } from "@/components/filters/CategorySelect";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { TransactionDialog } from "@/components/TransactionDialog";
 import { QuickEntry } from "@/components/QuickEntry";
-import { AttachmentsDialog } from "@/components/AttachmentsDialog";
+import { TransactionInspector } from "@/components/TransactionInspector";
 import { useAppActions, useAppData, useAppStatus } from "@/hooks/useAppData";
 import { useBriefly } from "@/hooks/useBriefly";
 import { useViewState } from "@/hooks/useViewState";
@@ -135,7 +135,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
   const { transactions, categories, categoryRules, tags, paymentMethods, isLoading } =
     useAppData();
   const { isMutating } = useAppStatus();
-  const { addTransaction, editTransaction, removeTransaction } = useAppActions();
+  const { addTransaction, removeTransaction } = useAppActions();
 
   // Remembered, so coming back from another screen finds the same rows.
   const [currency, setCurrency] = useViewState("transactions.currency", DEFAULT_CURRENCY);
@@ -147,7 +147,6 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
   // short enough to be gone before it turns into decoration.
   const { current: justWritten, remember: markWritten } = useBriefly<number>(1200);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editing, setEditing] = useState<TransactionWithCategory | null>(null);
   // What the quick entry handed over when it asked for the whole form.
   const [draft, setDraft] = useState<NewTransaction | null>(null);
   // Bumped once a handed-over line is saved from the form, which starts the
@@ -156,7 +155,12 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
   const [pendingDeletion, setPendingDeletion] = useState<TransactionWithCategory | null>(
     null,
   );
-  const [attaching, setAttaching] = useState<TransactionWithCategory | null>(null);
+  // The row open in the inspector, by id: the row itself is read from the list
+  // on every render, so the panel always shows what was last saved, and closes
+  // on its own when the row is deleted.
+  const [inspectedId, setInspectedId] = useState<number | null>(null);
+  // What had the keyboard when the inspector opened, to give it back on closing.
+  const inspectorOpener = useRef<HTMLElement | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const tableBody = useRef<HTMLTableSectionElement>(null);
 
@@ -222,14 +226,31 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
     [filtered, safePage],
   );
 
+  // Read from the whole list rather than the page, so narrowing the filters
+  // while a row is open does not close it under the user.
+  const inspected = useMemo(
+    () => transactions.find((transaction) => transaction.id === inspectedId) ?? null,
+    [transactions, inspectedId],
+  );
+
+  function openInspector(transaction: TransactionWithCategory) {
+    inspectorOpener.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setInspectedId(transaction.id);
+  }
+
+  function closeInspector() {
+    setInspectedId(null);
+    if (inspectorOpener.current?.isConnected) inspectorOpener.current.focus();
+    inspectorOpener.current = null;
+  }
+
   function openCreateDialog() {
-    setEditing(null);
     setDraft(null);
     setIsFormOpen(true);
   }
 
   function openDraftDialog(started: NewTransaction) {
-    setEditing(null);
     setDraft(started);
     setIsFormOpen(true);
   }
@@ -253,11 +274,6 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
     if (request !== null) onRequestHandled(request.seq);
   }, [request, onRequestHandled]);
 
-  function openEditDialog(transaction: TransactionWithCategory) {
-    setEditing(transaction);
-    setIsFormOpen(true);
-  }
-
   // Saving answers "where did it go": the table sorts by date, so the row can
   // land on any page, and the filters can leave it out altogether. The action
   // resolves once the list holds the row, so it is there to be looked for.
@@ -266,10 +282,10 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
     setArrival(arrived);
   }
 
-  // Its own function rather than a branch of the form's submit, which decides
-  // between creating and editing from `editing` — state that outlives the edit
-  // dialog, and would turn a line saved from the quick entry into an edit of
-  // whatever row was edited last.
+  //
+  // Only for a new row. An edit happens in the inspector, where the row stays
+  // open beside the list: sending the table to another page on every pause in
+  // the typing would move the list out from under the user.
   async function createTransaction(values: NewTransaction, transactionTags: string[]) {
     const id = await addTransaction(values, transactionTags);
     announce({ id, message: "Transacción agregada", status: "seeking" });
@@ -279,12 +295,6 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
     values: NewTransaction,
     transactionTags: string[],
   ) {
-    if (editing) {
-      await editTransaction(editing.id, values, transactionTags);
-      announce({ id: editing.id, message: "Transacción actualizada", status: "seeking" });
-      return;
-    }
-
     await createTransaction(values, transactionTags);
     if (draft !== null) {
       setDraft(null);
@@ -346,11 +356,13 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
 
   // The two keys this screen answers. "/" is where every list with a search
   // box puts it, and Escape undoes the filtering without having to find the
-  // button that does it.
+  // button that does it — or, with a row open, closes the inspector first,
+  // since that is what is in front.
   useShortcuts({
     "/": () => searchRef.current?.focus(),
     Escape: () => {
-      if (hasActiveFilters) resetFilters();
+      if (inspected !== null) closeInspector();
+      else if (hasActiveFilters) resetFilters();
     },
   });
 
@@ -515,9 +527,15 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
                           // Room above and below when a saved row is brought
                           // into view, so it does not land under the toast
                           // that announces it.
+                          // A click anywhere on the row opens it in the
+                          // inspector. The pencil does the same from the
+                          // keyboard, which cannot reach a row.
+                          onClick={() => openInspector(transaction)}
+                          data-selected={transaction.id === inspectedId || undefined}
                           className={cn(
-                            "scroll-my-24",
+                            "scroll-my-24 cursor-pointer",
                             transaction.id === justWritten && "just-written",
+                            transaction.id === inspectedId && "bg-muted",
                           )}
                         >
                           <TableCell className="whitespace-nowrap text-muted-foreground">
@@ -590,7 +608,9 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
                               </>
                             )}
                           </TableCell>
-                          <TableCell>
+                          {/* Its own buttons, not a click on the row: deleting
+                              a row should not also open it. */}
+                          <TableCell onClick={(event) => event.stopPropagation()}>
                             <div className="row-actions flex items-center gap-1">
                               <ActionButton
                                 type="button"
@@ -605,7 +625,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
                                   transaction.attachment_count === 0 &&
                                     "text-muted-foreground",
                                 )}
-                                onClick={() => setAttaching(transaction)}
+                                onClick={() => openInspector(transaction)}
                               >
                                 <Paperclip />
                                 <span className="sr-only">
@@ -617,7 +637,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
                                 variant="ghost"
                                 size="icon-sm"
                                 label="Editar"
-                                onClick={() => openEditDialog(transaction)}
+                                onClick={() => openInspector(transaction)}
                               >
                                 <Pencil />
                                 <span className="sr-only">
@@ -690,13 +710,6 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
         </CardContent>
       </Card>
 
-      <AttachmentsDialog
-        transaction={attaching}
-        onOpenChange={(open) => {
-          if (!open) setAttaching(null);
-        }}
-      />
-
       <ConfirmDeleteDialog
         open={pendingDeletion !== null}
         onClose={() => setPendingDeletion(null)}
@@ -715,7 +728,6 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
       <TransactionDialog
         open={isFormOpen}
         onOpenChange={setIsFormOpen}
-        editing={editing}
         categories={categories}
         categoryRules={categoryRules}
         tags={tags}
@@ -724,6 +736,14 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
         draft={draft}
         onSubmitTransaction={handleSubmitTransaction}
       />
+
+      {inspected !== null && (
+        <TransactionInspector
+          key={inspected.id}
+          transaction={inspected}
+          onClose={closeInspector}
+        />
+      )}
     </div>
   );
 }
