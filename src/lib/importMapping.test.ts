@@ -5,10 +5,12 @@ import {
   isMappingComplete,
   parseFlexibleAmount,
   parseFlexibleDate,
+  withMappingCurrency,
 } from "./importMapping";
 import type { ColumnMapping } from "./importMapping";
 import { detectDelimiter, parseCsv } from "@/lib/csv";
 import type { ImportContext } from "@/lib/csv";
+import type { PaymentMethod } from "@/db/schema";
 
 const CONTEXT: ImportContext = {
   categories: [],
@@ -111,6 +113,41 @@ describe("isMappingComplete", () => {
     expect(isMappingComplete(base)).toBe(false);
     expect(isMappingComplete({ ...base, debit: 2 })).toBe(true);
     expect(isMappingComplete({ ...base, credit: 3 })).toBe(true);
+  });
+});
+
+describe("withMappingCurrency", () => {
+  const ACCOUNTS: PaymentMethod[] = [
+    { id: 1, name: "Efectivo", type: "cash", currency: "ARS", initial_balance: 0 },
+    { id: 2, name: "Banco ARS", type: "bank", currency: "ARS", initial_balance: 0 },
+    { id: 3, name: "Banco USD", type: "bank", currency: "USD", initial_balance: 0 },
+  ];
+
+  // The account list only offers accounts in the chosen currency, so switching
+  // it hid the account while the mapping went on holding it: a statement in
+  // dollars was imported against a peso account.
+  it("drops an account in another currency", () => {
+    const mapping = { ...EMPTY_MAPPING, currency: "ARS", paymentMethodId: 2 };
+
+    expect(withMappingCurrency(mapping, "USD", ACCOUNTS)).toEqual({
+      ...mapping,
+      currency: "USD",
+      paymentMethodId: null,
+    });
+  });
+
+  it("keeps an account that holds the new currency", () => {
+    const mapping = { ...EMPTY_MAPPING, currency: "USD", paymentMethodId: 2 };
+
+    expect(withMappingCurrency(mapping, "ARS", ACCOUNTS).paymentMethodId).toBe(2);
+  });
+
+  it("leaves an empty account empty", () => {
+    // "Sin cuenta" is a real answer, so nothing may be chosen on the user's
+    // behalf, not even the only account in the new currency.
+    const mapping = { ...EMPTY_MAPPING, currency: "ARS", paymentMethodId: null };
+
+    expect(withMappingCurrency(mapping, "USD", ACCOUNTS).paymentMethodId).toBeNull();
   });
 });
 

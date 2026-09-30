@@ -1,7 +1,7 @@
 import { matchCategoryIdForType } from "@/lib/categoryRules";
 import { normalizeForSearch as normalize } from "@/lib/text";
 import type { ImportContext, ImportPlan, ImportSkip } from "@/lib/csv";
-import type { NewTransaction } from "@/db/schema";
+import type { NewTransaction, PaymentMethod } from "@/db/schema";
 
 // How the amount is laid out in the file.
 //
@@ -171,6 +171,28 @@ function duplicateKey(transaction: NewTransaction): string {
     transaction.currency,
     normalize(transaction.description),
   ].join("|");
+}
+
+// Switches the mapping to another currency, emptying the account unless it
+// holds that currency.
+//
+// The account list only offers accounts in the mapping's currency, so an
+// account left behind would show as "Sin cuenta" while the import went on
+// writing the new currency against it. It is emptied rather than replaced:
+// picking one would invent a choice the user never made.
+export function withMappingCurrency(
+  mapping: ColumnMapping,
+  currency: string,
+  accounts: readonly PaymentMethod[],
+): ColumnMapping {
+  const keepsAccount = accounts.some(
+    (account) => account.id === mapping.paymentMethodId && account.currency === currency,
+  );
+  return {
+    ...mapping,
+    currency,
+    paymentMethodId: keepsAccount ? mapping.paymentMethodId : null,
+  };
 }
 
 export function isMappingComplete(mapping: ColumnMapping): boolean {
