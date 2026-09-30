@@ -3,10 +3,13 @@ import {
   findProfile,
   parseProfiles,
   rememberProfile,
+  startingMapping,
   statementSignature,
 } from "./importProfiles";
 import { EMPTY_MAPPING } from "./importMapping";
 import type { ColumnMapping } from "./importMapping";
+import { CURRENCY_CODES } from "@/lib/currency";
+import type { PaymentMethod } from "@/db/schema";
 
 const MAPPING: ColumnMapping = {
   ...EMPTY_MAPPING,
@@ -119,5 +122,50 @@ describe("findProfile", () => {
 
     // A header 30 rows down is not a preamble, it is a different file.
     expect(findProfile(profiles, deep)).toBeNull();
+  });
+});
+
+describe("startingMapping", () => {
+  const ACCOUNTS: PaymentMethod[] = [
+    { id: 2, name: "Banco ARS", type: "bank", currency: "ARS", initial_balance: 0 },
+    { id: 3, name: "Banco USD", type: "bank", currency: "USD", initial_balance: 0 },
+  ];
+  const STATEMENT = [["Título", "", "", ""], HEADER];
+
+  function remembered(mapping: Partial<ColumnMapping>) {
+    return rememberProfile({}, statementSignature(HEADER), { ...MAPPING, ...mapping });
+  }
+
+  it("offers back a remembered mapping, from the row its header is on", () => {
+    const profiles = remembered({ currency: "USD", paymentMethodId: 3 });
+
+    expect(startingMapping(profiles, STATEMENT, ACCOUNTS)).toEqual({
+      ...MAPPING,
+      currency: "USD",
+      paymentMethodId: 3,
+      headerRow: 1,
+    });
+  });
+
+  // The account list only offers existing accounts in the mapping's currency,
+  // so a remembered account that no longer fits showed as "Sin cuenta" while
+  // the import went on writing to it.
+  it("drops a remembered account that was deleted since", () => {
+    const profiles = remembered({ currency: "ARS", paymentMethodId: 9 });
+
+    expect(startingMapping(profiles, STATEMENT, ACCOUNTS).paymentMethodId).toBeNull();
+  });
+
+  it("drops a remembered account now in another currency", () => {
+    const profiles = remembered({ currency: "ARS", paymentMethodId: 3 });
+
+    expect(startingMapping(profiles, STATEMENT, ACCOUNTS).paymentMethodId).toBeNull();
+  });
+
+  it("starts from nothing for a format never seen before", () => {
+    expect(startingMapping({}, STATEMENT, ACCOUNTS)).toEqual({
+      ...EMPTY_MAPPING,
+      currency: CURRENCY_CODES[0],
+    });
   });
 });

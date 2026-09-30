@@ -25,7 +25,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { buildMappedImportPlan, isMappingComplete } from "@/lib/importMapping";
+import {
+  buildMappedImportPlan,
+  isMappingComplete,
+  withFittingAccount,
+} from "@/lib/importMapping";
 import { CURRENCIES } from "@/lib/currency";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { TRANSACTION_TYPE_LABELS } from "@/lib/labels";
@@ -278,7 +282,15 @@ export function ImportMappingDialog({
                   CURRENCIES.map((currency) => [currency.code, currency.label]),
                 )}
                 value={mapping.currency}
-                onValueChange={(next) => next && set("currency", String(next))}
+                onValueChange={(next) =>
+                  next &&
+                  onMappingChange(
+                    withFittingAccount(
+                      { ...mapping, currency: String(next) },
+                      paymentMethods,
+                    ),
+                  )
+                }
               >
                 <SelectTrigger id="import-currency" className="w-full">
                   <SelectValue />

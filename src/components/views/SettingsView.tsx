@@ -51,9 +51,9 @@ import { duplicatesSkipped, transactionCount } from "@/lib/transactionCounts";
 import { ImportMappingDialog } from "@/components/ImportMappingDialog";
 import { EMPTY_MAPPING } from "@/lib/importMapping";
 import {
-  findProfile,
   parseProfiles,
   rememberProfile,
+  startingMapping,
   statementSignature,
 } from "@/lib/importProfiles";
 import { getSetting, setSetting, IMPORT_PROFILES } from "@/db";
@@ -205,13 +205,7 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
       // searched for rather than assumed: statements put a title and an account
       // summary above the table.
       const profiles = parseProfiles(await getSetting(IMPORT_PROFILES));
-      const found = findProfile(profiles, picked.rows);
-
-      setMapping(
-        found === null
-          ? { ...EMPTY_MAPPING, currency: CURRENCY_CODES[0] }
-          : { ...found.mapping, headerRow: found.headerRow },
-      );
+      setMapping(startingMapping(profiles, picked.rows, paymentMethods));
       setStatement(picked);
     } catch (error) {
       console.error("Failed to read the statement:", error);
