@@ -41,6 +41,7 @@ import { QuickEntry } from "@/components/QuickEntry";
 import { TransactionInspector } from "@/components/TransactionInspector";
 import { useAppActions, useAppData, useAppStatus } from "@/hooks/useAppData";
 import { useBriefly } from "@/hooks/useBriefly";
+import { useMerchantName } from "@/hooks/useMerchantName";
 import { useViewState } from "@/hooks/useViewState";
 import {
   applyTransactionFilters,
@@ -132,8 +133,15 @@ function TransferAmount({ transaction }: { transaction: TransactionWithCategory 
 }
 
 export function TransactionsView({ request, onRequestHandled }: ViewProps) {
-  const { transactions, categories, categoryRules, tags, paymentMethods, isLoading } =
-    useAppData();
+  const {
+    transactions,
+    categories,
+    categoryRules,
+    tags,
+    paymentMethods,
+    aiEnabled,
+    isLoading,
+  } = useAppData();
   const { isMutating } = useAppStatus();
   const { addTransaction, removeTransaction } = useAppActions();
 
@@ -162,6 +170,11 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
   // What had the keyboard when the inspector opened, to give it back on closing.
   const inspectorOpener = useRef<HTMLElement | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const merchantName = useMerchantName();
+  // What a row is called on screen: the merchant, when the AI recognises one in
+  // what the bank wrote.
+  const labelOf = (transaction: TransactionWithCategory) =>
+    merchantName(transaction.description) ?? transaction.description;
   const tableBody = useRef<HTMLTableSectionElement>(null);
 
   function setFilter<K extends keyof Filters>(key: K, value: Filters[K]) {
@@ -543,7 +556,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col gap-1">
-                              <span>{transaction.description}</span>
+                              <span>{labelOf(transaction)}</span>
                               {splitTagNames(transaction.tag_names).length > 0 && (
                                 <div className="flex flex-wrap gap-1">
                                   {splitTagNames(transaction.tag_names).map((name) => (
@@ -629,7 +642,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
                               >
                                 <Paperclip />
                                 <span className="sr-only">
-                                  Comprobantes de {transaction.description}
+                                  Comprobantes de {labelOf(transaction)}
                                 </span>
                               </ActionButton>
                               <ActionButton
@@ -641,7 +654,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
                               >
                                 <Pencil />
                                 <span className="sr-only">
-                                  Editar {transaction.description}
+                                  Editar {labelOf(transaction)}
                                 </span>
                               </ActionButton>
                               <ActionButton
@@ -653,7 +666,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
                               >
                                 <Trash2 />
                                 <span className="sr-only">
-                                  Eliminar {transaction.description}
+                                  Eliminar {labelOf(transaction)}
                                 </span>
                               </ActionButton>
                             </div>
@@ -716,7 +729,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
         title="¿Eliminar esta transacción?"
         description={
           <>
-            Se eliminará «{pendingDeletion?.description}» del{" "}
+            Se eliminará «{pendingDeletion ? labelOf(pendingDeletion) : ""}» del{" "}
             {pendingDeletion ? formatDate(pendingDeletion.date) : ""}. Esta acción no se
             puede deshacer.
           </>
@@ -734,6 +747,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
         paymentMethods={paymentMethods}
         defaultCurrency={currency}
         draft={draft}
+        aiEnabled={aiEnabled}
         onSubmitTransaction={handleSubmitTransaction}
       />
 

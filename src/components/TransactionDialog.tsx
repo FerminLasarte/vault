@@ -31,6 +31,7 @@ interface TransactionDialogProps {
   // What a new transaction starts with instead of a blank form: the line typed
   // into the quick entry, when the user asked for the whole form to finish it.
   draft?: NewTransaction | null;
+  aiEnabled: boolean;
   onSubmitTransaction: (transaction: NewTransaction, tags: string[]) => Promise<void>;
 }
 
@@ -45,6 +46,7 @@ export function TransactionDialog({
   paymentMethods,
   defaultCurrency,
   draft = null,
+  aiEnabled,
   onSubmitTransaction,
 }: TransactionDialogProps) {
   const form = useDialogForm<TransactionFormInput, TransactionFormValues>({
@@ -88,7 +90,13 @@ export function TransactionDialog({
       className="sm:max-w-lg"
       layout="grid"
     >
-      <TransactionFields form={form} fields={fields} tags={tags} idPrefix="transaction" />
+      <TransactionFields
+        form={form}
+        fields={fields}
+        tags={tags}
+        idPrefix="transaction"
+        aiEnabled={aiEnabled}
+      />
     </FormDialog>
   );
 }

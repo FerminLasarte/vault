@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loading } from "@/components/Loading";
+import { useMerchantName } from "@/hooks/useMerchantName";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type { TransactionWithCategory } from "@/db/schema";
@@ -40,6 +41,7 @@ export function RecentTransactions({
   isLoading,
 }: RecentTransactionsProps) {
   const recent = transactions.slice(0, RECENT_COUNT);
+  const merchantName = useMerchantName();
 
   return (
     <Card>
@@ -66,7 +68,8 @@ export function RecentTransactions({
                 >
                   <div className="flex min-w-0 flex-col gap-0.5">
                     <span className="truncate text-sm font-medium">
-                      {transaction.description || secondaryLabel(transaction)}
+                      {merchantName(transaction.description) ??
+                        (transaction.description || secondaryLabel(transaction))}
                     </span>
                     <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       <span className="truncate">{secondaryLabel(transaction)}</span>

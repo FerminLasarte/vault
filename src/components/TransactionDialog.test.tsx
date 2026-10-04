@@ -44,6 +44,7 @@ function renderDialog(
     onOpenChange?: (open: boolean) => void;
     onSubmitTransaction?: () => Promise<void>;
     categoryRules?: CategoryRuleWithCategory[];
+    aiEnabled?: boolean;
   } = {},
 ) {
   return render(
@@ -55,6 +56,7 @@ function renderDialog(
       tags={[]}
       paymentMethods={ACCOUNTS}
       defaultCurrency="ARS"
+      aiEnabled={handlers.aiEnabled ?? false}
       onSubmitTransaction={handlers.onSubmitTransaction ?? vi.fn()}
     />,
   );
@@ -113,6 +115,34 @@ describe("TransactionDialog and category rules", () => {
     await userEvent.type(screen.getByLabelText("Descripción"), "Netflix");
 
     expect(selectedCategory()).toContain("Gimnasio");
+  });
+});
+
+// The lists show the merchant instead of what the bank wrote, so the form says
+// so before a row changes name with nothing to explain why.
+describe("TransactionDialog and merchant names", () => {
+  it("says what name a bank's description will be shown as", async () => {
+    renderDialog({ aiEnabled: true });
+
+    await userEvent.type(screen.getByLabelText("Descripción"), "MERPAGO*RAPPI 4471");
+
+    expect(screen.getByText("Se muestra como «Rappi»")).toBeInTheDocument();
+  });
+
+  it("says nothing about what the user typed themselves", async () => {
+    renderDialog({ aiEnabled: true });
+
+    await userEvent.type(screen.getByLabelText("Descripción"), "almuerzo en rappi");
+
+    expect(screen.queryByText(/Se muestra como/)).not.toBeInTheDocument();
+  });
+
+  it("says nothing with the local AI switched off", async () => {
+    renderDialog({ aiEnabled: false });
+
+    await userEvent.type(screen.getByLabelText("Descripción"), "MERPAGO*RAPPI 4471");
+
+    expect(screen.queryByText(/Se muestra como/)).not.toBeInTheDocument();
   });
 });
 

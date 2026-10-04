@@ -1650,6 +1650,9 @@ export const IMPORT_PROFILES = "import_profiles";
 // How often the donation invitation has been earned and answered, as the JSON
 // that src/lib/donationPrompt.ts reads and writes. Never leaves the machine.
 export const DONATION_PROMPT = "donation_prompt";
+// What the local AI keeps about itself, as the JSON that src/lib/ai/state.ts
+// reads. Choices only; everything it shows is recomputed from the history.
+export const AI_STATE = "ai_state";
 
 export async function getSetting(key: string): Promise<string | null> {
   const db = await getDb();

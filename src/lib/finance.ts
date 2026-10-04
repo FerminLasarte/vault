@@ -6,6 +6,7 @@ import type {
   TransactionType,
   TransactionWithCategory,
 } from "@/db/schema";
+import { merchantName } from "@/lib/ai/merchants";
 import { normalizeForSearch, splitTagNames } from "@/lib/text";
 import { toIsoDate, parseIsoDate } from "@/lib/format";
 
@@ -102,8 +103,9 @@ export function filterByAmountRange<T extends Transaction>(
   );
 }
 
-// Matches against the description. An empty or whitespace-only query means
-// "no constraint" rather than "match nothing".
+// Matches against the description, and against the merchant name the lists
+// show for it, so searching what is on screen finds it. An empty or
+// whitespace-only query means "no constraint" rather than "match nothing".
 export function filterBySearch<T extends Transaction>(
   transactions: T[],
   query: string,
@@ -111,9 +113,11 @@ export function filterBySearch<T extends Transaction>(
   const needle = normalizeForSearch(query.trim());
   if (needle === "") return transactions;
 
-  return transactions.filter((transaction) =>
-    normalizeForSearch(transaction.description).includes(needle),
-  );
+  return transactions.filter((transaction) => {
+    if (normalizeForSearch(transaction.description).includes(needle)) return true;
+    const merchant = merchantName(transaction.description);
+    return merchant !== null && normalizeForSearch(merchant).includes(needle);
+  });
 }
 
 // Kept out of `applyTransactionFilters` because tags live on the joined
