@@ -7,12 +7,14 @@ import {
   Pencil,
   Plus,
   Search,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ActionButton } from "@/components/ActionButton";
+import { AiMark } from "@/components/AiMark";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -77,6 +79,8 @@ interface Filters {
   // As typed, so a half-written bound stays in the box.
   minAmount: string;
   maxAmount: string;
+  // Only movements whose category the local AI chose and nobody confirmed.
+  suggestedOnly: boolean;
 }
 
 const NO_FILTERS: Filters = {
@@ -86,6 +90,7 @@ const NO_FILTERS: Filters = {
   dateRange: EMPTY_DATE_RANGE,
   minAmount: "",
   maxAmount: "",
+  suggestedOnly: false,
 };
 
 // A row that was just saved, while the table brings it on screen. It is looked
@@ -140,16 +145,20 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
     tags,
     paymentMethods,
     aiEnabled,
+    categoryModel,
     isLoading,
   } = useAppData();
   const { isMutating } = useAppStatus();
-  const { addTransaction, removeTransaction } = useAppActions();
+  const { addTransaction, removeTransaction, confirmSuggestedCategories } =
+    useAppActions();
 
   // Remembered, so coming back from another screen finds the same rows.
   const [currency, setCurrency] = useViewState("transactions.currency", DEFAULT_CURRENCY);
   const [filters, setFilters] = useViewState("transactions.filters", NO_FILTERS);
   const [page, setPage] = useViewState("transactions.page", 0);
   const { search, tag, categoryId, dateRange, minAmount, maxAmount } = filters;
+  // Ignored with the AI off, which shows no suggestions to review.
+  const suggestedOnly = aiEnabled && filters.suggestedOnly;
   const [arrival, setArrival] = useState<Arrival | null>(null);
   // Long enough to find the row on a screen the user is only now looking at,
   // short enough to be gone before it turns into decoration.
@@ -191,8 +200,27 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
       minAmount: parseAmountBound(filters.minAmount),
       maxAmount: parseAmountBound(filters.maxAmount),
     });
-    return filters.tag === null ? matching : filterByTag(matching, filters.tag);
-  }, [transactions, currency, filters]);
+    const tagged = filters.tag === null ? matching : filterByTag(matching, filters.tag);
+    return suggestedOnly
+      ? tagged.filter((transaction) => transaction.category_suggested === 1)
+      : tagged;
+  }, [transactions, currency, filters, suggestedOnly]);
+
+  // Categories the AI chose on import and nobody has looked at yet, in the
+  // currency on screen.
+  const suggestedCount = useMemo(
+    () =>
+      transactions.filter(
+        (transaction) =>
+          transaction.category_suggested === 1 && transaction.currency === currency,
+      ).length,
+    [transactions, currency],
+  );
+
+  async function confirmShown() {
+    await confirmSuggestedCategories(filtered.map((transaction) => transaction.id));
+    setFilter("suggestedOnly", false);
+  }
 
   // Any change to the filters starts the listing over at the first page.
   //
@@ -365,7 +393,8 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
     dateRange.from !== null ||
     dateRange.to !== null ||
     minAmount !== "" ||
-    maxAmount !== "";
+    maxAmount !== "" ||
+    suggestedOnly;
 
   // The two keys this screen answers. "/" is where every list with a search
   // box puts it, and Escape undoes the filtering without having to find the
@@ -497,6 +526,32 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
             />
           </div>
 
+          {aiEnabled && (suggestedCount > 0 || suggestedOnly) && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-sm leading-none font-medium">Revisar</span>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={suggestedOnly ? "secondary" : "outline"}
+                  aria-pressed={suggestedOnly}
+                  onClick={() => setFilter("suggestedOnly", !suggestedOnly)}
+                >
+                  <Sparkles />
+                  Sugeridas por IA ({suggestedCount})
+                </Button>
+                {suggestedOnly && filtered.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => void confirmShown()}
+                  >
+                    Confirmar {filtered.length === 1 ? "la sugerencia" : "todas"}
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+
           {hasActiveFilters && (
             <Button type="button" variant="ghost" onClick={resetFilters}>
               Limpiar filtros
@@ -578,6 +633,9 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
                               : transaction.category_name
                                 ? `${transaction.category_icon ?? ""} ${transaction.category_name}`.trim()
                                 : "Sin categoría"}
+                            {aiEnabled && transaction.category_suggested === 1 && (
+                              <AiMark className="ml-2 align-middle" />
+                            )}
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-wrap items-center gap-1">
@@ -748,6 +806,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
         defaultCurrency={currency}
         draft={draft}
         aiEnabled={aiEnabled}
+        categoryModel={categoryModel}
         onSubmitTransaction={handleSubmitTransaction}
       />
 

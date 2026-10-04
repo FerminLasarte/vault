@@ -119,6 +119,7 @@ function anExpense(amount: number): Transaction {
     description: "Gasto",
     date: "2026-08-05",
     currency: "ARS",
+    category_suggested: 0,
   };
 }
 

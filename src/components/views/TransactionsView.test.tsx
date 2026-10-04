@@ -61,6 +61,7 @@ function aTransaction(
     description: `Movimiento ${id}`,
     date: "2026-08-01",
     currency: "ARS",
+    category_suggested: 0,
     category_name: null,
     category_color: null,
     category_icon: null,
@@ -97,6 +98,8 @@ function renderView(
       { id: 1, name: "Efectivo", type: "cash", currency: "ARS", initial_balance: 0 },
     ],
     categoryRules: [],
+    categoryModel: null,
+    aiEnabled: false,
     tags: [],
     today: TODAY,
     isLoading: false,
@@ -570,3 +573,29 @@ function clickAction(options: unknown) {
   const { action } = options as { action: { onClick: (event: unknown) => void } };
   action.onClick({});
 }
+
+// Categories the AI chose on import are found and confirmed from the list.
+describe("TransactionsView and categories the AI suggested", () => {
+  const rows = [
+    anEditable(1, { category_suggested: 1 }),
+    anEditable(2, { category_suggested: 1 }),
+    anEditable(3),
+  ];
+
+  it("narrows the list to them and confirms them together", async () => {
+    const confirmSuggestedCategories = vi.fn(() => Promise.resolve());
+    renderView(rows, { confirmSuggestedCategories }, { aiEnabled: true });
+
+    await userEvent.click(screen.getByRole("button", { name: /Sugeridas por IA \(2\)/ }));
+    expect(screen.getByText("2 transacciones")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar todas" }));
+    expect(confirmSuggestedCategories).toHaveBeenCalledWith([1, 2]);
+  });
+
+  it("offers nothing to review with the local AI off", () => {
+    renderView(rows, {}, { aiEnabled: false });
+
+    expect(screen.queryByRole("button", { name: /Sugeridas por IA/ })).toBeNull();
+  });
+});

@@ -26,6 +26,7 @@ function makeRow(overrides: Partial<TransactionWithCategory>): TransactionWithCa
     description: "Compra",
     date: "2026-08-01",
     currency: "ARS",
+    category_suggested: 0,
     category_name: null,
     category_color: null,
     category_icon: null,
@@ -239,6 +240,7 @@ describe("buildImportPlan", () => {
         description: "Almuerzo",
         date: "2026-08-01",
         currency: "ARS",
+        category_suggested: 0,
       },
     ];
     const plan = buildImportPlan(
@@ -272,6 +274,7 @@ describe("buildImportPlan", () => {
         description: "SUBE",
         date: "2026-08-01",
         currency: "ARS",
+        category_suggested: 0,
       },
     ];
     const line = "2026-08-01,Gasto,10,ARS,Comida,Efectivo ARS,,,SUBE\n";

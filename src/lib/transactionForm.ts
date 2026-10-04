@@ -1,5 +1,10 @@
 import { z } from "zod";
-import type { NewTransaction, TransactionType, TransactionWithCategory } from "@/db";
+import type {
+  NewTransaction,
+  Transaction,
+  TransactionType,
+  TransactionWithCategory,
+} from "@/db";
 import { todayIsoDate } from "@/lib/format";
 import { splitTagNames } from "@/lib/text";
 
@@ -161,4 +166,14 @@ export function differsFromSaved(
     next.date !== saved.date ||
     nextTags.join(",") !== savedTags.join(",")
   );
+}
+
+// Whether a saved movement's category is still the local AI's after an edit:
+// only while the category itself was left alone. Changing it is a decision,
+// and so is confirming it, which happens elsewhere.
+export function stillSuggested(
+  saved: Pick<Transaction, "category_suggested" | "category_id">,
+  categoryId: number | null,
+): boolean {
+  return saved.category_suggested === 1 && saved.category_id === categoryId;
 }

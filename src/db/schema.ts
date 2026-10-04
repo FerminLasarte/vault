@@ -44,6 +44,9 @@ export interface Transaction {
   description: string;
   date: string;
   currency: string;
+  // 1 while the category is one the local AI chose on import and the user has
+  // not confirmed or changed yet; 0 for everything else. SQLite has no boolean.
+  category_suggested: number;
 }
 
 export interface TransactionWithCategory extends Transaction {
@@ -252,6 +255,9 @@ export interface NewTransaction {
   description: string;
   date: string;
   currency: string;
+  // Set only by an import whose category came from the local AI, so it can be
+  // reviewed. Anything written without it is the user's own choice.
+  categorySuggested?: boolean;
 }
 
 // Maps a piece of description text to a category, so descriptions that repeat

@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { AiMark } from "@/components/AiMark";
+import { AiNote } from "@/components/AiMark";
 import { DatePicker } from "@/components/DatePicker";
 import { TagInput } from "@/components/TagInput";
 import type {
@@ -32,7 +32,9 @@ interface TransactionFieldsProps {
   // together, and two fields sharing an id would leave a label pointing at the
   // wrong one.
   idPrefix: string;
-  // Drawn under the category, for the inspector to say which rule matches.
+  // Drawn under the category instead of the default note, for the inspector
+  // to say which rule matches and offer what to do about it. Null draws
+  // nothing.
   categoryHint?: ReactNode;
   // Whether the local AI is on, which decides whether the merchant name the
   // lists will show is announced under the description.
@@ -67,6 +69,7 @@ export function TransactionFields({
     destinationAccounts,
     destinationAccount,
     descriptionField,
+    suggestion,
     markCategoryChosen,
   } = fields;
 
@@ -77,6 +80,14 @@ export function TransactionFields({
   // its description having explained why.
   const description = useWatch({ control, name: "description" });
   const shownAs = aiEnabled ? merchantName(description ?? "") : null;
+
+  // Said while the category is the one the AI suggested, whoever put it there:
+  // a choice the user makes for themselves says nothing about the AI.
+  const categoryId = useWatch({ control, name: "categoryId" });
+  const aiReason =
+    suggestion?.source === "ai" && suggestion.categoryId === categoryId
+      ? suggestion.reason
+      : null;
 
   const originSelectItems = useMemo(
     () =>
@@ -206,7 +217,9 @@ export function TransactionFields({
           {errors.categoryId && (
             <p className="text-xs text-destructive">{errors.categoryId.message}</p>
           )}
-          {categoryHint}
+          {categoryHint !== undefined
+            ? categoryHint
+            : aiReason !== null && <AiNote reason={aiReason}>Sugerida por IA</AiNote>}
         </div>
       )}
 
@@ -329,10 +342,9 @@ export function TransactionFields({
           {...descriptionField}
         />
         {shownAs !== null && (
-          <p className="flex items-center gap-2 text-xs text-muted-foreground">
-            <AiMark reason="Vault reconoce el comercio en el texto del banco. La descripción guardada no cambia." />
+          <AiNote reason="Vault reconoce el comercio en el texto del banco. La descripción guardada no cambia.">
             Se muestra como «{shownAs}»
-          </p>
+          </AiNote>
         )}
         {errors.description && (
           <p className="text-xs text-destructive">{errors.description.message}</p>

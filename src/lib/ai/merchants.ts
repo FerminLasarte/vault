@@ -26,12 +26,16 @@ const CONNECTORS = new Set(["de", "del", "la", "las", "el", "los", "y", "e"]);
 // outcome independent of anything but the dictionary.
 const PATTERNS = dictionary.merchants
   .flatMap((merchant) =>
-    merchant.patterns.map((pattern) => ({
-      pattern: ` ${pattern} `,
-      name: merchant.name,
-    })),
+    merchant.patterns.map((pattern) => ({ pattern: ` ${pattern} `, merchant })),
   )
   .sort((a, b) => b.pattern.length - a.pattern.length);
+
+// A merchant the dictionary knows, and what kind of place it is when that is
+// known: the key into categoryHints.json.
+export interface KnownMerchant {
+  name: string;
+  hint?: string;
+}
 
 const PROCESSOR_PREFIX = /^\s*([\p{L}\d]+)\s*\*/u;
 
@@ -51,9 +55,16 @@ function withoutProcessor(description: string): string {
   return description;
 }
 
-function knownMerchant(text: string): string | null {
+function findMerchant(text: string): KnownMerchant | null {
   const haystack = ` ${words(text).join(" ")} `;
-  return PATTERNS.find(({ pattern }) => haystack.includes(pattern))?.name ?? null;
+  return PATTERNS.find(({ pattern }) => haystack.includes(pattern))?.merchant ?? null;
+}
+
+// The dictionary's merchant behind any description, typed or not. Unlike
+// `merchantName`, this changes nothing on screen: it only says what the text
+// mentions, which is fair to read in "nafta ypf" too.
+export function knownMerchant(description: string): KnownMerchant | null {
+  return findMerchant(withoutProcessor(description));
 }
 
 function asNameWord(word: string, index: number): string {
@@ -86,7 +97,7 @@ function computeMerchantName(description: string): string | null {
   if (!readsLikeABank(description)) return null;
 
   const text = withoutProcessor(description);
-  const name = knownMerchant(text) ?? cleanedName(text);
+  const name = findMerchant(text)?.name ?? cleanedName(text);
   return name !== null && name !== description.trim() ? name : null;
 }
 

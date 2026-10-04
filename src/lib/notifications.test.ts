@@ -26,6 +26,7 @@ function anExpenseOn(date: string, currency = "ARS"): Transaction {
     description: "Gasto",
     date,
     currency,
+    category_suggested: 0,
   };
 }
 
@@ -164,6 +165,7 @@ function anExpense(amount: number, date = "2026-08-05"): Transaction {
     description: "Gasto",
     date,
     currency: "ARS",
+    category_suggested: 0,
   };
 }
 

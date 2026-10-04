@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bell,
   CalendarClock,
@@ -69,7 +69,7 @@ import {
 import { backupStatus } from "@/lib/backupReminder";
 import { cn } from "@/lib/utils";
 import type { ThemePreference } from "@/context/ThemeContext";
-import type { ImportSkip, ImportPlan } from "@/lib/csv";
+import type { ImportContext, ImportSkip, ImportPlan } from "@/lib/csv";
 import type { ColumnMapping } from "@/lib/importMapping";
 import type { PickedStatement } from "@/lib/files";
 import type { ViewProps } from "@/lib/menu";
@@ -91,6 +91,7 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
     transactions,
     categories,
     categoryRules,
+    categoryModel,
     paymentMethods,
     exchangeRateHistory,
     lastBackupAt,
@@ -119,6 +120,20 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
   const [outcome, setOutcome] = useState<ImportOutcome | null>(null);
   const [statement, setStatement] = useState<PickedStatement | null>(null);
   const [mapping, setMapping] = useState<ColumnMapping>(EMPTY_MAPPING);
+
+  // What both imports, the app's own file and a bank statement, place and
+  // check their rows against.
+  const importContext = useMemo<ImportContext>(
+    () => ({
+      categories,
+      categoryRules,
+      categoryModel,
+      accounts: paymentMethods,
+      existing: transactions,
+      supportedCurrencies: CURRENCY_CODES,
+    }),
+    [categories, categoryRules, categoryModel, paymentMethods, transactions],
+  );
 
   useEffect(() => {
     // Asked of Rust, which knows where the SQL plugin opened the file; working
@@ -251,13 +266,10 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
 
       // Detected rather than assumed: the app writes commas, but a file saved
       // again by Excel in an Argentine locale comes back with semicolons.
-      const plan = buildImportPlan(parseCsv(contents, detectDelimiter(contents)), {
-        categories,
-        categoryRules,
-        accounts: paymentMethods,
-        existing: transactions,
-        supportedCurrencies: CURRENCY_CODES,
-      });
+      const plan = buildImportPlan(
+        parseCsv(contents, detectDelimiter(contents)),
+        importContext,
+      );
 
       if (plan.ready.length > 0) {
         await importTransactions(plan.ready);
@@ -533,13 +545,7 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
         mapping={mapping}
         onMappingChange={setMapping}
         paymentMethods={paymentMethods}
-        context={{
-          categories,
-          categoryRules,
-          accounts: paymentMethods,
-          existing: transactions,
-          supportedCurrencies: CURRENCY_CODES,
-        }}
+        context={importContext}
         onConfirm={handleConfirmStatement}
       />
 

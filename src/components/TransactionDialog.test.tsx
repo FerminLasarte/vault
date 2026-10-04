@@ -2,6 +2,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it, vi } from "vitest";
+import { trainCategoryModel, type CategoryModel } from "@/lib/ai/categoryModel";
 import { TransactionDialog } from "./TransactionDialog";
 import type { Category, CategoryRuleWithCategory, PaymentMethod } from "@/db";
 
@@ -45,6 +46,7 @@ function renderDialog(
     onSubmitTransaction?: () => Promise<void>;
     categoryRules?: CategoryRuleWithCategory[];
     aiEnabled?: boolean;
+    categoryModel?: CategoryModel | null;
   } = {},
 ) {
   return render(
@@ -57,6 +59,7 @@ function renderDialog(
       paymentMethods={ACCOUNTS}
       defaultCurrency="ARS"
       aiEnabled={handlers.aiEnabled ?? false}
+      categoryModel={handlers.categoryModel ?? null}
       onSubmitTransaction={handlers.onSubmitTransaction ?? vi.fn()}
     />,
   );
@@ -115,6 +118,45 @@ describe("TransactionDialog and category rules", () => {
     await userEvent.type(screen.getByLabelText("Descripción"), "Netflix");
 
     expect(selectedCategory()).toContain("Gimnasio");
+  });
+});
+
+// Where no rule speaks, the local AI fills the category in from the history,
+// and the form says so, with the reason on hover.
+describe("TransactionDialog and the local AI", () => {
+  const padelHistory = trainCategoryModel(
+    [1, 2, 3].map((id) => ({
+      id,
+      amount: 9000,
+      type: "expense" as const,
+      category_id: 3,
+      payment_method_id: 1,
+      destination_payment_method_id: null,
+      destination_amount: null,
+      description: "turno cancha",
+      date: "2026-09-01",
+      currency: "ARS",
+      category_suggested: 0,
+    })),
+  );
+
+  it("fills in the category it learned, and says it was the AI", async () => {
+    renderDialog({ categoryModel: padelHistory });
+
+    await userEvent.type(screen.getByLabelText("Descripción"), "turno cancha");
+
+    expect(selectedCategory()).toContain("Padel");
+    expect(screen.getByText("Sugerida por IA")).toBeInTheDocument();
+  });
+
+  it("stops saying so once the user picks another category", async () => {
+    renderDialog({ categoryModel: padelHistory });
+
+    await userEvent.type(screen.getByLabelText("Descripción"), "turno cancha");
+    await userEvent.click(document.querySelector("#transaction-category")!);
+    await userEvent.click(await screen.findByRole("option", { name: /Gimnasio/ }));
+
+    expect(screen.queryByText("Sugerida por IA")).not.toBeInTheDocument();
   });
 });
 

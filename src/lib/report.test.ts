@@ -24,6 +24,7 @@ function aTransaction(
     description: "Gasto",
     date: "2026-08-05",
     currency: "ARS",
+    category_suggested: 0,
     category_name: "Salida",
     category_color: "#f00",
     category_icon: "🍺",

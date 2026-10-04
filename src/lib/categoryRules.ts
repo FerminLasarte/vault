@@ -34,14 +34,6 @@ export function matchCategoryRule(
   return best;
 }
 
-// Convenience wrapper for the callers that only care about where it lands.
-export function matchCategoryId(
-  description: string,
-  rules: CategoryRule[],
-): number | null {
-  return matchCategoryRule(description, rules)?.category_id ?? null;
-}
-
 // The rule that decides where a movement of this kind should land, or null.
 //
 // A rule names one category, and a category holds either income or expenses.
@@ -64,17 +56,5 @@ export function matchCategoryRuleForType(
   return matchCategoryRule(
     description,
     rules.filter((rule) => ofType.has(rule.category_id)),
-  );
-}
-
-// Where a movement of this kind should land, or null.
-export function matchCategoryIdForType(
-  description: string,
-  rules: CategoryRule[],
-  categories: Category[],
-  type: CategoryType,
-): number | null {
-  return (
-    matchCategoryRuleForType(description, rules, categories, type)?.category_id ?? null
   );
 }

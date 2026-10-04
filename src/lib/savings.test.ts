@@ -21,6 +21,7 @@ function makeTransaction(overrides: Partial<Transaction>): Transaction {
     description: "",
     date: TODAY,
     currency: "ARS",
+    category_suggested: 0,
     ...overrides,
   };
 }

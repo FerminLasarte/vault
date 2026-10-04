@@ -28,3 +28,20 @@ export function AiMark({ reason, className }: AiMarkProps) {
 
   return reason ? <Hint label={reason}>{mark}</Hint> : mark;
 }
+
+interface AiNoteProps {
+  reason: ReactNode;
+  children: ReactNode;
+}
+
+// A line under a field saying what the AI did there — "Sugerida por IA", "Se
+// muestra como «Rappi»" — with its mark and its reason. One look for all of
+// them, so the AI always reads the same wherever it speaks.
+export function AiNote({ reason, children }: AiNoteProps) {
+  return (
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+      <AiMark reason={reason} />
+      {children}
+    </p>
+  );
+}

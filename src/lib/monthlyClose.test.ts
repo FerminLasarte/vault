@@ -25,6 +25,7 @@ function tx(overrides: Partial<TransactionWithCategory> = {}): TransactionWithCa
     description: "Gasto",
     date: "2026-08-10",
     currency: "ARS",
+    category_suggested: 0,
     category_name: "Comida",
     category_color: "#f97316",
     category_icon: "🍽️",

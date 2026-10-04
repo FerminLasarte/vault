@@ -81,7 +81,7 @@ behaves.
 ```
 src/lib/ai/
   data/
-    merchants.json      known merchants and their patterns (a category hint from batch 2)
+    merchants.json      known merchants, their patterns and a category hint
     stopwords.json      words that say nothing about a movement
     categoryHints.json  hint → words that match the user's own category names
     csvHeaders.json     how banks name each column
@@ -89,7 +89,7 @@ src/lib/ai/
   tokens.ts             how every module reads the words of a text
   merchants.ts          clean merchant name
   state.ts              ai_state setting: parse, serialize, dismiss
-  categoryModel.ts      naive Bayes over the history
+  categoryModel.ts      the most telling word, learned from the history
   categorySuggestion.ts the one entry point for "which category"
   ruleProposals.ts      rules to create, rules to fix
   stats.ts              median, MAD, percentiles
@@ -129,9 +129,9 @@ are one of its best sentences.
 | AI-01 | 1     | Words                                          | —        | [x]  |
 | AI-02 | 1     | Clean merchant names                           | 5        | [x]  |
 | AI-03 | 1     | `AiMark`, the "IA local" card and the switch   | —        | [x]  |
-| AI-04 | 2     | Learned category model                         | 1        | [ ]  |
-| AI-05 | 2     | One entry point for category suggestions       | 1        | [ ]  |
-| AI-06 | 2     | Suggested categories on import                 | 1        | [ ]  |
+| AI-04 | 2     | Learned category model                         | 1        | [x]  |
+| AI-05 | 2     | One entry point for category suggestions       | 1        | [x]  |
+| AI-06 | 2     | Suggested categories on import                 | 1        | [x]  |
 | AI-07 | 3     | Dismissals                                     | —        | [ ]  |
 | AI-08 | 3     | Rule proposals                                 | 2        | [ ]  |
 | AI-09 | 3     | Rule hygiene                                   | 3        | [ ]  |
@@ -265,28 +265,41 @@ belongs to.
 
 **How:**
 
-- `categoryModel.ts`: multinomial naive Bayes with Laplace smoothing. Features
-  per movement: its tokens, its merchant name, `account:<id>` and an amount
-  bucket (order of magnitude, per currency). Trained separately per type, so an
-  expense is never classified into an income category (the same rule
-  `matchCategoryRuleForType` enforces).
-- Tokens come from `words` (AI-01) minus pure numbers, single characters,
-  reference codes (`P1A2B3`, long digit runs) and the words in
-  `stopwords.json` ("compra", "pago", "debito", "caba", "ar", "sa", "srl"…).
+- `categoryModel.ts` learns, per kind of movement (income or expense, so an
+  expense is never placed in an income category), how many of the user's
+  movements with each word — and each pair of adjacent words, so "mercado
+  libre" and "mercado pago" stay apart — went to each category.
+- **Not naive Bayes, as first planned.** With category priors, a category
+  holding hundreds of movements drowns a word that has only ever meant a small
+  one ("uber", three times in Transporte, landed in Comida); without them, the
+  smoothing penalises big categories the other way. What decides instead is the
+  single most telling word of the description: the one whose movements most
+  consistently landed in one category. That is also exactly the reason shown,
+  "14 de tus 15 movimientos con «rappi» están en Comida", which someone can
+  check. The account and amount features are left out: they describe the
+  account's mix, not the movement.
+- Confidence is the word's share in the category counting one extra "could be
+  something else" against it, so two out of two is 2/3, not certainty. Silent
+  below `MIN_EVIDENCE` (2 movements) or `MIN_CONFIDENCE` (0.65), and when two
+  telling words point at different categories ("rappi farmacia"). Boundary
+  tests pin both constants.
+- Tokens come from `words` (AI-01) minus single characters, anything with a
+  digit, `stopwords.json` (filler words, card networks, "compra", "pago"…) and
+  the dictionary's processors, legal forms and places.
 - Training data: income and expense movements with a category and
-  `category_suggested = 0` (principle 7).
-- `predict` returns `{ categoryId, confidence, evidence }`, where `evidence` is
-  the strongest token and its counts, which becomes the reason.
-- Thresholds (`MIN_CONFIDENCE`, `MIN_SUPPORT`) as constants with boundary tests.
-- Cold start: when the model has nothing, the merchant's `hint` is resolved
-  against the user's own category names through `categoryHints.json`
-  ("supermercado" → super, almacén, mercado…). No match, no suggestion.
-- Trained once per transaction list in `AppDataContext` (`useMemo`).
-- A dev-only evaluation script reads an exported CSV and prints accuracy and
-  coverage per threshold, to tune the constants on real data. Never run in CI,
-  no data committed.
+  `category_suggested = 0` (principle 7). A rule's category counts: the rule is
+  the user's.
+- Cold start: `merchants.json` gained a `hint` per merchant (supermercado,
+  delivery, combustible…), resolved against the user's own category names
+  through `categoryHints.json`, with the reason "Rappi es una app de
+  delivery.". Expenses only. No matching category, no suggestion.
+- Trained once per transaction list in `AppDataContext`, and only with the AI
+  on (`categoryModel` is null otherwise).
+- `categoryModel.eval.test.ts` is the dev-only evaluation: it reads an export
+  from `VAULT_EVAL_CSV`, learns from the oldest 80% and prints coverage and
+  accuracy on the newest 20%. Skipped in every normal run.
 
-- [ ] Done
+- [x] Done
 
 ### AI-05 · One entry point for category suggestions [1]
 
@@ -295,14 +308,24 @@ belongs to.
 
 **Should:** all of them ask one function, so rules-then-model is decided once.
 
-**How:** `categorySuggestion.ts` exports
-`suggestCategory(input, context) → { categoryId, source: "rule" | "ai", rule, reason } | null`:
-a matching rule first, then the model, then the cold-start hint. The five call
-sites switch to it. Where a suggestion is shown in a form, an `ai` one carries
-`AiMark` and its reason; a `rule` one keeps showing the rule as today. The
-inspector's "which rule" keeps its current behaviour.
+**How:** `categorySuggestion.ts` exports `suggestCategory(movement, context)`,
+returning `{ source: "rule", categoryId, rule }` or `{ source: "ai",
+categoryId, reason }`: a matching rule first, then the model, then the
+cold-start hint, and never a category that no longer exists. With the AI off
+(`model: null`) only the rules answer, as before. All five call sites use it,
+and the two wrappers it replaced (`matchCategoryIdForType`, and
+`matchCategoryId`, which nothing called already) are gone.
 
-- [ ] Done
+- The form fills the category in as before and, while it is the AI's, says
+  "Sugerida por IA" under it with the reason (`AiNote`, which the "Se muestra
+  como" line now shares).
+- The quick entry reads "Comida ✨ IA" with the reason on hover. As with rules,
+  an income suggestion can turn an unsigned line into income.
+- The inspector's line under the category covers both: "Coincide con la regla
+  «x»" or "La regla «x» la pondría en…", and "Coincide con lo que sugiere la
+  IA" or "La IA la pondría en… Aplicarla".
+
+- [x] Done
 
 ### AI-06 · Suggested categories on import [1]
 
@@ -315,18 +338,39 @@ until confirmed.
 **How:**
 
 - Migration 29: `category_suggested INTEGER NOT NULL DEFAULT 0` on
-  `transactions`, with `CHECK (category_suggested IN (0, 1))`. Check for a
-  running `tauri dev` first, and pin the hash once applied.
-- Import sets it to 1 only when `suggestCategory` returned `source: "ai"`.
-- Any category edit, or an explicit "Confirmar" in the inspector, sets it
-  to 0.
-- The import preview gains a Categoría column, with the rule mark or `AiMark`.
-- The transactions list shows `AiMark` next to a suggested category; a
-  "Sugeridas por IA" filter lists them, with "Confirmar todas".
-- After an import that left suggestions, one Atención notice: "Revisá 12
-  categorías sugeridas por IA".
+  `transactions`, with `CHECK (category_suggested IN (0, 1))`. Not yet applied
+  to a real database (no `tauri dev` was running); pin its hash once it is.
+- `NewTransaction.categorySuggested` (optional, so nothing else that writes a
+  movement changes) is set by both imports only when the suggestion's source
+  is the AI.
+- The inspector keeps the flag while the category is left alone
+  (`stillSuggested`: fixing an amount says nothing about the category), drops
+  it when the category changes, and offers "Sugerida por IA al importar.
+  Confirmar". `confirmSuggestedCategories` clears it for a list of ids.
+- The bank statement preview gains a Categoría column, with `AiMark` on the
+  AI's choices. The app's own CSV import has no preview; its rows are flagged
+  the same way.
+- The transactions list shows `AiMark` next to a suggested category, and a
+  "Revisar" group in the filters: "Sugeridas por IA (n)" narrows the list to
+  them in the currency on screen, and "Confirmar todas" confirms what is shown.
+- Atención: "Revisá n categorías sugeridas por IA", pointing at that filter,
+  after pending movements and before the monthly close.
+- With the AI off, none of it shows and the filter is ignored; the flags stay
+  in the database for when it is back on.
 
-- [ ] Done
+- [x] Done
+
+Checked: migration 29 applied by a debug build to a separate `.smoke` database
+(deleted afterwards). The Mac's screen was locked, so the native window could
+not be captured; the screens were checked instead on a throwaway Vite page
+(removed) mounting the real components with stand-in data: the list's marks,
+the "Sugeridas por IA (2)" filter narrowing to two rows with "Confirmar
+todas", the inspector's "Sugerida por IA al importar. Confirmar" (which called
+`confirmSuggestedCategories([2])`), the statement preview (Rappi → Comida from
+history, Coto → Comida from the supermarket hint, the greengrocer with none),
+the quick entry ("Ocio ✨ IA" for "turno padel 9990"), the form ("Transporte",
+"Sugerida por IA" for "UBER \*TRIP") and the Atención line. Not checked in the
+native app: an actual import writing flagged rows, and the toasts.
 
 ---
 

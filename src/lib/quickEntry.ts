@@ -1,5 +1,6 @@
 import type { Category, CategoryRule, NewTransaction, PaymentMethod } from "@/db";
-import { matchCategoryRuleForType } from "@/lib/categoryRules";
+import type { CategoryModel } from "@/lib/ai/categoryModel";
+import { suggestCategory, type CategorySuggestion } from "@/lib/ai/categorySuggestion";
 import { parseIsoDate, toIsoDate } from "@/lib/format";
 import { normalizeForSearch } from "@/lib/text";
 
@@ -22,6 +23,8 @@ export interface QuickEntryContext {
   paymentMethods: PaymentMethod[];
   categories: Category[];
   rules: CategoryRule[];
+  // What the local AI learned; null with it switched off.
+  model: CategoryModel | null;
   // The account each currency's latest movement went through, for when the
   // line names none. See lastUsedAccountByCurrency.
   lastUsedAccounts: Map<string, number>;
@@ -40,8 +43,8 @@ export interface QuickEntry {
   // so instead of presenting a guess as something the user wrote.
   accountAssumed: boolean;
   categoryId: number | null;
-  // The rule that chose the category, when one did.
-  rule: CategoryRule | null;
+  // Who chose the category, a rule or the local AI, when one did.
+  suggestion: CategorySuggestion | null;
   date: string;
 }
 
@@ -266,25 +269,20 @@ export function parseQuickEntry(text: string, context: QuickEntryContext): Quick
     context.paymentMethods.find((method) => method.currency === currency) ??
     null;
 
-  // A sign decides the kind outright. Without one, the rules do: an expense
-  // rule first, since most of what gets typed is spending, then an income one.
+  // A sign decides the kind outright. Without one, the suggestions do: an
+  // expense first, since most of what gets typed is spending, then an income.
+  const suggestions = {
+    rules: context.rules,
+    categories: context.categories,
+    model: context.model,
+  };
   let type: QuickEntry["type"] = amount?.sign === "+" ? "income" : "expense";
-  let rule = matchCategoryRuleForType(
-    description,
-    context.rules,
-    context.categories,
-    type,
-  );
-  if ((amount?.sign ?? null) === null && rule === null) {
-    const incomeRule = matchCategoryRuleForType(
-      description,
-      context.rules,
-      context.categories,
-      "income",
-    );
-    if (incomeRule !== null) {
+  let suggestion = suggestCategory({ description, type }, suggestions);
+  if ((amount?.sign ?? null) === null && suggestion === null) {
+    const income = suggestCategory({ description, type: "income" }, suggestions);
+    if (income !== null) {
       type = "income";
-      rule = incomeRule;
+      suggestion = income;
     }
   }
 
@@ -295,8 +293,8 @@ export function parseQuickEntry(text: string, context: QuickEntryContext): Quick
     currency,
     paymentMethodId: account?.id ?? null,
     accountAssumed: typedAccount === null,
-    categoryId: rule?.category_id ?? null,
-    rule,
+    categoryId: suggestion?.categoryId ?? null,
+    suggestion,
     date: date ?? context.today,
   };
 }

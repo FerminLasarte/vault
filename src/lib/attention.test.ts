@@ -28,6 +28,7 @@ const CALM = {
   overspent: [],
   backup: { daysAgo: 1, isOverdue: false },
   pendingCount: 0,
+  suggestedCount: 0,
   pendingClose: null,
 };
 
@@ -95,6 +96,7 @@ describe("buildAttentionItems", () => {
       overspent: [makeOverspent("Comida", 1.1)],
       backup: { daysAgo: 30, isOverdue: true },
       pendingCount: 2,
+      suggestedCount: 3,
       pendingClose: "2026-07",
     });
 
@@ -104,8 +106,22 @@ describe("buildAttentionItems", () => {
       "budget",
       "backup",
       "pending",
+      "suggested",
       "close",
     ]);
+  });
+});
+
+// Left by an import: categories the AI chose, waiting for a look.
+describe("the suggested categories row", () => {
+  it("counts them and says where to review them", () => {
+    const [one] = buildAttentionItems({ ...CALM, suggestedCount: 1 });
+    const [many] = buildAttentionItems({ ...CALM, suggestedCount: 12 });
+
+    expect(one.title).toBe("Revisá 1 categoría sugerida por IA");
+    expect(many.title).toBe("Revisá 12 categorías sugeridas por IA");
+    expect(many.detail).toContain("Transacciones");
+    expect(many.tone).toBe("neutral");
   });
 });
 

@@ -2,6 +2,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { trainCategoryModel } from "@/lib/ai/categoryModel";
 import { TransactionInspector } from "./TransactionInspector";
 import type { AppActions, AppData, AppStatus } from "@/context/AppDataContext";
 import type {
@@ -77,6 +78,7 @@ function aTransaction(
     description: "Mensual (abril)",
     date: "2025-05-15",
     currency: "ARS",
+    category_suggested: 0,
     category_name: "Padel",
     category_color: "#222",
     category_icon: "🎾",
@@ -90,9 +92,11 @@ function aTransaction(
 }
 
 let editTransaction: ReturnType<typeof vi.fn>;
+let confirmSuggestedCategories: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   editTransaction = vi.fn(() => Promise.resolve());
+  confirmSuggestedCategories = vi.fn(() => Promise.resolve());
 });
 
 function renderInspector(
@@ -102,9 +106,12 @@ function renderInspector(
   appData.current = {
     categories: CATEGORIES,
     categoryRules,
+    categoryModel: trainCategoryModel([]),
+    aiEnabled: true,
     tags: [],
     paymentMethods: ACCOUNTS,
     editTransaction,
+    confirmSuggestedCategories,
   } as unknown as AppContext;
 
   const onClose = vi.fn();
@@ -208,6 +215,7 @@ describe("TransactionInspector, saving", () => {
         destinationAmount: null,
         description: "Mensual (abril)",
         date: "2025-05-15",
+        categorySuggested: false,
       },
       [],
     );
@@ -365,5 +373,45 @@ describe("TransactionInspector and category rules", () => {
     await userEvent.type(description, "Netflix");
 
     expect(selectedCategory()).toContain("Gimnasio");
+  });
+});
+
+// A category the AI chose on import stays flagged until the user decides.
+describe("TransactionInspector and a category the AI chose", () => {
+  it("says so, and confirms it on request", async () => {
+    renderInspector(aTransaction({ category_suggested: 1 }));
+
+    expect(screen.getByText(/Sugerida por IA al importar/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    expect(confirmSuggestedCategories).toHaveBeenCalledWith([10]);
+  });
+
+  // Fixing the amount says nothing about the category.
+  it("keeps it flagged when something else is edited", async () => {
+    renderInspector(aTransaction({ category_suggested: 1 }));
+
+    const amount = screen.getByLabelText("Monto");
+    await userEvent.clear(amount);
+    await userEvent.type(amount, "60000");
+
+    await waitFor(() => expect(editTransaction).toHaveBeenCalled(), SAVES);
+    expect(editTransaction.mock.calls.at(-1)?.[1]).toMatchObject({
+      amount: 60000,
+      categorySuggested: true,
+    });
+  });
+
+  it("makes it the user's own once they choose another", async () => {
+    renderInspector(aTransaction({ category_suggested: 1 }));
+
+    await userEvent.click(document.querySelector("#inspector-category")!);
+    await userEvent.click(await screen.findByRole("option", { name: /Gimnasio/ }));
+
+    await waitFor(() => expect(editTransaction).toHaveBeenCalled(), SAVES);
+    expect(editTransaction.mock.calls.at(-1)?.[1]).toMatchObject({
+      categoryId: 2,
+      categorySuggested: false,
+    });
   });
 });

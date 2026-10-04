@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, type ChangeEvent } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import { useAccountCurrencySync } from "@/hooks/useAccountCurrencySync";
 import { useCategoryTypeSync } from "@/hooks/useCategoryTypeSync";
-import { matchCategoryIdForType } from "@/lib/categoryRules";
+import type { CategoryModel } from "@/lib/ai/categoryModel";
+import { suggestCategory } from "@/lib/ai/categorySuggestion";
 import {
   transactionCategoryType,
   type TransactionFormInput,
@@ -20,6 +21,8 @@ interface TransactionFieldsOptions {
   form: TransactionForm;
   categories: Category[];
   categoryRules: CategoryRuleWithCategory[];
+  // What the local AI learned; null with it switched off.
+  categoryModel: CategoryModel | null;
   paymentMethods: PaymentMethod[];
   // Whether the form holds a saved transaction rather than a new one, which
   // changes when the category rules may step in (see below).
@@ -32,7 +35,7 @@ interface TransactionFieldsOptions {
 // Everything a transaction form does on its own while the user fills it in:
 // keeping the category and the accounts valid for the type and the currency,
 // mirroring a same-currency transfer, and filling in the category from the
-// rules as the description is typed.
+// rules, or else the local AI, as the description is typed.
 //
 // A hook the form's owner calls rather than something the fields do by
 // themselves: effects run children first, and these have to run after the
@@ -43,6 +46,7 @@ export function useTransactionFields({
   form,
   categories,
   categoryRules,
+  categoryModel,
   paymentMethods,
   isEditing,
   loadKey,
@@ -157,23 +161,27 @@ export function useTransactionFields({
     setValue("destinationAmount", selectedAmount, { shouldValidate: false });
   }, [isSameCurrencyTransfer, selectedAmount, setValue]);
 
-  // Fill in the category from the rules as the description is typed. Only rules
-  // of the form's own kind apply: an expense rule while the form is on income
-  // is left alone rather than silently switching the type.
+  // Where the description says the movement belongs: a rule's category, or
+  // else the local AI's. Only of the form's own kind: an expense rule while the
+  // form is on income is left alone rather than silently switching the type.
+  const suggestion = useMemo(
+    () =>
+      selectedType === "transfer"
+        ? null
+        : suggestCategory(
+            { description: typedDescription ?? "", type: selectedType },
+            { rules: categoryRules, categories, model: categoryModel },
+          ),
+    [selectedType, typedDescription, categoryRules, categories, categoryModel],
+  );
+
+  // Filled in as the description is typed.
   useEffect(() => {
-    if (selectedType === "transfer" || categoryTouchedRef.current) return;
+    if (suggestion === null || categoryTouchedRef.current) return;
     if (isEditing && !descriptionEditedRef.current) return;
 
-    const matched = matchCategoryIdForType(
-      typedDescription ?? "",
-      categoryRules,
-      categories,
-      selectedType,
-    );
-    if (matched === null) return;
-
-    setValue("categoryId", matched, { shouldValidate: false });
-  }, [typedDescription, categoryRules, categories, selectedType, isEditing, setValue]);
+    setValue("categoryId", suggestion.categoryId, { shouldValidate: false });
+  }, [suggestion, isEditing, setValue]);
 
   return {
     isTransfer,
@@ -184,6 +192,7 @@ export function useTransactionFields({
     destinationAccounts,
     destinationAccount,
     descriptionField,
+    suggestion,
     // A category chosen by the user, from the list or from a rule offered to
     // them, stops the rules from choosing another one.
     markCategoryChosen: () => {

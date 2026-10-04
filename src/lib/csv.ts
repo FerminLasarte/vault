@@ -9,7 +9,8 @@ import type {
 } from "@/db/schema";
 import { TRANSACTION_TYPE_LABELS } from "@/lib/labels";
 import { normalizeForSearch as normalize } from "@/lib/text";
-import { matchCategoryIdForType } from "@/lib/categoryRules";
+import type { CategoryModel } from "@/lib/ai/categoryModel";
+import { suggestCategory } from "@/lib/ai/categorySuggestion";
 import { parseFlexibleAmount, parseFlexibleDate } from "@/lib/importMapping";
 import { splitTagNames } from "@/lib/text";
 
@@ -197,6 +198,9 @@ export interface ImportContext {
   // Applied only to rows that arrive with no category of their own, so an
   // explicit value in the file always wins over a rule.
   categoryRules?: CategoryRule[];
+  // What the local AI learned, for rows no rule places; absent or null with
+  // it switched off. Its choices arrive flagged as suggested, to be reviewed.
+  categoryModel?: CategoryModel | null;
   accounts: PaymentMethod[];
   existing: Transaction[];
   supportedCurrencies: string[];
@@ -319,6 +323,7 @@ export function buildImportPlan(rows: string[][], context: ImportContext): Impor
     }
 
     let categoryId: number | null = null;
+    let categorySuggested = false;
     let destinationId: number | null = null;
     let destinationAmount: number | null = null;
 
@@ -351,12 +356,16 @@ export function buildImportPlan(rows: string[][], context: ImportContext): Impor
         }
         categoryId = category.id;
       } else {
-        categoryId = matchCategoryIdForType(
-          description,
-          context.categoryRules ?? [],
-          context.categories,
-          type,
+        const suggestion = suggestCategory(
+          { description, type },
+          {
+            rules: context.categoryRules ?? [],
+            categories: context.categories,
+            model: context.categoryModel ?? null,
+          },
         );
+        categoryId = suggestion?.categoryId ?? null;
+        categorySuggested = suggestion?.source === "ai";
       }
     }
 
@@ -383,6 +392,7 @@ export function buildImportPlan(rows: string[][], context: ImportContext): Impor
         destinationAmount,
         description,
         date,
+        categorySuggested,
       },
       tags,
     });

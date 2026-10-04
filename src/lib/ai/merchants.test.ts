@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import dictionary from "./data/merchants.json";
-import { merchantName } from "./merchants";
+import { knownMerchant, merchantName } from "./merchants";
 import { words } from "./tokens";
 
 describe("merchantName", () => {
@@ -76,6 +76,23 @@ describe("merchantName", () => {
       expect(merchantName("MERPAGO*")).toBeNull();
       expect(merchantName("MERPAGO* 4471 CABA")).toBeNull();
     });
+  });
+});
+
+describe("knownMerchant", () => {
+  // Nothing on screen changes, so typed text is fair game: "nafta ypf" is
+  // about YPF all the same.
+  it("finds the merchant in typed text as well as in a bank's", () => {
+    expect(knownMerchant("nafta ypf")).toEqual({
+      name: "YPF",
+      patterns: ["ypf"],
+      hint: "combustible",
+    });
+    expect(knownMerchant("MERPAGO*RAPPI 4471")?.hint).toBe("delivery");
+  });
+
+  it("says nothing about a merchant it does not know", () => {
+    expect(knownMerchant("verduleria los hermanos")).toBeNull();
   });
 });
 

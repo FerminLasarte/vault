@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { toast } from "sonner";
+import { trainCategoryModel, type CategoryModel } from "@/lib/ai/categoryModel";
 import { DEFAULT_AI_STATE, parseAiState, type AiState } from "@/lib/ai/state";
 import { ReportedError } from "@/lib/reportedError";
 import { transactionCount } from "@/lib/transactionCounts";
@@ -24,6 +25,7 @@ import {
   deletePaymentMethod,
   deleteTransaction,
   AI_STATE,
+  confirmSuggestedCategories,
   EXCHANGE_RATE_TYPE,
   NOTIFICATIONS_ENABLED,
   getSetting,
@@ -205,6 +207,10 @@ export interface AppData {
   // Whether the local AI is on. Every AI surface reads it, so the switch in
   // Ajustes turns all of them off at once.
   aiEnabled: boolean;
+  // What the local AI learned from where the user put their movements, or
+  // null with it switched off. Trained once per change to the history, here,
+  // rather than by every screen that suggests a category.
+  categoryModel: CategoryModel | null;
   // Today's date, moving on at midnight with the app left open (see useToday).
   // What depends on the date reads it from here, so it re-renders when the
   // day changes instead of keeping the day it was first drawn on.
@@ -237,6 +243,9 @@ export interface AppActions {
     tags: string[],
   ) => Promise<void>;
   removeTransaction: (id: number) => Promise<void>;
+  // Keeps the categories the local AI chose for these movements: they become
+  // the user's own.
+  confirmSuggestedCategories: (ids: number[]) => Promise<void>;
   importTransactions: (
     entries: { transaction: NewTransaction; tags: string[] }[],
   ) => Promise<void>;
@@ -495,6 +504,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [recurring, installmentPlans, loans, expectedMovements, today],
   );
 
+  const categoryModel = useMemo(
+    () => (aiState.enabled ? trainCategoryModel(transactions) : null),
+    [aiState.enabled, transactions],
+  );
+
   const exchangeRate = useMemo(
     () => exchangeRateHistory.at(-1) ?? null,
     [exchangeRateHistory],
@@ -748,6 +762,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       lastSeenClose,
       notificationsEnabled,
       aiEnabled: aiState.enabled,
+      categoryModel,
       today,
       pending,
       isLoading,
@@ -772,6 +787,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       lastSeenClose,
       notificationsEnabled,
       aiState.enabled,
+      categoryModel,
       today,
       pending,
       isLoading,
@@ -825,6 +841,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           ["transactions", "expected"],
           "Transacción eliminada",
           "No se pudo eliminar la transacción",
+        ),
+      confirmSuggestedCategories: (ids) =>
+        runMutation(
+          () => confirmSuggestedCategories(ids),
+          ["transactions"],
+          ids.length === 1 ? "Categoría confirmada" : "Categorías confirmadas",
+          "No se pudieron confirmar las categorías",
         ),
       importTransactions: (imported) =>
         runMutation(

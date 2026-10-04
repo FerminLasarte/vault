@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  stillSuggested,
   differsFromSaved,
   formToTransaction,
   transactionFormSchema,
@@ -22,6 +23,7 @@ function aTransaction(
     description: "Café",
     date: "2026-09-20",
     currency: "ARS",
+    category_suggested: 0,
     category_name: "Comida",
     category_color: "#000",
     category_icon: "☕",
@@ -122,5 +124,23 @@ describe("differsFromSaved", () => {
     expect(
       differsFromSaved({ ...valuesOf(saved), tags: ["trabajo", "mañana"] }, saved),
     ).toBe(false);
+  });
+});
+
+describe("stillSuggested", () => {
+  const suggested = { category_suggested: 1, category_id: 3 };
+
+  // Fixing the amount or the date says nothing about the category.
+  it("keeps the AI's category flagged while the category is left alone", () => {
+    expect(stillSuggested(suggested, 3)).toBe(true);
+  });
+
+  it("makes it the user's own once they change it", () => {
+    expect(stillSuggested(suggested, 4)).toBe(false);
+    expect(stillSuggested(suggested, null)).toBe(false);
+  });
+
+  it("never flags a category the user chose", () => {
+    expect(stillSuggested({ category_suggested: 0, category_id: 3 }, 3)).toBe(false);
   });
 });

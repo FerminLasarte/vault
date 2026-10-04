@@ -3,128 +3,525 @@
   "legalSuffixes": ["sa", "srl", "sas", "sacif", "saic", "sacifi", "sca", "sh"],
   "locationSuffixes": ["caba", "ar", "arg", "bsas", "ba", "cf"],
   "merchants": [
-    { "name": "Coto", "patterns": ["coto"] },
-    { "name": "Carrefour", "patterns": ["carrefour"] },
+    {
+      "name": "Coto",
+      "patterns": ["coto"],
+      "hint": "supermercado"
+    },
+    {
+      "name": "Carrefour",
+      "patterns": ["carrefour"],
+      "hint": "supermercado"
+    },
     {
       "name": "Día",
-      "patterns": ["supermercado dia", "supermercados dia", "dia tienda"]
+      "patterns": ["supermercado dia", "supermercados dia", "dia tienda"],
+      "hint": "supermercado"
     },
-    { "name": "Jumbo", "patterns": ["jumbo"] },
-    { "name": "Disco", "patterns": ["supermercado disco", "supermercados disco"] },
-    { "name": "Vea", "patterns": ["supermercado vea", "supermercados vea"] },
-    { "name": "ChangoMás", "patterns": ["changomas", "chango mas"] },
-    { "name": "La Anónima", "patterns": ["la anonima"] },
-    { "name": "Walmart", "patterns": ["walmart"] },
-    { "name": "Makro", "patterns": ["makro"] },
-    { "name": "Maxiconsumo", "patterns": ["maxiconsumo"] },
-    { "name": "Farmacity", "patterns": ["farmacity"] },
-
-    { "name": "Rappi", "patterns": ["rappi"] },
-    { "name": "PedidosYa", "patterns": ["pedidosya", "pedidos ya"] },
-    { "name": "Uber", "patterns": ["uber"] },
-    { "name": "Uber Eats", "patterns": ["uber eats", "ubereats"] },
-    { "name": "Cabify", "patterns": ["cabify"] },
-    { "name": "DiDi", "patterns": ["didi"] },
-
-    { "name": "Mercado Libre", "patterns": ["mercadolibre", "mercado libre"] },
-    { "name": "Amazon", "patterns": ["amazon", "amzn"] },
-    { "name": "AliExpress", "patterns": ["aliexpress"] },
-    { "name": "Temu", "patterns": ["temu"] },
-    { "name": "Shein", "patterns": ["shein"] },
-    { "name": "Frávega", "patterns": ["fravega"] },
-    { "name": "Garbarino", "patterns": ["garbarino"] },
-    { "name": "Musimundo", "patterns": ["musimundo"] },
-    { "name": "Sodimac", "patterns": ["sodimac"] },
-    { "name": "Falabella", "patterns": ["falabella"] },
-    { "name": "Zara", "patterns": ["zara"] },
-    { "name": "Nike", "patterns": ["nike"] },
-    { "name": "Adidas", "patterns": ["adidas"] },
-    { "name": "Decathlon", "patterns": ["decathlon"] },
-
-    { "name": "YPF", "patterns": ["ypf"] },
-    { "name": "Shell", "patterns": ["shell"] },
-    { "name": "Axion", "patterns": ["axion"] },
-    { "name": "Puma Energy", "patterns": ["puma energy"] },
-
-    { "name": "Netflix", "patterns": ["netflix"] },
-    { "name": "Spotify", "patterns": ["spotify"] },
-    { "name": "Disney+", "patterns": ["disney plus", "disneyplus"] },
-    { "name": "Max", "patterns": ["hbo max", "hbomax", "hbo"] },
-    { "name": "Prime Video", "patterns": ["prime video", "primevideo", "amazon prime"] },
-    { "name": "Paramount+", "patterns": ["paramount"] },
-    { "name": "YouTube", "patterns": ["youtube"] },
-    { "name": "Google Play", "patterns": ["google play"] },
-    { "name": "Google One", "patterns": ["google one"] },
-    { "name": "Google", "patterns": ["google"] },
-    { "name": "Apple", "patterns": ["apple com", "itunes"] },
-    { "name": "iCloud", "patterns": ["icloud"] },
-    { "name": "Microsoft", "patterns": ["microsoft", "msft"] },
-    { "name": "Xbox", "patterns": ["xbox"] },
-    { "name": "PlayStation", "patterns": ["playstation", "psn", "sony interactive"] },
-    { "name": "Steam", "patterns": ["steam", "steampowered"] },
-    { "name": "Nintendo", "patterns": ["nintendo"] },
-    { "name": "OpenAI", "patterns": ["openai", "chatgpt"] },
-    { "name": "Anthropic", "patterns": ["anthropic"] },
-    { "name": "Adobe", "patterns": ["adobe"] },
-    { "name": "Canva", "patterns": ["canva"] },
-    { "name": "Dropbox", "patterns": ["dropbox"] },
-    { "name": "Twitch", "patterns": ["twitch"] },
-    { "name": "Crunchyroll", "patterns": ["crunchyroll"] },
-
-    { "name": "Personal", "patterns": ["telecom personal"] },
-    { "name": "Telecom", "patterns": ["telecom"] },
-    { "name": "Movistar", "patterns": ["movistar", "telefonica moviles"] },
-    { "name": "Claro", "patterns": ["claro", "amx argentina"] },
-    { "name": "Telecentro", "patterns": ["telecentro"] },
-    { "name": "Fibertel", "patterns": ["fibertel"] },
-    { "name": "Cablevisión", "patterns": ["cablevision"] },
-    { "name": "DirecTV", "patterns": ["directv"] },
-
-    { "name": "Edenor", "patterns": ["edenor"] },
-    { "name": "Edesur", "patterns": ["edesur"] },
-    { "name": "Edelap", "patterns": ["edelap"] },
-    { "name": "EPEC", "patterns": ["epec"] },
-    { "name": "Metrogas", "patterns": ["metrogas"] },
-    { "name": "Naturgy", "patterns": ["naturgy"] },
-    { "name": "Camuzzi", "patterns": ["camuzzi"] },
-    { "name": "AySA", "patterns": ["aysa"] },
-
-    { "name": "ARCA", "patterns": ["afip", "arca"] },
-    { "name": "ARBA", "patterns": ["arba"] },
-    { "name": "AGIP", "patterns": ["agip"] },
-
-    { "name": "SUBE", "patterns": ["sube"] },
+    {
+      "name": "Jumbo",
+      "patterns": ["jumbo"],
+      "hint": "supermercado"
+    },
+    {
+      "name": "Disco",
+      "patterns": ["supermercado disco", "supermercados disco"],
+      "hint": "supermercado"
+    },
+    {
+      "name": "Vea",
+      "patterns": ["supermercado vea", "supermercados vea"],
+      "hint": "supermercado"
+    },
+    {
+      "name": "ChangoMás",
+      "patterns": ["changomas", "chango mas"],
+      "hint": "supermercado"
+    },
+    {
+      "name": "La Anónima",
+      "patterns": ["la anonima"],
+      "hint": "supermercado"
+    },
+    {
+      "name": "Walmart",
+      "patterns": ["walmart"],
+      "hint": "supermercado"
+    },
+    {
+      "name": "Makro",
+      "patterns": ["makro"],
+      "hint": "supermercado"
+    },
+    {
+      "name": "Maxiconsumo",
+      "patterns": ["maxiconsumo"],
+      "hint": "supermercado"
+    },
+    {
+      "name": "Farmacity",
+      "patterns": ["farmacity"],
+      "hint": "salud"
+    },
+    {
+      "name": "Rappi",
+      "patterns": ["rappi"],
+      "hint": "delivery"
+    },
+    {
+      "name": "PedidosYa",
+      "patterns": ["pedidosya", "pedidos ya"],
+      "hint": "delivery"
+    },
+    {
+      "name": "Uber",
+      "patterns": ["uber"],
+      "hint": "transporte"
+    },
+    {
+      "name": "Uber Eats",
+      "patterns": ["uber eats", "ubereats"],
+      "hint": "delivery"
+    },
+    {
+      "name": "Cabify",
+      "patterns": ["cabify"],
+      "hint": "transporte"
+    },
+    {
+      "name": "DiDi",
+      "patterns": ["didi"],
+      "hint": "transporte"
+    },
+    {
+      "name": "Mercado Libre",
+      "patterns": ["mercadolibre", "mercado libre"],
+      "hint": "compras"
+    },
+    {
+      "name": "Amazon",
+      "patterns": ["amazon", "amzn"],
+      "hint": "compras"
+    },
+    {
+      "name": "AliExpress",
+      "patterns": ["aliexpress"],
+      "hint": "compras"
+    },
+    {
+      "name": "Temu",
+      "patterns": ["temu"],
+      "hint": "compras"
+    },
+    {
+      "name": "Shein",
+      "patterns": ["shein"],
+      "hint": "compras"
+    },
+    {
+      "name": "Frávega",
+      "patterns": ["fravega"],
+      "hint": "compras"
+    },
+    {
+      "name": "Garbarino",
+      "patterns": ["garbarino"],
+      "hint": "compras"
+    },
+    {
+      "name": "Musimundo",
+      "patterns": ["musimundo"],
+      "hint": "compras"
+    },
+    {
+      "name": "Sodimac",
+      "patterns": ["sodimac"],
+      "hint": "compras"
+    },
+    {
+      "name": "Falabella",
+      "patterns": ["falabella"],
+      "hint": "compras"
+    },
+    {
+      "name": "Zara",
+      "patterns": ["zara"],
+      "hint": "compras"
+    },
+    {
+      "name": "Nike",
+      "patterns": ["nike"],
+      "hint": "compras"
+    },
+    {
+      "name": "Adidas",
+      "patterns": ["adidas"],
+      "hint": "compras"
+    },
+    {
+      "name": "Decathlon",
+      "patterns": ["decathlon"],
+      "hint": "compras"
+    },
+    {
+      "name": "YPF",
+      "patterns": ["ypf"],
+      "hint": "combustible"
+    },
+    {
+      "name": "Shell",
+      "patterns": ["shell"],
+      "hint": "combustible"
+    },
+    {
+      "name": "Axion",
+      "patterns": ["axion"],
+      "hint": "combustible"
+    },
+    {
+      "name": "Puma Energy",
+      "patterns": ["puma energy"],
+      "hint": "combustible"
+    },
+    {
+      "name": "Netflix",
+      "patterns": ["netflix"],
+      "hint": "suscripciones"
+    },
+    {
+      "name": "Spotify",
+      "patterns": ["spotify"],
+      "hint": "suscripciones"
+    },
+    {
+      "name": "Disney+",
+      "patterns": ["disney plus", "disneyplus"],
+      "hint": "suscripciones"
+    },
+    {
+      "name": "Max",
+      "patterns": ["hbo max", "hbomax", "hbo"],
+      "hint": "suscripciones"
+    },
+    {
+      "name": "Prime Video",
+      "patterns": ["prime video", "primevideo", "amazon prime"],
+      "hint": "suscripciones"
+    },
+    {
+      "name": "Paramount+",
+      "patterns": ["paramount"],
+      "hint": "suscripciones"
+    },
+    {
+      "name": "YouTube",
+      "patterns": ["youtube"],
+      "hint": "suscripciones"
+    },
+    {
+      "name": "Google Play",
+      "patterns": ["google play"],
+      "hint": "suscripciones"
+    },
+    {
+      "name": "Google One",
+      "patterns": ["google one"],
+      "hint": "suscripciones"
+    },
+    {
+      "name": "Google",
+      "patterns": ["google"]
+    },
+    {
+      "name": "Apple",
+      "patterns": ["apple com", "itunes"],
+      "hint": "suscripciones"
+    },
+    {
+      "name": "iCloud",
+      "patterns": ["icloud"],
+      "hint": "suscripciones"
+    },
+    {
+      "name": "Microsoft",
+      "patterns": ["microsoft", "msft"],
+      "hint": "suscripciones"
+    },
+    {
+      "name": "Xbox",
+      "patterns": ["xbox"],
+      "hint": "gaming"
+    },
+    {
+      "name": "PlayStation",
+      "patterns": ["playstation", "psn", "sony interactive"],
+      "hint": "gaming"
+    },
+    {
+      "name": "Steam",
+      "patterns": ["steam", "steampowered"],
+      "hint": "gaming"
+    },
+    {
+      "name": "Nintendo",
+      "patterns": ["nintendo"],
+      "hint": "gaming"
+    },
+    {
+      "name": "OpenAI",
+      "patterns": ["openai", "chatgpt"],
+      "hint": "suscripciones"
+    },
+    {
+      "name": "Anthropic",
+      "patterns": ["anthropic"],
+      "hint": "suscripciones"
+    },
+    {
+      "name": "Adobe",
+      "patterns": ["adobe"],
+      "hint": "suscripciones"
+    },
+    {
+      "name": "Canva",
+      "patterns": ["canva"],
+      "hint": "suscripciones"
+    },
+    {
+      "name": "Dropbox",
+      "patterns": ["dropbox"],
+      "hint": "suscripciones"
+    },
+    {
+      "name": "Twitch",
+      "patterns": ["twitch"],
+      "hint": "suscripciones"
+    },
+    {
+      "name": "Crunchyroll",
+      "patterns": ["crunchyroll"],
+      "hint": "suscripciones"
+    },
+    {
+      "name": "Personal",
+      "patterns": ["telecom personal"],
+      "hint": "telefonia"
+    },
+    {
+      "name": "Telecom",
+      "patterns": ["telecom"],
+      "hint": "telefonia"
+    },
+    {
+      "name": "Movistar",
+      "patterns": ["movistar", "telefonica moviles"],
+      "hint": "telefonia"
+    },
+    {
+      "name": "Claro",
+      "patterns": ["claro", "amx argentina"],
+      "hint": "telefonia"
+    },
+    {
+      "name": "Telecentro",
+      "patterns": ["telecentro"],
+      "hint": "telefonia"
+    },
+    {
+      "name": "Fibertel",
+      "patterns": ["fibertel"],
+      "hint": "telefonia"
+    },
+    {
+      "name": "Cablevisión",
+      "patterns": ["cablevision"],
+      "hint": "telefonia"
+    },
+    {
+      "name": "DirecTV",
+      "patterns": ["directv"],
+      "hint": "telefonia"
+    },
+    {
+      "name": "Edenor",
+      "patterns": ["edenor"],
+      "hint": "servicios"
+    },
+    {
+      "name": "Edesur",
+      "patterns": ["edesur"],
+      "hint": "servicios"
+    },
+    {
+      "name": "Edelap",
+      "patterns": ["edelap"],
+      "hint": "servicios"
+    },
+    {
+      "name": "EPEC",
+      "patterns": ["epec"],
+      "hint": "servicios"
+    },
+    {
+      "name": "Metrogas",
+      "patterns": ["metrogas"],
+      "hint": "servicios"
+    },
+    {
+      "name": "Naturgy",
+      "patterns": ["naturgy"],
+      "hint": "servicios"
+    },
+    {
+      "name": "Camuzzi",
+      "patterns": ["camuzzi"],
+      "hint": "servicios"
+    },
+    {
+      "name": "AySA",
+      "patterns": ["aysa"],
+      "hint": "servicios"
+    },
+    {
+      "name": "ARCA",
+      "patterns": ["afip", "arca"],
+      "hint": "impuestos"
+    },
+    {
+      "name": "ARBA",
+      "patterns": ["arba"],
+      "hint": "impuestos"
+    },
+    {
+      "name": "AGIP",
+      "patterns": ["agip"],
+      "hint": "impuestos"
+    },
+    {
+      "name": "SUBE",
+      "patterns": ["sube"],
+      "hint": "transporte"
+    },
     {
       "name": "Aerolíneas Argentinas",
-      "patterns": ["aerolineas argentinas", "aerolineas"]
+      "patterns": ["aerolineas argentinas", "aerolineas"],
+      "hint": "viajes"
     },
-    { "name": "Flybondi", "patterns": ["flybondi"] },
-    { "name": "JetSMART", "patterns": ["jetsmart"] },
-    { "name": "Despegar", "patterns": ["despegar"] },
-    { "name": "Airbnb", "patterns": ["airbnb"] },
-    { "name": "Booking", "patterns": ["booking com", "booking"] },
-
-    { "name": "McDonald's", "patterns": ["mcdonalds", "mc donalds", "arcos dorados"] },
-    { "name": "Burger King", "patterns": ["burger king"] },
-    { "name": "Starbucks", "patterns": ["starbucks"] },
-    { "name": "Havanna", "patterns": ["havanna"] },
-    { "name": "Café Martínez", "patterns": ["cafe martinez"] },
-    { "name": "Mostaza", "patterns": ["mostaza"] },
-    { "name": "Grido", "patterns": ["grido"] },
-    { "name": "Freddo", "patterns": ["freddo"] },
-
-    { "name": "Smart Fit", "patterns": ["smart fit", "smartfit"] },
-    { "name": "Megatlon", "patterns": ["megatlon"] },
-
-    { "name": "OSDE", "patterns": ["osde"] },
-    { "name": "Swiss Medical", "patterns": ["swiss medical"] },
-    { "name": "Galeno", "patterns": ["galeno"] },
-    { "name": "Medifé", "patterns": ["medife"] },
-    { "name": "OMINT", "patterns": ["omint"] },
-
-    { "name": "Ualá", "patterns": ["uala"] },
-    { "name": "Brubank", "patterns": ["brubank"] },
-    { "name": "Naranja X", "patterns": ["naranja x", "naranjax"] },
-    { "name": "Personal Pay", "patterns": ["personal pay"] }
+    {
+      "name": "Flybondi",
+      "patterns": ["flybondi"],
+      "hint": "viajes"
+    },
+    {
+      "name": "JetSMART",
+      "patterns": ["jetsmart"],
+      "hint": "viajes"
+    },
+    {
+      "name": "Despegar",
+      "patterns": ["despegar"],
+      "hint": "viajes"
+    },
+    {
+      "name": "Airbnb",
+      "patterns": ["airbnb"],
+      "hint": "viajes"
+    },
+    {
+      "name": "Booking",
+      "patterns": ["booking com", "booking"],
+      "hint": "viajes"
+    },
+    {
+      "name": "McDonald's",
+      "patterns": ["mcdonalds", "mc donalds", "arcos dorados"],
+      "hint": "comida"
+    },
+    {
+      "name": "Burger King",
+      "patterns": ["burger king"],
+      "hint": "comida"
+    },
+    {
+      "name": "Starbucks",
+      "patterns": ["starbucks"],
+      "hint": "comida"
+    },
+    {
+      "name": "Havanna",
+      "patterns": ["havanna"],
+      "hint": "comida"
+    },
+    {
+      "name": "Café Martínez",
+      "patterns": ["cafe martinez"],
+      "hint": "comida"
+    },
+    {
+      "name": "Mostaza",
+      "patterns": ["mostaza"],
+      "hint": "comida"
+    },
+    {
+      "name": "Grido",
+      "patterns": ["grido"],
+      "hint": "comida"
+    },
+    {
+      "name": "Freddo",
+      "patterns": ["freddo"],
+      "hint": "comida"
+    },
+    {
+      "name": "Smart Fit",
+      "patterns": ["smart fit", "smartfit"],
+      "hint": "deporte"
+    },
+    {
+      "name": "Megatlon",
+      "patterns": ["megatlon"],
+      "hint": "deporte"
+    },
+    {
+      "name": "OSDE",
+      "patterns": ["osde"],
+      "hint": "salud"
+    },
+    {
+      "name": "Swiss Medical",
+      "patterns": ["swiss medical"],
+      "hint": "salud"
+    },
+    {
+      "name": "Galeno",
+      "patterns": ["galeno"],
+      "hint": "salud"
+    },
+    {
+      "name": "Medifé",
+      "patterns": ["medife"],
+      "hint": "salud"
+    },
+    {
+      "name": "OMINT",
+      "patterns": ["omint"],
+      "hint": "salud"
+    },
+    {
+      "name": "Ualá",
+      "patterns": ["uala"]
+    },
+    {
+      "name": "Brubank",
+      "patterns": ["brubank"]
+    },
+    {
+      "name": "Naranja X",
+      "patterns": ["naranja x", "naranjax"]
+    },
+    {
+      "name": "Personal Pay",
+      "patterns": ["personal pay"]
+    }
   ]
 }

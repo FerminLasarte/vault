@@ -308,9 +308,9 @@ function commitmentTransactionStatements(transaction: NewTransaction): BatchStat
     {
       query: `INSERT INTO transactions
                 (amount, type, category_id, payment_method_id, destination_payment_method_id,
-                 destination_amount, description, date, currency)
+                 destination_amount, description, date, currency, category_suggested)
               VALUES ($1, $2, $3, COALESCE($4, ${unassignedAccountIn("$9")}),
-                      $5, $6, $7, $8, $9)`,
+                      $5, $6, $7, $8, $9, $10)`,
       values: insert.values,
     },
   ];
@@ -320,8 +320,8 @@ function insertTransactionStatement(transaction: NewTransaction): BatchStatement
   return {
     query: `INSERT INTO transactions
               (amount, type, category_id, payment_method_id, destination_payment_method_id,
-               destination_amount, description, date, currency)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+               destination_amount, description, date, currency, category_suggested)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
     values: [
       transaction.amount,
       transaction.type,
@@ -332,6 +332,7 @@ function insertTransactionStatement(transaction: NewTransaction): BatchStatement
       transaction.description,
       transaction.date,
       transaction.currency,
+      transaction.categorySuggested ? 1 : 0,
     ],
   };
 }
@@ -350,8 +351,9 @@ function updateTransactionStatement(
                 destination_amount = $6,
                 description = $7,
                 date = $8,
-                currency = $9
-            WHERE id = $10`,
+                currency = $9,
+                category_suggested = $10
+            WHERE id = $11`,
     values: [
       transaction.amount,
       transaction.type,
@@ -362,9 +364,22 @@ function updateTransactionStatement(
       transaction.description,
       transaction.date,
       transaction.currency,
+      transaction.categorySuggested ? 1 : 0,
       id,
     ],
   };
+}
+
+// The user has looked at categories the local AI chose and keeps them: they
+// become the user's own, and start teaching the AI.
+export async function confirmSuggestedCategories(ids: number[]): Promise<void> {
+  if (ids.length === 0) return;
+  const db = await getDb();
+  const placeholders = ids.map((_, index) => `$${index + 1}`).join(", ");
+  await db.execute(
+    `UPDATE transactions SET category_suggested = 0 WHERE id IN (${placeholders})`,
+    ids,
+  );
 }
 
 export async function updateTransaction(
