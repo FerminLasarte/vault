@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { toast } from "sonner";
+import { DEFAULT_AI_STATE, parseAiState, type AiState } from "@/lib/ai/state";
 import { ReportedError } from "@/lib/reportedError";
 import { transactionCount } from "@/lib/transactionCounts";
 import {
@@ -22,6 +23,7 @@ import {
   deleteCategoryRule,
   deletePaymentMethod,
   deleteTransaction,
+  AI_STATE,
   EXCHANGE_RATE_TYPE,
   NOTIFICATIONS_ENABLED,
   getSetting,
@@ -200,6 +202,9 @@ export interface AppData {
   // Whether the app may raise system notifications. Persisted, so turning them
   // off is a decision and not something that resets on the next launch.
   notificationsEnabled: boolean;
+  // Whether the local AI is on. Every AI surface reads it, so the switch in
+  // Ajustes turns all of them off at once.
+  aiEnabled: boolean;
   // Today's date, moving on at midnight with the app left open (see useToday).
   // What depends on the date reads it from here, so it re-renders when the
   // day changes instead of keeping the day it was first drawn on.
@@ -328,6 +333,7 @@ export interface AppActions {
   // than assuming the latest, so acting on an older one still settles it.
   markCloseSeen: (monthKey: string) => Promise<void>;
   setNotificationsEnabled: (enabled: boolean) => Promise<void>;
+  setAiEnabled: (enabled: boolean) => Promise<void>;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -361,6 +367,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [lastBackupAt, setLastBackupAt] = useState<string | null>(null);
   const [lastSeenClose, setLastSeenClose] = useState<string | null>(null);
   const [notificationsEnabled, setNotificationsEnabledState] = useState(true);
+  const [aiState, setAiState] = useState<AiState>(DEFAULT_AI_STATE);
   const [isLoading, setIsLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
   const [isRefreshingRate, setIsRefreshingRate] = useState(false);
@@ -368,6 +375,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   // under a previous one (see refreshExchangeRate). State alone cannot do that:
   // a callback only ever sees the render it was created in.
   const currentRateType = useRef<RateType>(DEFAULT_RATE_TYPE);
+  const aiStateRef = useRef<AiState>(DEFAULT_AI_STATE);
   // The toast currently offering "Deshacer", if any.
   const undoToast = useRef<string | number | null>(null);
 
@@ -449,14 +457,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       ? storedRateType
       : DEFAULT_RATE_TYPE;
 
-    const [cachedHistory, storedLastBackup, storedSeenClose, storedNotifications] =
-      await Promise.all([
-        listExchangeRates(activeRateType),
-        getSetting(LAST_BACKUP_AT),
-        getSetting(LAST_SEEN_CLOSE),
-        getSetting(NOTIFICATIONS_ENABLED),
-        reload(EVERY_DOMAIN),
-      ]);
+    const [
+      cachedHistory,
+      storedLastBackup,
+      storedSeenClose,
+      storedNotifications,
+      storedAiState,
+    ] = await Promise.all([
+      listExchangeRates(activeRateType),
+      getSetting(LAST_BACKUP_AT),
+      getSetting(LAST_SEEN_CLOSE),
+      getSetting(NOTIFICATIONS_ENABLED),
+      getSetting(AI_STATE),
+      reload(EVERY_DOMAIN),
+    ]);
     currentRateType.current = activeRateType;
     setRateTypeState(activeRateType);
     setExchangeRateHistory(cachedHistory);
@@ -464,6 +478,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setLastSeenClose(storedSeenClose);
     // Absent means "never chosen", and the useful default is on.
     setNotificationsEnabledState(storedNotifications !== "false");
+    aiStateRef.current = parseAiState(storedAiState);
+    setAiState(aiStateRef.current);
   }, [reload]);
 
   // The quote on screen is the last of the series rather than a copy kept
@@ -539,6 +555,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const setNotificationsEnabled = useCallback(async (enabled: boolean) => {
     await setSetting(NOTIFICATIONS_ENABLED, enabled ? "true" : "false");
     setNotificationsEnabledState(enabled);
+  }, []);
+
+  // Read from the ref, like the rate type, so this action never changes
+  // identity: the AI's stored state will hold more than the switch, and
+  // writing one part must not drop the others.
+  const setAiEnabled = useCallback(async (enabled: boolean) => {
+    const next = { ...aiStateRef.current, enabled };
+    await setSetting(AI_STATE, JSON.stringify(next));
+    aiStateRef.current = next;
+    setAiState(next);
   }, []);
 
   const markCloseSeen = useCallback(async (monthKey: string) => {
@@ -721,6 +747,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       lastBackupAt,
       lastSeenClose,
       notificationsEnabled,
+      aiEnabled: aiState.enabled,
       today,
       pending,
       isLoading,
@@ -744,6 +771,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       lastBackupAt,
       lastSeenClose,
       notificationsEnabled,
+      aiState.enabled,
       today,
       pending,
       isLoading,
@@ -768,6 +796,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       recordBackup,
       markCloseSeen,
       setNotificationsEnabled,
+      setAiEnabled,
 
       addTransaction: async (transaction, transactionTags) => {
         // Only ever read once the write went through: a failed one throws
@@ -1112,6 +1141,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       recordBackup,
       markCloseSeen,
       setNotificationsEnabled,
+      setAiEnabled,
       runMutation,
     ],
   );

@@ -6,6 +6,7 @@ import { TransactionAttachments } from "@/components/TransactionAttachments";
 import { TransactionFields } from "@/components/TransactionFields";
 import { useAppActions, useAppData } from "@/hooks/useAppData";
 import { useDialogForm } from "@/hooks/useDialogForm";
+import { useMerchantName } from "@/hooks/useMerchantName";
 import { useTransactionFields } from "@/hooks/useTransactionFields";
 import { matchCategoryRuleForType } from "@/lib/categoryRules";
 import { isMacOS } from "@/lib/platform";
@@ -60,8 +61,9 @@ export function TransactionInspector({
   transaction,
   onClose,
 }: TransactionInspectorProps) {
-  const { categories, categoryRules, tags, paymentMethods } = useAppData();
+  const { categories, categoryRules, tags, paymentMethods, aiEnabled } = useAppData();
   const { editTransaction } = useAppActions();
+  const merchantName = useMerchantName();
 
   const loaded = transactionToForm(transaction);
   const form = useDialogForm<TransactionFormInput, TransactionFormValues>({
@@ -218,7 +220,7 @@ export function TransactionInspector({
             id="inspector-title"
             className="truncate font-heading text-base font-semibold"
           >
-            {transaction.description}
+            {merchantName(transaction.description) ?? transaction.description}
           </h2>
           <p
             role="status"
@@ -263,6 +265,7 @@ export function TransactionInspector({
             tags={tags}
             idPrefix="inspector"
             categoryHint={categoryHint}
+            aiEnabled={aiEnabled}
           />
         </form>
 

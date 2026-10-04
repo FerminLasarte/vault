@@ -190,6 +190,12 @@ exports[`icon motion > pins the shape of every icon a rule reaches into 1`] = `
     "1. path: M9.671 4.136a2.34 2.34 0",
     "2. circle: cx=12 cy=12 r=3",
   ],
+  "sparkles": [
+    "1. path: M11.017 2.814a1 1 0 0 1 ",
+    "2. path: M20 2v4",
+    "3. path: M22 4h-4",
+    "4. circle: cx=4 cy=20 r=2",
+  ],
   "tags": [
     "1. path: M13.172 2a2 2 0 0 1 1.41",
     "2. path: M2 7v6.172a2 2 0 0 0 .58",

@@ -12,6 +12,7 @@ import {
 import { getVersion } from "@tauri-apps/api/app";
 import { toast } from "sonner";
 import { SuggestionDialog } from "@/components/SuggestionDialog";
+import { AiCard } from "@/components/AiCard";
 import { DonationCard } from "@/components/DonationCard";
 import { Button } from "@/components/ui/button";
 import { AnsweringButton } from "@/components/AnsweringButton";
@@ -365,6 +366,8 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
           )}
         </CardContent>
       </Card>
+
+      <AiCard />
 
       <Card>
         <CardHeader>

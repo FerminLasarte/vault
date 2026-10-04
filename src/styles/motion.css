@@ -278,6 +278,18 @@
       scale: 1.15;
     }
 
+    /* The local AI's mark: the star stays and the small sparkles around it
+       flare, each from its own centre. */
+    & .lucide-sparkles :is(path:nth-child(2), path:nth-child(3)) {
+      transform-origin: 20px 4px;
+      scale: 1.3;
+    }
+
+    & .lucide-sparkles circle {
+      transform-origin: 4px 20px;
+      scale: 1.3;
+    }
+
     /* A tick and a heart are nothing but what they are saying, so the whole
        icon is what grows. */
     & :is(.lucide-check, .lucide-heart) {

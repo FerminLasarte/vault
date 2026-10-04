@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from "react";
-import { Controller } from "react-hook-form";
+import { Controller, useWatch } from "react-hook-form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -9,12 +9,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { AiMark } from "@/components/AiMark";
 import { DatePicker } from "@/components/DatePicker";
 import { TagInput } from "@/components/TagInput";
 import type {
   TransactionFieldsState,
   TransactionForm,
 } from "@/hooks/useTransactionFields";
+import { merchantName } from "@/lib/ai/merchants";
 import { TRANSACTION_TYPE_LABELS } from "@/lib/labels";
 import { CURRENCY_LABELS } from "@/lib/currency";
 import { idSelectProps } from "@/lib/forms";
@@ -32,6 +34,9 @@ interface TransactionFieldsProps {
   idPrefix: string;
   // Drawn under the category, for the inspector to say which rule matches.
   categoryHint?: ReactNode;
+  // Whether the local AI is on, which decides whether the merchant name the
+  // lists will show is announced under the description.
+  aiEnabled: boolean;
 }
 
 // The fields of a transaction, drawn the same way wherever one is written.
@@ -46,6 +51,7 @@ export function TransactionFields({
   tags,
   idPrefix,
   categoryHint,
+  aiEnabled,
 }: TransactionFieldsProps) {
   const {
     control,
@@ -65,6 +71,12 @@ export function TransactionFields({
   } = fields;
 
   const id = (name: string) => `${idPrefix}-${name}`;
+
+  // The name the lists will show for what is being typed, when the AI
+  // recognises a merchant in it. Said here so a row never changes name without
+  // its description having explained why.
+  const description = useWatch({ control, name: "description" });
+  const shownAs = aiEnabled ? merchantName(description ?? "") : null;
 
   const originSelectItems = useMemo(
     () =>
@@ -316,6 +328,12 @@ export function TransactionFields({
           }
           {...descriptionField}
         />
+        {shownAs !== null && (
+          <p className="flex items-center gap-2 text-xs text-muted-foreground">
+            <AiMark reason="Vault reconoce el comercio en el texto del banco. La descripción guardada no cambia." />
+            Se muestra como «{shownAs}»
+          </p>
+        )}
         {errors.description && (
           <p className="text-xs text-destructive">{errors.description.message}</p>
         )}

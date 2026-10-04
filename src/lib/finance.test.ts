@@ -692,6 +692,17 @@ describe("filterBySearch", () => {
     expect(filterBySearch(transactions, "cená").map((t) => t.id)).toEqual([3]);
   });
 
+  // The list shows "Mercado Libre" for what the bank wrote as one word, so
+  // searching what is on screen has to find it.
+  it("matches the merchant name the list shows for a bank's description", () => {
+    const fromStatement = [
+      ...transactions,
+      makeTransaction({ id: 4, description: "MERCADOLIBRE*COMPRA 8812" }),
+    ];
+
+    expect(filterBySearch(fromStatement, "mercado libre").map((t) => t.id)).toEqual([4]);
+  });
+
   it("treats an empty or blank query as no constraint", () => {
     expect(filterBySearch(transactions, "")).toHaveLength(3);
     expect(filterBySearch(transactions, "   ")).toHaveLength(3);
