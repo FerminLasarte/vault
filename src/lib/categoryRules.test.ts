@@ -1,16 +1,29 @@
 import { describe, expect, it } from "vitest";
 import type { Category, CategoryRule } from "@/db/schema";
-import {
-  matchCategoryId,
-  matchCategoryIdForType,
-  matchCategoryRule,
-} from "@/lib/categoryRules";
+import { matchCategoryRule, matchCategoryRuleForType } from "@/lib/categoryRules";
+
+// Where a rule would put the description, for the tests that only care about
+// that.
+function matchCategoryId(description: string, rules: CategoryRule[]): number | null {
+  return matchCategoryRule(description, rules)?.category_id ?? null;
+}
+
+function matchCategoryIdForType(
+  description: string,
+  rules: CategoryRule[],
+  categories: Category[],
+  type: Category["type"],
+): number | null {
+  return (
+    matchCategoryRuleForType(description, rules, categories, type)?.category_id ?? null
+  );
+}
 
 function rule(id: number, pattern: string, categoryId: number): CategoryRule {
   return { id, pattern, category_id: categoryId };
 }
 
-describe("matchCategoryIdForType", () => {
+describe("matchCategoryRuleForType", () => {
   const categories: Category[] = [
     { id: 3, name: "Compras", type: "expense", color: "#f97316", icon: "🛍️" },
     { id: 8, name: "Cobros", type: "income", color: "#10b981", icon: "💰" },

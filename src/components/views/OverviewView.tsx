@@ -113,6 +113,7 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
     lastSeenClose,
     today,
     pending,
+    aiEnabled,
     isLoading,
   } = useAppData();
 
@@ -274,9 +275,27 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
 
   // One list rather than four independent conditions in the markup: what to
   // raise, and in what order, is a decision worth testing on its own.
+  // Every currency, like the close: the review happens in Transacciones, where
+  // each currency is looked at in turn.
+  const suggestedCount = useMemo(
+    () =>
+      aiEnabled
+        ? transactions.filter((transaction) => transaction.category_suggested === 1)
+            .length
+        : 0,
+    [aiEnabled, transactions],
+  );
+
   const attention = useMemo(
-    () => buildAttentionItems({ overspent, backup, pendingCount, pendingClose }),
-    [overspent, backup, pendingCount, pendingClose],
+    () =>
+      buildAttentionItems({
+        overspent,
+        backup,
+        pendingCount,
+        suggestedCount,
+        pendingClose,
+      }),
+    [overspent, backup, pendingCount, suggestedCount, pendingClose],
   );
 
   // Which of the two documents is visible to the print engine. It takes the

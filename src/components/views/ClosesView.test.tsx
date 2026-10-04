@@ -45,6 +45,7 @@ function aTransaction(
     description: `Movimiento ${id}`,
     date: "2026-07-10",
     currency: "ARS",
+    category_suggested: 0,
     category_name: null,
     category_color: null,
     category_icon: null,

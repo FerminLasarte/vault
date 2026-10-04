@@ -276,6 +276,27 @@ describe("migrations", () => {
     expect(query(database, "SELECT COUNT(*) FROM attachments;")).toBe("0");
   });
 
+  // Written by an import when the local AI chose the category, and cleared
+  // once the user confirms or changes it (migration 29). Everything that was
+  // there before, and everything written without saying, is the user's own.
+  it("starts every movement with its category as the user's, flagged only as 0 or 1", () => {
+    const database = newDatabase("category-suggested");
+    applyMigrations(database);
+    sql(
+      database,
+      `INSERT INTO transactions (id, amount, type, description, date, currency)
+         VALUES (1, 10, 'expense', 'x', '2026-01-01', 'ARS');`,
+    );
+    expect(query(database, "SELECT category_suggested FROM transactions;")).toBe("0");
+
+    expect(() =>
+      sql(database, "UPDATE transactions SET category_suggested = 1 WHERE id = 1;"),
+    ).not.toThrow();
+    expect(() =>
+      sql(database, "UPDATE transactions SET category_suggested = 2 WHERE id = 1;"),
+    ).toThrow();
+  });
+
   it("rejects a budget period it does not understand", () => {
     const database = newDatabase("budget-check");
     applyMigrations(database);

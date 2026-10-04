@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { ActionButton } from "@/components/ActionButton";
+import { AiNote } from "@/components/AiMark";
+import type { CategorySuggestion } from "@/lib/ai/categorySuggestion";
 import { Button } from "@/components/ui/button";
 import { TransactionAttachments } from "@/components/TransactionAttachments";
 import { TransactionFields } from "@/components/TransactionFields";
@@ -8,12 +10,12 @@ import { useAppActions, useAppData } from "@/hooks/useAppData";
 import { useDialogForm } from "@/hooks/useDialogForm";
 import { useMerchantName } from "@/hooks/useMerchantName";
 import { useTransactionFields } from "@/hooks/useTransactionFields";
-import { matchCategoryRuleForType } from "@/lib/categoryRules";
 import { isMacOS } from "@/lib/platform";
 import { isReported } from "@/lib/reportedError";
 import {
   differsFromSaved,
   formToTransaction,
+  stillSuggested,
   transactionFormSchema,
   transactionToForm,
   type TransactionFormInput,
@@ -61,8 +63,9 @@ export function TransactionInspector({
   transaction,
   onClose,
 }: TransactionInspectorProps) {
-  const { categories, categoryRules, tags, paymentMethods, aiEnabled } = useAppData();
-  const { editTransaction } = useAppActions();
+  const { categories, categoryRules, categoryModel, tags, paymentMethods, aiEnabled } =
+    useAppData();
+  const { editTransaction, confirmSuggestedCategories } = useAppActions();
   const merchantName = useMerchantName();
 
   const loaded = transactionToForm(transaction);
@@ -78,6 +81,7 @@ export function TransactionInspector({
     form,
     categories,
     categoryRules,
+    categoryModel,
     paymentMethods,
     isEditing: true,
     loadKey: transaction.id,
@@ -102,7 +106,10 @@ export function TransactionInspector({
         return;
       }
 
-      const next = formToTransaction(values);
+      const next = {
+        ...formToTransaction(values),
+        categorySuggested: stillSuggested(saved.current, values.categoryId),
+      };
       const signature = JSON.stringify([next, [...values.tags].sort()]);
       if (signature === lastSent.current) return;
       lastSent.current = signature;
@@ -161,44 +168,38 @@ export function TransactionInspector({
     [],
   );
 
-  // Which rule matches the description now. Nothing records which rule chose a
-  // saved category, so this says what a rule would do, never what one did.
-  const type = watch("type");
-  const description = watch("description");
+  // Which rule — or else what the local AI — would place the description now.
+  // Nothing records who chose a saved category, so this says what they would
+  // do, never what they did; the one exception is a category the AI chose on
+  // import, which stays flagged until the user confirms or changes it.
   const categoryId = watch("categoryId");
-  const rule =
-    type === "transfer"
-      ? null
-      : matchCategoryRuleForType(description ?? "", categoryRules, categories, type);
-  const ruleCategory = categories.find((category) => category.id === rule?.category_id);
+  const { suggestion } = fields;
+  const suggestedCategory = categories.find(
+    (category) => category.id === suggestion?.categoryId,
+  );
+  const awaitsConfirmation =
+    aiEnabled &&
+    stillSuggested(transaction, typeof categoryId === "number" ? categoryId : null);
 
-  function applyRule() {
-    if (rule === null) return;
+  function applySuggestion() {
+    if (suggestion === null) return;
     fields.markCategoryChosen();
-    setValue("categoryId", rule.category_id, { shouldDirty: true });
+    setValue("categoryId", suggestion.categoryId, { shouldDirty: true });
     scheduleSave();
   }
 
-  const categoryHint =
-    rule === null || ruleCategory === undefined ? null : rule.category_id ===
-      categoryId ? (
-      <p className="text-xs text-muted-foreground">
-        Coincide con la regla «{rule.pattern}».
-      </p>
-    ) : (
-      <p className="flex flex-wrap items-center gap-x-1 text-xs text-muted-foreground">
-        La regla «{rule.pattern}» la pondría en {ruleCategory.name}.
-        <Button
-          type="button"
-          variant="link"
-          size="xs"
-          className="h-auto px-0 text-foreground underline decoration-muted-foreground/50"
-          onClick={applyRule}
-        >
-          Aplicarla
-        </Button>
-      </p>
-    );
+  const categoryHint = (
+    <CategoryHint
+      hint={describeCategory(
+        awaitsConfirmation,
+        suggestion,
+        suggestedCategory?.name,
+        categoryId,
+      )}
+      onApply={applySuggestion}
+      onConfirm={() => void confirmSuggestedCategories([transaction.id])}
+    />
+  );
 
   return (
     <aside
@@ -272,5 +273,93 @@ export function TransactionInspector({
         <TransactionAttachments transaction={transaction} />
       </div>
     </aside>
+  );
+}
+
+// What the line under the category says, in order: a category the AI chose on
+// import waits to be confirmed; otherwise what a rule, or else the AI, would
+// put there, and whether the category already agrees with it.
+type CategoryHintState =
+  | { kind: "confirm" }
+  | { kind: "matches-rule"; pattern: string }
+  | { kind: "rule-differs"; pattern: string; categoryName: string }
+  | { kind: "matches-ai"; reason: string }
+  | { kind: "ai-differs"; reason: string; categoryName: string };
+
+function describeCategory(
+  awaitsConfirmation: boolean,
+  suggestion: CategorySuggestion | null,
+  categoryName: string | undefined,
+  categoryId: unknown,
+): CategoryHintState | null {
+  if (awaitsConfirmation) return { kind: "confirm" };
+  if (suggestion === null || categoryName === undefined) return null;
+  const matches = suggestion.categoryId === categoryId;
+  if (suggestion.source === "rule") {
+    return matches
+      ? { kind: "matches-rule", pattern: suggestion.rule.pattern }
+      : { kind: "rule-differs", pattern: suggestion.rule.pattern, categoryName };
+  }
+  return matches
+    ? { kind: "matches-ai", reason: suggestion.reason }
+    : { kind: "ai-differs", reason: suggestion.reason, categoryName };
+}
+
+function CategoryHint({
+  hint,
+  onApply,
+  onConfirm,
+}: {
+  hint: CategoryHintState | null;
+  onApply: () => void;
+  onConfirm: () => void;
+}) {
+  switch (hint?.kind) {
+    case undefined:
+      return null;
+    case "confirm":
+      return (
+        <AiNote reason="La IA eligió esta categoría al importar el movimiento. Confirmala si es la correcta, o elegí otra.">
+          Sugerida por IA al importar.
+          <InlineAction onClick={onConfirm}>Confirmar</InlineAction>
+        </AiNote>
+      );
+    case "matches-rule":
+      return (
+        <p className="text-xs text-muted-foreground">
+          Coincide con la regla «{hint.pattern}».
+        </p>
+      );
+    case "rule-differs":
+      return (
+        <p className="flex flex-wrap items-center gap-x-1 text-xs text-muted-foreground">
+          La regla «{hint.pattern}» la pondría en {hint.categoryName}.
+          <InlineAction onClick={onApply}>Aplicarla</InlineAction>
+        </p>
+      );
+    case "matches-ai":
+      return <AiNote reason={hint.reason}>Coincide con lo que sugiere la IA.</AiNote>;
+    case "ai-differs":
+      return (
+        <AiNote reason={hint.reason}>
+          La IA la pondría en {hint.categoryName}.
+          <InlineAction onClick={onApply}>Aplicarla</InlineAction>
+        </AiNote>
+      );
+  }
+}
+
+// An action inside a line of hint text, such as applying what a rule would do.
+function InlineAction({ onClick, children }: { onClick: () => void; children: string }) {
+  return (
+    <Button
+      type="button"
+      variant="link"
+      size="xs"
+      className="h-auto px-0 text-foreground underline decoration-muted-foreground/50"
+      onClick={onClick}
+    >
+      {children}
+    </Button>
   );
 }

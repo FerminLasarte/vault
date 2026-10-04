@@ -1,0 +1,72 @@
+{
+  "supermercado": {
+    "label": "un supermercado",
+    "categories": ["supermercado", "super", "almacen", "alimentos", "comida"]
+  },
+  "delivery": {
+    "label": "una app de delivery",
+    "categories": [
+      "delivery",
+      "comida",
+      "restaurantes",
+      "restaurant",
+      "salidas",
+      "salida"
+    ]
+  },
+  "comida": {
+    "label": "un local de comida",
+    "categories": ["comida", "restaurantes", "restaurant", "salidas", "salida"]
+  },
+  "transporte": {
+    "label": "un servicio de transporte",
+    "categories": ["transporte", "movilidad", "viajes"]
+  },
+  "combustible": {
+    "label": "una estación de servicio",
+    "categories": ["combustible", "nafta", "auto", "transporte"]
+  },
+  "compras": {
+    "label": "una tienda",
+    "categories": ["compras", "shopping", "ropa", "hogar"]
+  },
+  "suscripciones": {
+    "label": "un servicio de suscripción",
+    "categories": [
+      "suscripciones",
+      "suscripcion",
+      "streaming",
+      "entretenimiento",
+      "ocio",
+      "servicios"
+    ]
+  },
+  "gaming": {
+    "label": "una tienda de juegos",
+    "categories": ["gaming", "juegos", "videojuegos", "entretenimiento", "ocio"]
+  },
+  "telefonia": {
+    "label": "una empresa de telefonía e internet",
+    "categories": ["telefonia", "internet", "celular", "servicios"]
+  },
+  "servicios": {
+    "label": "una empresa de servicios",
+    "categories": ["servicios", "luz", "gas", "agua", "hogar"]
+  },
+  "impuestos": {
+    "label": "un organismo de impuestos",
+    "categories": ["impuestos", "impuesto", "tasas"]
+  },
+  "viajes": {
+    "label": "una empresa de viajes",
+    "categories": ["viajes", "viaje", "turismo", "vacaciones"]
+  },
+  "salud": {
+    "label": "una prepaga o farmacia",
+    "categories": ["salud", "farmacia", "medicina", "prepaga"]
+  },
+  "deporte": {
+    "label": "un gimnasio",
+    "categories": ["gimnasio", "gym", "deporte", "deportes", "salud"]
+  }
+}

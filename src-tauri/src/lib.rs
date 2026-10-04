@@ -1054,6 +1054,18 @@ fn migrations() -> Vec<Migration> {
             ",
             kind: MigrationKind::Up,
         },
+        // Whether the category was chosen by the local AI on import and not yet
+        // confirmed by the user. Every existing row is the user's own, which is
+        // what the default says.
+        Migration {
+            version: 29,
+            description: "add_category_suggested_to_transactions",
+            sql: "
+                ALTER TABLE transactions ADD COLUMN category_suggested INTEGER NOT NULL
+                    DEFAULT 0 CHECK (category_suggested IN (0, 1));
+            ",
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

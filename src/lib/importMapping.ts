@@ -1,4 +1,4 @@
-import { matchCategoryIdForType } from "@/lib/categoryRules";
+import { suggestCategory } from "@/lib/ai/categorySuggestion";
 import { normalizeForSearch as normalize } from "@/lib/text";
 import type { ImportContext, ImportPlan, ImportSkip } from "@/lib/csv";
 import type { NewTransaction, PaymentMethod } from "@/db/schema";
@@ -201,9 +201,9 @@ export function isMappingComplete(mapping: ColumnMapping): boolean {
 // Turns the rows of a bank statement into transactions, using the columns the
 // user pointed at.
 //
-// Reuses the category rules and the duplicate detection that the app's own CSV
-// import already relies on, so a statement lands classified the same way a
-// hand-made file would.
+// Reuses the category suggestions (the rules, then the local AI) and the
+// duplicate detection that the app's own CSV import already relies on, so a
+// statement lands classified the same way a hand-made file would.
 export function buildMappedImportPlan(
   rows: string[][],
   mapping: ColumnMapping,
@@ -255,21 +255,25 @@ export function buildMappedImportPlan(
       continue;
     }
 
+    const suggestion = suggestCategory(
+      { description, type: money.type },
+      {
+        rules: context.categoryRules ?? [],
+        categories: context.categories,
+        model: context.categoryModel ?? null,
+      },
+    );
     const transaction: NewTransaction = {
       amount: money.amount,
       type: money.type,
       currency: mapping.currency,
-      categoryId: matchCategoryIdForType(
-        description,
-        context.categoryRules ?? [],
-        context.categories,
-        money.type,
-      ),
+      categoryId: suggestion?.categoryId ?? null,
       paymentMethodId: mapping.paymentMethodId,
       destinationPaymentMethodId: null,
       destinationAmount: null,
       description,
       date,
+      categorySuggested: suggestion?.source === "ai",
     };
 
     const key = duplicateKey(transaction);

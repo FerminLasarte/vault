@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { trainCategoryModel } from "@/lib/ai/categoryModel";
 import {
   lastUsedAccountByCurrency,
   parseQuickEntry,
@@ -43,6 +44,7 @@ function context(overrides: Partial<QuickEntryContext> = {}): QuickEntryContext 
     paymentMethods: ACCOUNTS,
     categories: CATEGORIES,
     rules: RULES,
+    model: null,
     lastUsedAccounts: new Map([
       ["ARS", 1],
       ["USD", 3],
@@ -70,7 +72,7 @@ describe("parseQuickEntry", () => {
       categoryId: 10,
       date: "2026-09-27",
     });
-    expect(entry.rule?.pattern).toBe("café");
+    expect(entry.suggestion).toMatchObject({ source: "rule", rule: { pattern: "café" } });
   });
 
   it("keeps the description as it was typed", () => {
@@ -230,6 +232,29 @@ describe("quickEntryGaps", () => {
       "amount",
       "category",
     ]);
+  });
+
+  // Where no rule speaks, the local AI does, and the line says it was the AI.
+  it("takes the local AI's category when no rule matches", () => {
+    const model = trainCategoryModel(
+      ["verduleria", "verduleria", "verduleria"].map((description, index) => ({
+        id: index,
+        amount: 500,
+        type: "expense",
+        category_id: 10,
+        payment_method_id: 1,
+        destination_payment_method_id: null,
+        destination_amount: null,
+        description,
+        date: TODAY,
+        currency: "ARS",
+        category_suggested: 0,
+      })),
+    );
+    const entry = parse("verduleria 800", { model });
+
+    expect(entry.categoryId).toBe(10);
+    expect(entry.suggestion).toMatchObject({ source: "ai" });
   });
 
   it("asks for a category when no rule matches", () => {

@@ -3,6 +3,7 @@ import {
   FileText,
   HardDriveDownload,
   Repeat,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ const ICONS: Record<AttentionKind, LucideIcon> = {
   budget: AlertTriangle,
   backup: HardDriveDownload,
   pending: Repeat,
+  suggested: Sparkles,
   close: FileText,
 };
 

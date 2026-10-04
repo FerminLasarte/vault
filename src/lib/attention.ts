@@ -13,7 +13,7 @@ import type { BudgetProgress } from "@/lib/finance";
 
 export type AttentionTone = "critical" | "neutral";
 
-export type AttentionKind = "budget" | "backup" | "pending" | "close";
+export type AttentionKind = "budget" | "backup" | "pending" | "suggested" | "close";
 
 export interface AttentionItem {
   kind: AttentionKind;
@@ -72,6 +72,23 @@ function pendingItem(pendingCount: number): AttentionItem | null {
   };
 }
 
+// Categories the local AI chose on import that nobody has looked at yet. Work
+// to do rather than something wrong, and where to do it.
+function suggestedItem(suggestedCount: number): AttentionItem | null {
+  if (suggestedCount <= 0) return null;
+
+  return {
+    kind: "suggested",
+    tone: "neutral",
+    title:
+      suggestedCount === 1
+        ? "Revisá 1 categoría sugerida por IA"
+        : `Revisá ${suggestedCount} categorías sugeridas por IA`,
+    detail:
+      "En Transacciones, con «Sugeridas por IA»: confirmalas o cambiales la categoría.",
+  };
+}
+
 // A month that has finished, has something in it, and has not been dealt with
 // yet. Informational rather than a warning: nothing is wrong, something is
 // ready — which is why it carries a neutral tone and sits last.
@@ -95,6 +112,8 @@ export function buildAttentionItems(sources: {
   overspent: BudgetProgress[];
   backup: BackupStatus;
   pendingCount: number;
+  // Categories the local AI chose and nobody confirmed; 0 with it switched off.
+  suggestedCount: number;
   // The month whose close is ready and unseen, or null when there is none.
   pendingClose: string | null;
 }): AttentionItem[] {
@@ -102,6 +121,7 @@ export function buildAttentionItems(sources: {
     budgetItem(sources.overspent),
     backupItem(sources.backup),
     pendingItem(sources.pendingCount),
+    suggestedItem(sources.suggestedCount),
     closeItem(sources.pendingClose),
   ].filter((item): item is AttentionItem => item !== null);
 }

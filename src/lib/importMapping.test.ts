@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { trainCategoryModel } from "@/lib/ai/categoryModel";
 import {
   buildMappedImportPlan,
   EMPTY_MAPPING,
@@ -332,6 +333,7 @@ describe("buildMappedImportPlan", () => {
             description: "Supermercado",
             date: "2026-08-05",
             currency: "ARS",
+            category_suggested: 0,
           },
         ],
       },
@@ -382,6 +384,7 @@ describe("buildMappedImportPlan", () => {
             description: "SUBE",
             date: "2026-08-05",
             currency: "ARS",
+            category_suggested: 0,
           },
         ],
       },
@@ -433,6 +436,41 @@ describe("buildMappedImportPlan", () => {
     expect(plan.ready[0].transaction.type).toBe("income");
     expect(plan.ready[0].transaction.categoryId).toBeNull();
     expect(plan.ready[1].transaction.categoryId).toBe(7);
+  });
+
+  // Where no rule says anything, the local AI does — and its choice arrives
+  // flagged, to be reviewed, while a rule's is the user's own.
+  it("lets the local AI place what no rule does, flagged as suggested", () => {
+    const categories = [
+      { id: 3, name: "Comida", type: "expense" as const, color: "", icon: "" },
+      { id: 7, name: "Supermercado", type: "expense" as const, color: "", icon: "" },
+    ];
+    const plan = buildMappedImportPlan(
+      [
+        ["Fecha", "Concepto", "Importe"],
+        ["05/08/2026", "MERPAGO*RAPPI 4471", "-1.000,00"],
+        ["06/08/2026", "COTO DIGITAL", "-2.000,00"],
+        ["07/08/2026", "VERDULERIA LOS HERMANOS", "-500,00"],
+      ],
+      SIGNED,
+      {
+        ...CONTEXT,
+        categories,
+        categoryRules: [{ id: 1, pattern: "coto", category_id: 7 }],
+        categoryModel: trainCategoryModel([]),
+      },
+    );
+
+    expect(plan.ready.map(({ transaction }) => transaction.categoryId)).toEqual([
+      3,
+      7,
+      null,
+    ]);
+    expect(plan.ready.map(({ transaction }) => transaction.categorySuggested)).toEqual([
+      true,
+      false,
+      false,
+    ]);
   });
 
   it("assigns the account chosen for the file", () => {
@@ -535,6 +573,7 @@ describe("a real Argentine bank statement", () => {
         payment_method_id: entry.transaction.paymentMethodId,
         destination_payment_method_id: null,
         destination_amount: null,
+        category_suggested: 0,
       })),
     });
 

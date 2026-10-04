@@ -1,5 +1,6 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { Input } from "@/components/ui/input";
+import { AiMark } from "@/components/AiMark";
 import { useAppData } from "@/hooks/useAppData";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { TRANSACTION_TYPE_LABELS } from "@/lib/labels";
@@ -28,6 +29,8 @@ interface Part {
   text: string;
   // Still to be filled in, so it reads apart from what was understood.
   missing?: boolean;
+  // Chosen by the local AI, and why; it carries the AI's mark.
+  aiReason?: string;
 }
 
 // A movement typed as one line, above the list: "café 2500 mp ayer".
@@ -40,7 +43,14 @@ interface Part {
 // the whole form with all of that filled in. A line with something missing
 // goes to the form on either key, since the form is where that gets filled.
 export function QuickEntry({ defaultCurrency, onSave, onExpand }: QuickEntryProps) {
-  const { paymentMethods, categories, categoryRules, transactions, today } = useAppData();
+  const {
+    paymentMethods,
+    categories,
+    categoryRules,
+    categoryModel,
+    transactions,
+    today,
+  } = useAppData();
   const [text, setText] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -58,6 +68,7 @@ export function QuickEntry({ defaultCurrency, onSave, onExpand }: QuickEntryProp
             paymentMethods,
             categories,
             rules: categoryRules,
+            model: categoryModel,
             lastUsedAccounts,
             defaultCurrency,
           }),
@@ -67,6 +78,7 @@ export function QuickEntry({ defaultCurrency, onSave, onExpand }: QuickEntryProp
       paymentMethods,
       categories,
       categoryRules,
+      categoryModel,
       lastUsedAccounts,
       defaultCurrency,
     ],
@@ -90,13 +102,16 @@ export function QuickEntry({ defaultCurrency, onSave, onExpand }: QuickEntryProp
         : { key: "description", text: `«${entry.description}»` },
       category === undefined
         ? { key: "category", text: "Sin categoría", missing: true }
-        : {
-            key: "category",
-            text:
-              entry.rule === null
-                ? category.name
-                : `${category.name}, por la regla «${entry.rule.pattern}»`,
-          },
+        : entry.suggestion?.source === "rule"
+          ? {
+              key: "category",
+              text: `${category.name}, por la regla «${entry.suggestion.rule.pattern}»`,
+            }
+          : {
+              key: "category",
+              text: category.name,
+              aiReason: entry.suggestion?.reason,
+            },
       account === undefined
         ? { key: "account", text: "Sin cuenta", missing: true }
         : {
@@ -162,6 +177,9 @@ export function QuickEntry({ defaultCurrency, onSave, onExpand }: QuickEntryProp
                 <span className={cn(part.missing && "text-destructive")}>
                   {part.text}
                 </span>
+                {part.aiReason !== undefined && (
+                  <AiMark reason={part.aiReason} className="ml-1.5 align-middle" />
+                )}
                 {index < parts.length - 1 && <span aria-hidden> ·</span>}
               </span>
             ))}

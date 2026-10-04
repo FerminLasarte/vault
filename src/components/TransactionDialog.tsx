@@ -2,6 +2,7 @@ import { useDialogForm } from "@/hooks/useDialogForm";
 import { useTransactionFields } from "@/hooks/useTransactionFields";
 import { FormDialog } from "@/components/FormDialog";
 import { TransactionFields } from "@/components/TransactionFields";
+import type { CategoryModel } from "@/lib/ai/categoryModel";
 import {
   blankTransactionForm,
   draftToForm,
@@ -32,6 +33,8 @@ interface TransactionDialogProps {
   // into the quick entry, when the user asked for the whole form to finish it.
   draft?: NewTransaction | null;
   aiEnabled: boolean;
+  // What the local AI learned; null with it switched off.
+  categoryModel: CategoryModel | null;
   onSubmitTransaction: (transaction: NewTransaction, tags: string[]) => Promise<void>;
 }
 
@@ -47,6 +50,7 @@ export function TransactionDialog({
   defaultCurrency,
   draft = null,
   aiEnabled,
+  categoryModel,
   onSubmitTransaction,
 }: TransactionDialogProps) {
   const form = useDialogForm<TransactionFormInput, TransactionFormValues>({
@@ -61,6 +65,7 @@ export function TransactionDialog({
     form,
     categories,
     categoryRules,
+    categoryModel,
     paymentMethods,
     isEditing: false,
     loadKey: open,
