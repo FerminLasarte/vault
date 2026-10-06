@@ -101,6 +101,7 @@ const SHIPPED_MIGRATIONS: Record<number, string> = {
   // `tauri dev`, which sqlx would refuse to open just the same.
   27: "9b45b1c90ac537a953aa044a3c957e14290f9c2f87cd2e6023735523877b25a8",
   28: "970ead188133e4994dd6f98da6ae0e7a01dec2490a9b20fe904ff02161667dbc",
+  29: "618d41f48592b59199e3009929fd5609f349282e39b0478138f48319d2d9c945",
 };
 
 function sha256(text: string): string {
