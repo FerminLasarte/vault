@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { ActionButton } from "@/components/ActionButton";
 import { InlineAction } from "@/components/InlineAction";
 import { AiNote } from "@/components/AiMark";
 import type { CategorySuggestion } from "@/lib/ai/categorySuggestion";
+import { unusualSpending } from "@/lib/ai/unusualSpending";
 import { TransactionAttachments } from "@/components/TransactionAttachments";
 import { TransactionFields } from "@/components/TransactionFields";
 import { useAppActions, useAppData } from "@/hooks/useAppData";
@@ -22,6 +23,7 @@ import {
   type TransactionFormValues,
 } from "@/lib/transactionForm";
 import { cn } from "@/lib/utils";
+import { formatCurrency } from "@/lib/format";
 import type { TransactionWithCategory } from "@/db";
 
 // How long the inspector waits after the last keystroke before saving: long
@@ -63,8 +65,15 @@ export function TransactionInspector({
   transaction,
   onClose,
 }: TransactionInspectorProps) {
-  const { categories, categoryRules, categoryModel, tags, paymentMethods, aiEnabled } =
-    useAppData();
+  const {
+    categories,
+    categoryRules,
+    categoryModel,
+    tags,
+    paymentMethods,
+    aiEnabled,
+    spendingBaselines,
+  } = useAppData();
   const { editTransaction, confirmSuggestedCategories } = useAppActions();
   const merchantName = useMerchantName();
 
@@ -201,6 +210,19 @@ export function TransactionInspector({
     />
   );
 
+  // Said of the movement as saved: an amount still being typed is not news.
+  const unusual = useMemo(
+    () =>
+      spendingBaselines === null ? null : unusualSpending(transaction, spendingBaselines),
+    [transaction, spendingBaselines],
+  );
+  const amountHint = unusual !== null && (
+    <AiNote reason={unusual.reason}>
+      Más de lo habitual: en {unusual.name} solés gastar cerca de{" "}
+      {formatCurrency(unusual.typical, transaction.currency)}.
+    </AiNote>
+  );
+
   return (
     <aside
       aria-labelledby="inspector-title"
@@ -266,6 +288,7 @@ export function TransactionInspector({
             tags={tags}
             idPrefix="inspector"
             categoryHint={categoryHint}
+            amountHint={amountHint}
             aiEnabled={aiEnabled}
           />
         </form>

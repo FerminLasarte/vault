@@ -14,9 +14,14 @@ import { cn } from "@/lib/utils";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { formatCurrency, formatMonthLabel, formatPercent } from "@/lib/format";
 import type { MonthOverview } from "@/lib/monthOverview";
+import { paceChange, paceReason, type Pace } from "@/lib/ai/monthPace";
+import { AiNote } from "@/components/AiMark";
 
 interface MonthOverviewCardsProps {
   overview: MonthOverview;
+  // Where the month's spending is heading, from the local AI; null with it off
+  // or too little history.
+  pace: Pace | null;
   currency: string;
   isLoading: boolean;
 }
@@ -25,6 +30,7 @@ interface MonthOverviewCardsProps {
 // they are drawn and land together rather than a frame apart.
 interface MonthCardProps {
   overview: MonthOverview;
+  pace: Pace | null;
   currency: string;
   gate: LoadingGate;
 }
@@ -56,9 +62,12 @@ function ProgressSkeleton() {
   );
 }
 
-function MonthExpensesCard({ overview, currency, gate }: MonthCardProps) {
+function MonthExpensesCard({ overview, pace, currency, gate }: MonthCardProps) {
   const { total, previousTotal, previousMonthKey, changeRatio } = overview.expenses;
   const isUp = changeRatio !== null && changeRatio > 0;
+  // Only when the month heads well off a usual one: within that, it is going
+  // as it always does and there is nothing to add.
+  const heading = pace === null ? null : paceChange(pace);
 
   return (
     <Card>
@@ -99,6 +108,16 @@ function MonthExpensesCard({ overview, currency, gate }: MonthCardProps) {
                 que en {formatMonthLabel(previousMonthKey)}
               </span>
             </p>
+          )}
+          {pace !== null && heading !== null && (
+            <div className="mt-2">
+              <AiNote reason={paceReason(pace, currency, "")}>
+                Si el resto del mes va como siempre, vas a gastar{" "}
+                {formatCurrency(pace.projected, currency)},{" "}
+                {formatPercent(Math.abs(heading))} {heading > 0 ? "más" : "menos"} de lo
+                habitual.
+              </AiNote>
+            </div>
           )}
         </LoadingSlot>
       </CardContent>
@@ -207,11 +226,12 @@ function SavingsCard({ overview, currency, gate }: MonthCardProps) {
 // is stated rather than implied.
 export function MonthOverviewCards({
   overview,
+  pace,
   currency,
   isLoading,
 }: MonthOverviewCardsProps) {
   const gate = useLoadingGate(isLoading);
-  const card = { overview, currency, gate };
+  const card = { overview, pace, currency, gate };
 
   return (
     <section className="flex flex-col gap-3">

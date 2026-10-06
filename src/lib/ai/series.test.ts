@@ -5,6 +5,7 @@ import {
   MAX_AMOUNT_SPREAD,
   MIN_OCCURRENCES,
   PERIODS,
+  settledThisMonth,
   RECENT_OCCURRENCES,
 } from "./series";
 import {
@@ -204,5 +205,19 @@ describe("detectSeries", () => {
         ),
       ).toEqual([]);
     });
+  });
+});
+
+describe("settledThisMonth", () => {
+  it("names the monthly series already seen this month", () => {
+    const series = detect([
+      ...charges("Sueldo", ["2026-07-03", "2026-08-03", "2026-09-03", "2026-10-03"], {
+        type: "income",
+      }),
+      ...charges("Netflix", MONTHLY),
+      ...charges("Clase de yoga", datesEvery(7, 4, "2026-10-05")),
+    ]);
+
+    expect([...settledThisMonth(series, "2026-10-06")]).toEqual(["income:ARS:sueldo"]);
   });
 });

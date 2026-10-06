@@ -3,13 +3,18 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { NetWorthBar } from "./NetWorthBar";
 import type { NetWorth } from "@/lib/netWorth";
+import type { EndOfMonth } from "@/lib/ai/endOfMonth";
 
 const HOLDINGS = new Map([
   ["ARS", 500000],
   ["USD", 100],
 ]);
 
-function renderBar(worth: Partial<NetWorth>, convertedNet: number | null = 400) {
+function renderBar(
+  worth: Partial<NetWorth>,
+  convertedNet: number | null = 400,
+  endOfMonth: EndOfMonth | null = null,
+) {
   render(
     <NetWorthBar
       holdings={HOLDINGS}
@@ -17,6 +22,7 @@ function renderBar(worth: Partial<NetWorth>, convertedNet: number | null = 400) 
       convertedNet={convertedNet}
       currency="ARS"
       convertedCurrency="USD"
+      endOfMonth={endOfMonth}
       isLoading={false}
     />,
   );
@@ -63,5 +69,27 @@ describe("NetWorthBar", () => {
     expect(
       screen.getByText("Traé una cotización para sumar las dos monedas"),
     ).toBeTruthy();
+  });
+
+  it("adds the estimated end of the month, marked as the AI's", () => {
+    renderBar({}, 400, {
+      date: "2026-10-31",
+      balance: 500000,
+      committed: { income: 0, expenses: 5500 },
+      expected: { income: 0, expenses: 0 },
+      usual: { income: 0, expenses: 40000 },
+      estimate: 454500,
+      months: 3,
+    });
+
+    expect(screen.getByText("Fin de mes estimado")).toBeTruthy();
+    expect(screen.getByText("$ 454.500,00")).toBeTruthy();
+    expect(screen.getByText(/al 31 oct 2026/)).toBeTruthy();
+    expect(screen.getByText("IA")).toBeTruthy();
+  });
+
+  it("leaves it out without an estimate", () => {
+    renderBar({});
+    expect(screen.queryByText("Fin de mes estimado")).toBeNull();
   });
 });

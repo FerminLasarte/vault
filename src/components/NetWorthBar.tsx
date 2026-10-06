@@ -1,5 +1,7 @@
+import { AiMark } from "@/components/AiMark";
 import { FigureBar, type Figure } from "@/components/FigureBar";
-import { formatCurrency } from "@/lib/format";
+import { endOfMonthBreakdown, type EndOfMonth } from "@/lib/ai/endOfMonth";
+import { formatCurrency, formatDate } from "@/lib/format";
 import { CURRENCY_CODES, CURRENCY_SHORT_LABELS } from "@/lib/currency";
 import type { NetWorth } from "@/lib/netWorth";
 
@@ -12,6 +14,9 @@ interface NetWorthBarProps {
   convertedNet: number | null;
   currency: string;
   convertedCurrency: string;
+  // What the accounts in the selected currency will hold when the month ends,
+  // as the local AI estimates it; null with it off or too little history.
+  endOfMonth: EndOfMonth | null;
   isLoading: boolean;
 }
 
@@ -33,6 +38,7 @@ export function NetWorthBar({
   convertedNet,
   currency,
   convertedCurrency,
+  endOfMonth,
   isLoading,
 }: NetWorthBarProps) {
   // Null rather than approximate when there is no quote to add the currencies
@@ -77,6 +83,32 @@ export function NetWorthBar({
             key: "receivable",
             label: "Te deben",
             value: formatCurrency(worth.receivable, currency),
+          },
+        ]
+      : []),
+    // Where the selected currency's pocket ends the month: an estimate, so it
+    // carries the AI's mark and what it is made of.
+    ...(endOfMonth !== null
+      ? [
+          {
+            key: "end-of-month",
+            label: "Fin de mes estimado",
+            value: formatCurrency(endOfMonth.estimate, currency),
+            valueClassName: endOfMonth.estimate < 0 ? "text-negative" : undefined,
+            sub: (
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <AiMark
+                  reason={
+                    <span className="flex flex-col gap-0.5">
+                      {endOfMonthBreakdown(endOfMonth, currency).map((line) => (
+                        <span key={line}>{line}</span>
+                      ))}
+                    </span>
+                  }
+                />
+                al {formatDate(endOfMonth.date)}
+              </span>
+            ),
           },
         ]
       : []),

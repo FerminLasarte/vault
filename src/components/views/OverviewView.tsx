@@ -68,6 +68,10 @@ import { priceRises } from "@/lib/ai/priceRises";
 import { unregisteredSeries } from "@/lib/ai/unregisteredSeries";
 import { nearDuplicates } from "@/lib/ai/nearDuplicates";
 import { splitTransfers } from "@/lib/ai/splitTransfers";
+import { spendingPace } from "@/lib/ai/monthPace";
+import { recentUnusualSpending } from "@/lib/ai/unusualSpending";
+import { endOfMonthEstimate } from "@/lib/ai/endOfMonth";
+import { declaredMerchantIds, settledThisMonth } from "@/lib/ai/series";
 import { recurringFromTemplate } from "@/lib/recurring";
 import type { NewRecurringTransaction, RecurringTransactionWithNames } from "@/db";
 import { buildMonthOverview } from "@/lib/monthOverview";
@@ -102,6 +106,7 @@ const CUSTOM_PERIOD_LABEL = "Personalizado";
 // What the AI read from repeating movements, with it switched off.
 const NOTHING_REPEATING = { lateIncome: [], rises: [], unregistered: [] };
 const NOTHING_IN_THE_LEDGER = { duplicates: [], transfers: [] };
+const NOTHING_UNUSUAL = { paces: [], unusual: [] };
 
 export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
   const [currentTab, setCurrentTab] = useRequestedTab<OverviewTab>(
@@ -133,6 +138,8 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
     categoryRules,
     categoryModel,
     series,
+    spendingBaselines,
+    budgetPaces,
     ledger,
     rateAt,
     isLoading,
@@ -223,6 +230,57 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
       ),
     [transactions, budgets, savingsProgress, currency, reference],
   );
+
+  // The merchants whose monthly movement already came this month, and so is
+  // not still to come.
+  const settled = useMemo(
+    () => (series === null ? null : settledThisMonth(series, today)),
+    [series, today],
+  );
+
+  // Where this month's spending is heading in this currency, for the card.
+  const pace = useMemo(
+    () =>
+      settled === null ? null : spendingPace(transactions, currency, today, settled),
+    [settled, transactions, currency, today],
+  );
+
+  // What the accounts in this currency will hold when the month ends: what
+  // they hold now, what is owed and expected before then, and what usually
+  // comes and goes for the rest of it.
+  const endOfMonth = useMemo(() => {
+    if (settled === null) return null;
+    const thisMonth = [currentMonthKey(reference)];
+    return endOfMonthEstimate(
+      {
+        balance: netWorth.holdings.get(currency) ?? 0,
+        committed: projectCommitments(
+          { recurring, installmentPlans, loans },
+          thisMonth,
+          currency,
+        )[0],
+        expected: projectExpected(expectedMovements, thisMonth, currency)[0],
+        transactions,
+        known: new Set([
+          ...declaredMerchantIds({ recurring, installmentPlans, loans }),
+          ...settled,
+        ]),
+      },
+      currency,
+      today,
+    );
+  }, [
+    settled,
+    reference,
+    netWorth.holdings,
+    currency,
+    recurring,
+    installmentPlans,
+    loans,
+    expectedMovements,
+    transactions,
+    today,
+  ]);
 
   // What the months ahead already owe. Read from the same schedules the
   // pending notices are read from, only forwards.
@@ -344,6 +402,17 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
     };
   }, [series, aiDismissed, today]);
 
+  // Budgets about to be passed, and recent expenses far above the usual, from
+  // what the context worked out once.
+  const statistics = useMemo(() => {
+    if (budgetPaces === null || spendingBaselines === null) return NOTHING_UNUSUAL;
+    const dismissed = (id: string) => isDismissed(aiDismissed, id, today);
+    return {
+      paces: [...budgetPaces.values()].filter((entry) => !dismissed(entry.id)),
+      unusual: recentUnusualSpending(transactions, spendingBaselines, today, dismissed),
+    };
+  }, [budgetPaces, spendingBaselines, transactions, aiDismissed, today]);
+
   // Movements recorded twice, and transfers that came in as an expense and an
   // income, in the recent history.
   const ledgerProblems = useMemo(
@@ -390,6 +459,7 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
           categoryName: group.categoryName,
         })),
         ...repeating,
+        ...statistics,
         ...ledgerProblems,
         pendingClose,
       }),
@@ -400,6 +470,7 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
       suggestedCount,
       uncategorised,
       repeating,
+      statistics,
       ledgerProblems,
       pendingClose,
     ],
@@ -584,11 +655,13 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
             convertedNet={netWorth.convertedNet}
             currency={currency}
             convertedCurrency={otherCurrency}
+            endOfMonth={endOfMonth}
             isLoading={isLoading}
           />
 
           <MonthOverviewCards
             overview={monthOverview}
+            pace={pace}
             currency={currency}
             isLoading={isLoading}
           />

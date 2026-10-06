@@ -5,6 +5,7 @@ import {
   formatDate,
   formatMonthLabel,
   formatPercent,
+  monthsBefore,
 } from "@/lib/format";
 
 // Intl separates the number from its unit with a non-breaking space, and that
@@ -48,6 +49,18 @@ describe("dates", () => {
   it("names whole months", () => {
     expect(formatMonthLabel("2026-09")).toBe("Septiembre de 2026");
     expect(formatMonthLabel("2026-09", "short")).toBe("sept 2026");
+  });
+});
+
+describe("monthsBefore", () => {
+  it("moves whole months, across years and both ways", () => {
+    expect(monthsBefore("2026-10-06", 6)).toBe("2026-04-06");
+    expect(monthsBefore("2026-02-15", 3)).toBe("2025-11-15");
+    expect(monthsBefore("2026-11-15", -3)).toBe("2027-02-15");
+  });
+
+  it("rolls a missing day over, as Date does", () => {
+    expect(monthsBefore("2026-03-31", 1)).toBe("2026-03-03");
   });
 });
 

@@ -7,6 +7,9 @@ import { priceRises } from "@/lib/ai/priceRises";
 import { unregisteredSeries } from "@/lib/ai/unregisteredSeries";
 import { nearDuplicates } from "@/lib/ai/nearDuplicates";
 import { splitTransfers } from "@/lib/ai/splitTransfers";
+import { budgetPaces } from "@/lib/ai/monthPace";
+import { learnMerchantHistory } from "@/lib/ai/merchantHistory";
+import { recentUnusualSpending, spendingBaselines } from "@/lib/ai/unusualSpending";
 import { LEDGER, TODAY as LEDGER_TODAY, WALLET, held } from "@/lib/ai/testing/ledger";
 import {
   MONTHLY,
@@ -47,6 +50,8 @@ const CALM = {
   lateIncome: [],
   rises: [],
   unregistered: [],
+  paces: [],
+  unusual: [],
   duplicates: [],
   transfers: [],
   pendingClose: null,
@@ -121,6 +126,8 @@ describe("buildAttentionItems", () => {
       lateIncome: [],
       rises: [],
       unregistered: [],
+      paces: [],
+      unusual: [],
       duplicates: [],
       transfers: [],
       pendingClose: "2026-07",
@@ -449,5 +456,98 @@ describe("the ledger's notices", () => {
     });
 
     expect(items.map((item) => item.kind)).toEqual(["rise", "duplicate", "transfer"]);
+  });
+});
+
+describe("the statistics' notices", () => {
+  const NBSP = "\u00a0";
+  const TODAY = "2026-10-06";
+  const salidas = {
+    id: 9,
+    category_id: 3,
+    currency: "ARS",
+    amount: 35000,
+    period: "monthly",
+    category_name: "Salidas",
+    category_icon: "🍻",
+    category_color: "#000000",
+  } satisfies BudgetWithCategory;
+
+  // 10.000 early and 10.000 late every month, and 30.000 already this one.
+  const outings = [
+    ...["2026-07", "2026-08", "2026-09"].flatMap((month) =>
+      chargesOf("Bar", [`${month}-01`, `${month}-20`], [10000, 10000], {
+        category_id: 3,
+      }),
+    ),
+    ...chargesOf("Bar", ["2026-10-02"], [30000], { category_id: 3 }),
+  ];
+
+  function paces(cap = salidas.amount) {
+    return [...budgetPaces([{ ...salidas, amount: cap }], outings, TODAY).values()];
+  }
+
+  function unusual() {
+    const pharmacy = [
+      "2026-08-18",
+      "2026-08-29",
+      "2026-09-09",
+      "2026-09-20",
+      "2026-10-01",
+    ];
+    const history = [
+      ...pharmacy.map((date) => held({ description: "FARMACITY", amount: 8000, date })),
+      held({ description: "FARMACITY", amount: 45000, date: "2026-10-05" }),
+    ];
+    return recentUnusualSpending(
+      history,
+      spendingBaselines(history, [], learnMerchantHistory(history, TODAY), []),
+      TODAY,
+      () => false,
+    );
+  }
+
+  it("says when a budget would be passed, while it has not been", () => {
+    const [item] = buildAttentionItems({ ...CALM, paces: paces() });
+
+    expect(item).toMatchObject({
+      key: "pace:9:2026-10",
+      kind: "pace",
+      title: "Superarías el presupuesto de Salidas el 20",
+      detail: `Llevás $${NBSP}30.000,00 de $${NBSP}35.000,00; si el resto del mes va como siempre, llegás a $${NBSP}40.000,00.`,
+      dismissalId: "pace:9:2026-10",
+    });
+  });
+
+  it("says nothing of a budget the month stays under", () => {
+    expect(buildAttentionItems({ ...CALM, paces: paces(50000) })).toEqual([]);
+  });
+
+  it("names an unusual expense and what is usual there", () => {
+    const [item] = buildAttentionItems({ ...CALM, unusual: unusual() });
+
+    expect(item).toMatchObject({
+      kind: "unusual",
+      title: `Gastaste $${NBSP}45.000,00 en Farmacity; lo habitual es cerca de $${NBSP}8.000,00`,
+      detail: `El 05 oct 2026. Comparado con tus 5 gastos en Farmacity de los 6 meses anteriores: la mitad fue de menos de $${NBSP}8.000,00.`,
+    });
+    expect(item.dismissalId).toBe(item.key);
+  });
+
+  it("puts a budget about to be passed after late income, and spending after rises", () => {
+    const items = buildAttentionItems({
+      ...CALM,
+      suggestedCount: 2,
+      unusual: unusual(),
+      paces: paces(),
+      rises: priceRises(
+        detect(
+          chargesOf("DLO*NETFLIX", ["2026-06-10", ...MONTHLY], [5000, 5000, 5000, 5900]),
+        ),
+        () => false,
+      ),
+    });
+
+    expect(items.map((item) => item.kind)).toEqual(["pace", "rise", "unusual"]);
   });
 });

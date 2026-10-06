@@ -3,6 +3,7 @@ import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MonthOverviewCards } from "./MonthOverviewCards";
 import type { MonthOverview } from "@/lib/monthOverview";
+import type { Pace } from "@/lib/ai/monthPace";
 import { allSkeletons, drawnSkeletons } from "@/test/loading";
 
 beforeEach(() => vi.useFakeTimers());
@@ -25,8 +26,28 @@ const overview: MonthOverview = {
 // line under the budget and the savings.
 const PLACEHOLDERS = 3 + 1 + 2 * 2;
 
-function cards(isLoading: boolean) {
-  return <MonthOverviewCards overview={overview} currency="ARS" isLoading={isLoading} />;
+function cards(isLoading: boolean, pace: Pace | null = null) {
+  return (
+    <MonthOverviewCards
+      overview={overview}
+      pace={pace}
+      currency="ARS"
+      isLoading={isLoading}
+    />
+  );
+}
+
+function pace(projected: number): Pace {
+  return {
+    day: 6,
+    lastDay: 30,
+    spent: projected - 10000,
+    rest: 10000,
+    projected,
+    typical: 20000,
+    months: 3,
+    curves: [],
+  };
 }
 
 describe("MonthOverviewCards", () => {
@@ -56,5 +77,21 @@ describe("MonthOverviewCards", () => {
 
     expect(screen.getByText(/1\.500/).closest(".arrive")).not.toBeNull();
     expect(screen.getByText(/Sin gastos en/).closest(".arrive")).not.toBeNull();
+  });
+
+  it("says where the month is heading when it is well off a usual one", () => {
+    render(cards(false, pace(27000)));
+
+    expect(
+      screen.getByText(
+        /Si el resto del mes va como siempre, vas a gastar \$\s27\.000,00, 35% más de lo habitual\./,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("says nothing more while the month goes as usual", () => {
+    render(cards(false, pace(22000)));
+
+    expect(screen.queryByText(/Si el resto del mes/)).toBeNull();
   });
 });
