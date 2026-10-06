@@ -7,7 +7,7 @@ import { normalizeForSearch } from "@/lib/text";
 import { predictCategory, trainCategoryModel } from "./categoryModel";
 
 // How well the category model does on someone's real history, to tune
-// MIN_EVIDENCE and MIN_CONFIDENCE on data rather than by feel. Never part of a
+// MIN_CONFIDENCE and when a word is trusted on data rather than by feel. Never part of a
 // normal run: it needs a file exported from the app (Ajustes › Exportar a CSV),
 // which holds real finances and never belongs in the repository.
 //

@@ -278,11 +278,19 @@ belongs to.
   "14 de tus 15 movimientos con «rappi» están en Comida", which someone can
   check. The account and amount features are left out: they describe the
   account's mix, not the movement.
-- Confidence is the word's share in the category counting one extra "could be
-  something else" against it, so two out of two is 2/3, not certainty. Silent
-  below `MIN_EVIDENCE` (2 movements) or `MIN_CONFIDENCE` (0.65), and when two
-  telling words point at different categories ("rappi farmacia"). Boundary
-  tests pin both constants.
+- A word that has only ever meant one category is trusted from its first
+  movement ("Tu único movimiento con «gluck» está en Salida."). A word that has
+  been in more than one needs `MIN_CONFIDENCE` (0.65): its share counting one
+  extra "could be something else" against it, so 2 of 3 is not enough and 4 of
+  5 is. Silent when two telling words point at different categories ("rappi
+  farmacia"). Boundary tests pin the rule.
+- Tuned on the user's real export on 2026-10-06 (147 movements learned, 37
+  newest tested): requiring two movements placed 46%, this rule 68%, both
+  with no mistakes. That 68% was measured before a single-movement word could
+  also contradict another; that check only makes it more cautious, and the
+  export was deleted before it could be re-run. Trusting any single movement, mixed or not, placed 70% but
+  would also accept 2 of 3, so it was not taken. A small sample: worth
+  re-measuring as the history grows.
 - Tokens come from `words` (AI-01) minus single characters, anything with a
   digit, `stopwords.json` (filler words, card networks, "compra", "pago"…) and
   the dictionary's processors, legal forms and places.
