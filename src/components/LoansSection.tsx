@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { SignedAmount } from "@/components/SignedAmount";
 import { Check, ChevronDown, HandCoins, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -231,15 +232,11 @@ export function LoansSection() {
                   </div>
 
                   <div className="row-actions flex shrink-0 items-center gap-2">
-                    <span
-                      className={cn(
-                        "text-sm font-medium tabular-nums",
-                        directionTone(entry.loan.direction),
-                      )}
-                    >
-                      {entry.loan.direction === "borrowed" ? "-" : "+"}
-                      {formatCurrency(entry.amount, entry.loan.currency)}
-                    </span>
+                    <SignedAmount
+                      amount={entry.amount}
+                      currency={entry.loan.currency}
+                      type={entry.loan.direction === "borrowed" ? "expense" : "income"}
+                    />
                     <ActionButton
                       type="button"
                       variant="outline"

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { SignedAmount } from "@/components/SignedAmount";
 import { Check, Pencil, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ListCard } from "@/components/ListCard";
@@ -15,9 +16,8 @@ import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { ExpectedMovementDialog } from "@/components/ExpectedMovementDialog";
 import { useAppActions, useAppData, useAppStatus } from "@/hooks/useAppData";
 import { collectUpcomingExpected } from "@/lib/expected";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import { TRANSACTION_TYPE_LABELS } from "@/lib/labels";
-import { cn } from "@/lib/utils";
 import type { ExpectedMovementWithNames, NewExpectedMovement } from "@/db";
 
 // The amount, coloured and signed the way the rest of the app shows money
@@ -30,19 +30,12 @@ function Amount({
   muted?: boolean;
 }) {
   return (
-    <span
-      className={cn(
-        "text-sm font-medium tabular-nums",
-        muted
-          ? "text-muted-foreground"
-          : movement.type === "income"
-            ? "text-positive"
-            : "text-negative",
-      )}
-    >
-      {movement.type === "income" ? "+" : "-"}
-      {formatCurrency(movement.amount, movement.currency)}
-    </span>
+    <SignedAmount
+      amount={movement.amount}
+      currency={movement.currency}
+      type={movement.type}
+      muted={muted}
+    />
   );
 }
 
