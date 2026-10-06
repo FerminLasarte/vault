@@ -132,10 +132,10 @@ are one of its best sentences.
 | AI-04 | 2     | Learned category model                         | 1        | [x]  |
 | AI-05 | 2     | One entry point for category suggestions       | 1        | [x]  |
 | AI-06 | 2     | Suggested categories on import                 | 1        | [x]  |
-| AI-07 | 3     | Dismissals                                     | —        | [ ]  |
-| AI-08 | 3     | Rule proposals                                 | 2        | [ ]  |
-| AI-09 | 3     | Rule hygiene                                   | 3        | [ ]  |
-| AI-10 | 3     | Bulk categorisation of uncategorised movements | 4        | [ ]  |
+| AI-07 | 3     | Dismissals                                     | —        | [x]  |
+| AI-08 | 3     | Rule proposals                                 | 2        | [x]  |
+| AI-09 | 3     | Rule hygiene                                   | 3        | [x]  |
+| AI-10 | 3     | Bulk categorisation of uncategorised movements | 4        | [x]  |
 | AI-11 | 4     | Autocomplete from history                      | 19       | [ ]  |
 | AI-12 | 4     | Account by merchant in quick entry             | 19       | [ ]  |
 | AI-13 | 4     | Natural-language search                        | 21       | [ ]  |
@@ -397,7 +397,20 @@ derived from what they are about (`rule:rappi:12`, `series:netflix:monthly`),
 so the same suggestion is recognised after a restart. The reset lives in the
 "IA" card.
 
-- [ ] Done
+- `state.ts`: `isDismissed(dismissed, id, today)` and `withDismissed(state,
+ids)`; a state stored by batch 1, without the field, reads as nothing
+  dismissed. Nothing snoozes yet, but the stored shape already allows it.
+- `AppDataContext` exposes `aiDismissed`, `dismissAiSuggestions(ids)` and
+  `resetAiDismissals()`; the switch and both actions go through one
+  `updateAiState`, read from the ref, so no write drops another's part.
+- The ids in this batch: `rule:<pattern>:<category>` for a proposal,
+  `rule-unused|shadowed|contradicted:<rule>:<pattern>:<category>` for a note
+  (editing the rule makes it a new one), and `categorise:<movement>:<category>`
+  for a movement turned down in a group.
+- "IA local" says "Descartaste n sugerencias. Volver a mostrarlas" when there
+  are any.
+
+- [x] Done
 
 ### AI-08 · Rule proposals [2]
 
@@ -411,7 +424,28 @@ movements per category; propose `pattern → category` when it has at least
 already matches those movements. Shown in `CategoryRulesCard` under "Sugeridas
 por IA", with how many movements it would cover, "Crear" and "Descartar".
 
-- [ ] Done
+As built:
+
+- Candidates are the model's own words and pairs (AI-04) with at least
+  `MIN_OCCURRENCES` (3) movements in one category and `MIN_PATTERN_LENGTH` (3)
+  characters, since a rule matches anywhere in the text ("bar" is also in
+  "barbería"). Merchant names are not candidates on their own: a rule has to
+  be text the description contains, and the words already are.
+- Each is then checked the way a rule would actually behave: the movements
+  whose text contains it, minus those an existing rule at least as specific
+  already decides. At least `MIN_PURITY` (90%) of those must be in one
+  category — higher than the model's bar, because a rule is not marked as the
+  AI's once it exists — and at least 3 must not already be put there by a rule.
+  So a longer rule can be proposed where a shorter one gets them wrong.
+- Overlapping candidates ("birra", "bar", "birra bar"): the one settling more
+  movements first, then the longer, which is the more specific. A dismissed
+  proposal still takes its movements, so saying no to one does not bring up a
+  near copy of it.
+- The count is in the reason ("Tus 12 movimientos con «rappi» están en
+  Comida."), shown on the mark. Five at a time; the card no longer says "no
+  rules" while there are proposals.
+
+- [x] Done
 
 ### AI-09 · Rule hygiene [3]
 
@@ -425,7 +459,20 @@ by a longer one, and rules contradicted by the user (most of their matches sit
 in another category), with a proposal to change the rule's category. Shown
 inline on the rule's row in `CategoryRulesCard`.
 
-- [ ] Done
+As built, one note per rule at most, with `AiNote` and "Descartar":
+
+- "No coincide con ningún movimiento." — no income or expense of its kind
+  contains it.
+- "Nunca decide: siempre gana una regla más específica." — it matches at least
+  3 movements and none is decided by it; the reason names the winner.
+- "La mayoría de lo que decide está en Salida." with "Pasarla a Salida" — of
+  the movements it decides that the user categorised, at least 3 and more than
+  `CONTRADICTION_SHARE` (half) sit in one other category.
+
+`matchCategoryRule` became `ruleMatcher(rules)`, which reads each pattern once,
+since this module matches the whole history against every rule.
+
+- [x] Done
 
 ### AI-10 · Bulk categorisation of uncategorised movements [4]
 
@@ -439,7 +486,41 @@ notice per group opens a dialog with the list, a checkbox per row (all ticked)
 and "Aplicar". Applied categories are confirmed (`category_suggested = 0`):
 the user reviewed them.
 
-- [ ] Done
+As built:
+
+- `uncategorised.ts` asks `suggestCategory` for every uncategorised income or
+  expense, so a rule written after the movement counts
+  too ("Coincide con tu regla «Cabify»."). A group needs `MIN_GROUP_SIZE` (2);
+  a single movement is better looked at in the inspector, which already offers
+  the AI's category.
+- Atención: "23 movimientos sin categoría parecen Supermercado · Revisar", one
+  per group, biggest first. Principle 11 is enforced here for the first time:
+  at most `MAX_AI_NOTICES` (3) AI notices, the suggested categories to review
+  first. A notice now has a `key`, and the screen is handed the notice itself,
+  since two can share a kind.
+- `UncategorisedDialog`: every row ticked, with its clean name, date, account,
+  amount and the mark with its reason. "Aplicar a todos"/"Aplicar a n" writes
+  them in one statement (`categoriseTransactions`, all or none, with
+  "Deshacer"); what was unticked is turned down for that category. "Descartar"
+  turns the whole group down. A failed write leaves the dialog open.
+- `Checkbox` (shadcn) added for it; `InlineAction` moved out of the inspector
+  to be shared with the rules card and the "IA local" card.
+
+- [x] Done
+
+Checked in the running app for the whole batch (a debug build on a separate
+`.smoke` database seeded with 20 movements and two rules, deleted afterwards):
+Atención showed "Revisá 1 categoría sugerida por IA" and one notice each for
+Super (3) and Comida (2); "Revisar" opened the dialog, unticking one and
+"Aplicar a 2" wrote both rows and dismissed the third, and "Deshacer" (on the
+Comida group) put them back. In Categorías: "No coincide con ningún
+movimiento." on an unused rule, "La mayoría de lo que decide está en Salida."
+on a contradicted one, whose "Pasarla a Salida" moved the rule and made the
+"pedidos ya" proposal go away by itself; "Sugeridas por IA" with coto, rappi,
+pedidos ya and cabify, the reason on the mark, "Crear" and both "Descartar".
+In Ajustes, "Descartaste 3 sugerencias. Volver a mostrarlas" emptied the
+list; switching the AI off removed every AI notice. Not checked: the dark
+theme, and a "Nunca decide" note in the app (tests only).
 
 ---
 

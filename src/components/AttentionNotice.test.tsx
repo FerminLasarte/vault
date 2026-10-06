@@ -5,6 +5,7 @@ import { AttentionNotice } from "./AttentionNotice";
 import type { AttentionItem } from "@/lib/attention";
 
 const BACKUP: AttentionItem = {
+  key: "backup",
   kind: "backup",
   tone: "critical",
   title: "Nunca guardaste una copia de seguridad",
@@ -12,6 +13,7 @@ const BACKUP: AttentionItem = {
 };
 
 const CLOSE: AttentionItem = {
+  key: "close",
   kind: "close",
   tone: "neutral",
   title: "El cierre de agosto de 2026 está listo",
@@ -54,7 +56,7 @@ describe("AttentionNotice", () => {
     render(<AttentionNotice items={[BACKUP, CLOSE]} onAction={onAction} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Guardar como PDF" }));
-    expect(onAction).toHaveBeenCalledExactlyOnceWith("close");
+    expect(onAction).toHaveBeenCalledExactlyOnceWith(CLOSE);
   });
 
   it("offers no action when the screen has nothing to do with it", () => {

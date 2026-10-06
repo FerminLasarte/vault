@@ -6,7 +6,9 @@ import { AiCard } from "./AiCard";
 
 const app = vi.hoisted(() => ({
   aiEnabled: true,
+  aiDismissed: {},
   setAiEnabled: vi.fn((_enabled: boolean) => Promise.resolve()),
+  resetAiDismissals: vi.fn(() => Promise.resolve()),
 }));
 vi.mock("@/hooks/useAppData", () => ({
   useAppData: () => app,
@@ -15,7 +17,9 @@ vi.mock("@/hooks/useAppData", () => ({
 
 beforeEach(() => {
   app.aiEnabled = true;
+  app.aiDismissed = {};
   app.setAiEnabled.mockClear();
+  app.resetAiDismissals.mockClear();
 });
 
 describe("AiCard", () => {
@@ -41,5 +45,21 @@ describe("AiCard", () => {
 
     await userEvent.click(screen.getByRole("tab", { name: "Desactivada" }));
     expect(app.setAiEnabled).toHaveBeenLastCalledWith(false);
+  });
+
+  // Nothing else brings a dismissed suggestion back.
+  it("brings back what was dismissed", async () => {
+    app.aiDismissed = { "rule:rappi:3": null, "rule-unused:4:netflix:5": null };
+    render(<AiCard />);
+
+    expect(screen.getByText(/Descartaste 2 sugerencias/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Volver a mostrarlas" }));
+    expect(app.resetAiDismissals).toHaveBeenCalledOnce();
+  });
+
+  it("offers nothing to bring back when nothing was dismissed", () => {
+    render(<AiCard />);
+
+    expect(screen.queryByText(/Descartaste/)).not.toBeInTheDocument();
   });
 });

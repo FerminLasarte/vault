@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { ActionButton } from "@/components/ActionButton";
+import { InlineAction } from "@/components/InlineAction";
 import { AiNote } from "@/components/AiMark";
 import type { CategorySuggestion } from "@/lib/ai/categorySuggestion";
-import { Button } from "@/components/ui/button";
 import { TransactionAttachments } from "@/components/TransactionAttachments";
 import { TransactionFields } from "@/components/TransactionFields";
 import { useAppActions, useAppData } from "@/hooks/useAppData";
@@ -347,19 +347,4 @@ function CategoryHint({
         </AiNote>
       );
   }
-}
-
-// An action inside a line of hint text, such as applying what a rule would do.
-function InlineAction({ onClick, children }: { onClick: () => void; children: string }) {
-  return (
-    <Button
-      type="button"
-      variant="link"
-      size="xs"
-      className="h-auto px-0 text-foreground underline decoration-muted-foreground/50"
-      onClick={onClick}
-    >
-      {children}
-    </Button>
-  );
 }

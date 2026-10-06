@@ -13,9 +13,18 @@ import type { BudgetProgress } from "@/lib/finance";
 
 export type AttentionTone = "critical" | "neutral";
 
-export type AttentionKind = "budget" | "backup" | "pending" | "suggested" | "close";
+export type AttentionKind =
+  "budget" | "backup" | "pending" | "suggested" | "uncategorised" | "close";
+
+// The local AI's notices share the line with everything else, and never take
+// it over: at most this many at once, the most pressing first; the rest wait
+// for these to be dealt with.
+export const MAX_AI_NOTICES = 3;
 
 export interface AttentionItem {
+  // Tells apart two notices of the same kind: one per group of uncategorised
+  // movements. The kind itself for the rest.
+  key: string;
   kind: AttentionKind;
   tone: AttentionTone;
   // The headline: what happened.
@@ -32,6 +41,7 @@ function budgetItem(overspent: BudgetProgress[]): AttentionItem | null {
   if (overspent.length === 0) return null;
 
   return {
+    key: "budget",
     kind: "budget",
     tone: "critical",
     title:
@@ -48,6 +58,7 @@ function backupItem(backup: BackupStatus): AttentionItem | null {
   if (!backup.isOverdue) return null;
 
   return {
+    key: "backup",
     kind: "backup",
     tone: "critical",
     title:
@@ -62,6 +73,7 @@ function pendingItem(pendingCount: number): AttentionItem | null {
   if (pendingCount <= 0) return null;
 
   return {
+    key: "pending",
     kind: "pending",
     tone: "neutral",
     title:
@@ -78,6 +90,7 @@ function suggestedItem(suggestedCount: number): AttentionItem | null {
   if (suggestedCount <= 0) return null;
 
   return {
+    key: "suggested",
     kind: "suggested",
     tone: "neutral",
     title:
@@ -89,6 +102,25 @@ function suggestedItem(suggestedCount: number): AttentionItem | null {
   };
 }
 
+// A group of movements nobody categorised that the AI can place together.
+function uncategorisedItem(group: {
+  id: string;
+  size: number;
+  categoryName: string;
+}): AttentionItem {
+  return {
+    key: group.id,
+    kind: "uncategorised",
+    tone: "neutral",
+    title:
+      group.size === 1
+        ? `1 movimiento sin categoría parece ${group.categoryName}`
+        : `${group.size} movimientos sin categoría parecen ${group.categoryName}`,
+    detail: "Revisalos y aplicales la categoría de una vez.",
+    actionLabel: "Revisar",
+  };
+}
+
 // A month that has finished, has something in it, and has not been dealt with
 // yet. Informational rather than a warning: nothing is wrong, something is
 // ready — which is why it carries a neutral tone and sits last.
@@ -96,6 +128,7 @@ function closeItem(monthKey: string | null): AttentionItem | null {
   if (monthKey === null) return null;
 
   return {
+    key: "close",
     kind: "close",
     tone: "neutral",
     title: `El cierre de ${formatMonthLabel(monthKey)} está listo`,
@@ -114,14 +147,25 @@ export function buildAttentionItems(sources: {
   pendingCount: number;
   // Categories the local AI chose and nobody confirmed; 0 with it switched off.
   suggestedCount: number;
+  // Uncategorised movements the AI can place, biggest group first; empty with
+  // it switched off.
+  uncategorised: { id: string; size: number; categoryName: string }[];
   // The month whose close is ready and unseen, or null when there is none.
   pendingClose: string | null;
 }): AttentionItem[] {
+  // What the AI already wrote comes before what it could write.
+  const ai = [
+    suggestedItem(sources.suggestedCount),
+    ...sources.uncategorised.map(uncategorisedItem),
+  ]
+    .filter((item): item is AttentionItem => item !== null)
+    .slice(0, MAX_AI_NOTICES);
+
   return [
     budgetItem(sources.overspent),
     backupItem(sources.backup),
     pendingItem(sources.pendingCount),
-    suggestedItem(sources.suggestedCount),
+    ...ai,
     closeItem(sources.pendingClose),
   ].filter((item): item is AttentionItem => item !== null);
 }

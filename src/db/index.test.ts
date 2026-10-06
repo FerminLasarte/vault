@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestDatabase } from "./testing/database";
 import {
+  categoriseTransactions,
   confirmExpectedMovement,
   deletePaymentMethod,
   deleteTransaction,
@@ -1587,5 +1588,88 @@ describe("what a transaction leaves behind", () => {
     expect(plan.map((step) => step.detail).join(" ")).toMatch(
       /USING (COVERING )?INDEX idx_expected_movements_transaction/,
     );
+  });
+});
+
+describe("categorising several movements at once", () => {
+  async function uncategorised(count: number) {
+    for (let index = 0; index < count; index++) {
+      await insertTransaction(anExpense({ description: `rappi ${index}` }));
+    }
+    return (await listTransactionsWithCategory())
+      .map((row) => row.id)
+      .sort((a, b) => a - b);
+  }
+
+  async function categoriesOf() {
+    const rows = await listTransactionsWithCategory();
+    return rows
+      .sort((a, b) => a.id - b.id)
+      .map((row) => [row.category_id, row.category_suggested]);
+  }
+
+  // Reviewed in a list and applied by the user: theirs, not a suggestion.
+  it("puts them in the category as the user's own choice", async () => {
+    const comida = await anExpenseCategory();
+    const ids = await uncategorised(3);
+
+    await categoriseTransactions(ids.slice(0, 2), comida.id);
+
+    expect(await categoriesOf()).toEqual([
+      [comida.id, 0],
+      [comida.id, 0],
+      [null, 0],
+    ]);
+  });
+
+  it("takes it back with its undo", async () => {
+    const comida = await anExpenseCategory();
+    const ids = await uncategorised(2);
+
+    const undo = await categoriseTransactions(ids, comida.id);
+    await undo();
+
+    expect(await categoriesOf()).toEqual([
+      [null, 0],
+      [null, 0],
+    ]);
+  });
+
+  // Something categorised in the meantime was decided after this, and an old
+  // toast must not take that back too.
+  it("writes nothing when one was categorised by hand since", async () => {
+    const comida = await anExpenseCategory();
+    const salida = await anExpenseCategory("Salida");
+    const ids = await uncategorised(2);
+
+    const undo = await categoriseTransactions(ids, comida.id);
+    await db.execute("UPDATE transactions SET category_id = $1 WHERE id = $2", [
+      salida.id,
+      ids[0],
+    ]);
+
+    await expect(undo()).rejects.toThrow();
+    expect(await categoriesOf()).toEqual([
+      [salida.id, 0],
+      [comida.id, 0],
+    ]);
+  });
+
+  // One already categorised elsewhere by the time this lands: the list the user
+  // reviewed is no longer the one in the database.
+  it("writes nothing when one of them has been categorised since", async () => {
+    const comida = await anExpenseCategory();
+    const salida = await anExpenseCategory("Salida");
+    const ids = await uncategorised(2);
+    await db.execute("UPDATE transactions SET category_id = $1 WHERE id = $2", [
+      salida.id,
+      ids[1],
+    ]);
+
+    await expect(categoriseTransactions(ids, comida.id)).rejects.toThrow();
+    expect((await categoriesOf()).map(([categoryId]) => categoryId)).toEqual([
+      null,
+      salida.id,
+    ]);
   });
 });

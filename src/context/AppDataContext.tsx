@@ -9,7 +9,13 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { trainCategoryModel, type CategoryModel } from "@/lib/ai/categoryModel";
-import { DEFAULT_AI_STATE, parseAiState, type AiState } from "@/lib/ai/state";
+import {
+  DEFAULT_AI_STATE,
+  parseAiState,
+  withDismissed,
+  type AiState,
+  type Dismissals,
+} from "@/lib/ai/state";
 import { ReportedError } from "@/lib/reportedError";
 import { transactionCount } from "@/lib/transactionCounts";
 import {
@@ -25,6 +31,7 @@ import {
   deletePaymentMethod,
   deleteTransaction,
   AI_STATE,
+  categoriseTransactions,
   confirmSuggestedCategories,
   EXCHANGE_RATE_TYPE,
   NOTIFICATIONS_ENABLED,
@@ -207,6 +214,8 @@ export interface AppData {
   // Whether the local AI is on. Every AI surface reads it, so the switch in
   // Ajustes turns all of them off at once.
   aiEnabled: boolean;
+  // The local AI's suggestions the user waved away, by id (see isDismissed).
+  aiDismissed: Dismissals;
   // What the local AI learned from where the user put their movements, or
   // null with it switched off. Trained once per change to the history, here,
   // rather than by every screen that suggests a category.
@@ -246,6 +255,9 @@ export interface AppActions {
   // Keeps the categories the local AI chose for these movements: they become
   // the user's own.
   confirmSuggestedCategories: (ids: number[]) => Promise<void>;
+  // Puts movements nobody categorised in one category, all or none, as the
+  // user's own choice, with a "Deshacer".
+  categoriseTransactions: (ids: number[], categoryId: number) => Promise<void>;
   importTransactions: (
     entries: { transaction: NewTransaction; tags: string[] }[],
   ) => Promise<void>;
@@ -343,6 +355,10 @@ export interface AppActions {
   markCloseSeen: (monthKey: string) => Promise<void>;
   setNotificationsEnabled: (enabled: boolean) => Promise<void>;
   setAiEnabled: (enabled: boolean) => Promise<void>;
+  // Waves these suggestions away for good.
+  dismissAiSuggestions: (ids: string[]) => Promise<void>;
+  // Brings every dismissed suggestion back.
+  resetAiDismissals: () => Promise<void>;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -571,15 +587,30 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setNotificationsEnabledState(enabled);
   }, []);
 
-  // Read from the ref, like the rate type, so this action never changes
-  // identity: the AI's stored state will hold more than the switch, and
-  // writing one part must not drop the others.
-  const setAiEnabled = useCallback(async (enabled: boolean) => {
-    const next = { ...aiStateRef.current, enabled };
+  // Every change to the AI's stored state starts from the ref, like the rate
+  // type, so these actions never change identity and writing one part — the
+  // switch, a dismissal — never drops another.
+  const updateAiState = useCallback(async (change: (state: AiState) => AiState) => {
+    const next = change(aiStateRef.current);
     await setSetting(AI_STATE, JSON.stringify(next));
     aiStateRef.current = next;
     setAiState(next);
   }, []);
+
+  const setAiEnabled = useCallback(
+    (enabled: boolean) => updateAiState((state) => ({ ...state, enabled })),
+    [updateAiState],
+  );
+
+  const dismissAiSuggestions = useCallback(
+    (ids: string[]) => updateAiState((state) => withDismissed(state, ids)),
+    [updateAiState],
+  );
+
+  const resetAiDismissals = useCallback(
+    () => updateAiState((state) => ({ ...state, dismissed: {} })),
+    [updateAiState],
+  );
 
   const markCloseSeen = useCallback(async (monthKey: string) => {
     await setSetting(LAST_SEEN_CLOSE, monthKey);
@@ -762,6 +793,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       lastSeenClose,
       notificationsEnabled,
       aiEnabled: aiState.enabled,
+      aiDismissed: aiState.dismissed,
       categoryModel,
       today,
       pending,
@@ -787,6 +819,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       lastSeenClose,
       notificationsEnabled,
       aiState.enabled,
+      aiState.dismissed,
       categoryModel,
       today,
       pending,
@@ -813,6 +846,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       markCloseSeen,
       setNotificationsEnabled,
       setAiEnabled,
+      dismissAiSuggestions,
+      resetAiDismissals,
 
       addTransaction: async (transaction, transactionTags) => {
         // Only ever read once the write went through: a failed one throws
@@ -848,6 +883,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           ["transactions"],
           ids.length === 1 ? "Categoría confirmada" : "Categorías confirmadas",
           "No se pudieron confirmar las categorías",
+        ),
+      categoriseTransactions: (ids, categoryId) =>
+        runMutation(
+          () => categoriseTransactions(ids, categoryId),
+          ["transactions"],
+          transactionCount(ids.length, "categorizada"),
+          "No se pudo aplicar la categoría",
+          { offerUndo: true },
         ),
       importTransactions: (imported) =>
         runMutation(
@@ -1165,6 +1208,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       markCloseSeen,
       setNotificationsEnabled,
       setAiEnabled,
+      dismissAiSuggestions,
+      resetAiDismissals,
       runMutation,
     ],
   );

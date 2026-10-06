@@ -2,7 +2,7 @@
 // the noun and the participle with the number, so "1 transacciones importadas"
 // is not a shortcut but a mistake the user reads every time one row goes in.
 
-type Participle = "importada" | "exportada";
+type Participle = "importada" | "exportada" | "categorizada";
 
 export function transactionCount(count: number, participle: Participle): string {
   return count === 1
