@@ -30,7 +30,6 @@ interface DuplicateDialogProps {
 export function DuplicateDialog({ pair, onClose }: DuplicateDialogProps) {
   const { deleteDuplicate, dismissAiSuggestions } = useAppActions();
   const { isMutating } = useAppStatus();
-  const merchantName = useMerchantName();
 
   async function handleDelete(transaction: TransactionWithCategory) {
     try {
@@ -67,9 +66,7 @@ export function DuplicateDialog({ pair, onClose }: DuplicateDialogProps) {
           {pair?.movements.map((transaction, index) => (
             <li key={transaction.id} className="flex items-center gap-3 py-2.5">
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="truncate text-sm font-medium">
-                  {merchantName(transaction.description) ?? transaction.description}
-                </span>
+                <MovementName description={transaction.description} />
                 <span className="text-xs text-muted-foreground">
                   {[
                     formatDate(transaction.date),
@@ -132,5 +129,21 @@ export function DuplicateDialog({ pair, onClose }: DuplicateDialogProps) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// Two movements can share a clean name (a hand-typed "Uber" and the bank's
+// `UBER *TRIP HELP.UBER.COM`), so what the bank wrote goes under it.
+function MovementName({ description }: { description: string }) {
+  const merchantName = useMerchantName();
+  const name = merchantName(description);
+
+  return (
+    <>
+      <span className="truncate text-sm font-medium">{name ?? description}</span>
+      {name !== null && (
+        <span className="truncate text-xs text-muted-foreground">{description}</span>
+      )}
+    </>
   );
 }
