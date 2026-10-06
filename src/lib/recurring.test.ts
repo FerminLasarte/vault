@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { occurrenceAt, occurrencesBetween, pendingOccurrences } from "@/lib/recurring";
+import {
+  occurrenceAt,
+  occurrencesBetween,
+  pendingOccurrences,
+  recurringFromTemplate,
+} from "@/lib/recurring";
 
 describe("occurrenceAt", () => {
   it("returns the start date itself at index 0", () => {
@@ -135,5 +140,35 @@ describe("occurrencesBetween", () => {
     expect(
       occurrencesBetween("2026-01-31", "monthly", "2027-02-01", "2027-02-28"),
     ).toEqual(["2027-02-28"]);
+  });
+});
+
+describe("recurringFromTemplate", () => {
+  it("is the template as it would be written back, paused or not", () => {
+    expect(
+      recurringFromTemplate({
+        id: 4,
+        description: "Alquiler",
+        amount: 300000,
+        type: "expense",
+        category_id: 1,
+        payment_method_id: 2,
+        currency: "ARS",
+        frequency: "monthly",
+        start_date: "2026-01-01",
+        last_confirmed_date: "2026-09-01",
+        is_active: 0,
+      }),
+    ).toEqual({
+      description: "Alquiler",
+      amount: 300000,
+      type: "expense",
+      categoryId: 1,
+      paymentMethodId: 2,
+      currency: "ARS",
+      frequency: "monthly",
+      startDate: "2026-01-01",
+      isActive: false,
+    });
   });
 });

@@ -80,6 +80,18 @@ describe("learnMerchantHistory", () => {
     expect(history.size).toBe(3);
   });
 
+  it("keeps its movements, oldest first", () => {
+    const september = movement("Netflix", { date: "2026-09-10" });
+    const august = movement("Netflix", { date: "2026-08-10" });
+    const sameDayLater = movement("Netflix", { date: "2026-09-10" });
+
+    expect(only([september, sameDayLater, august]).movements).toEqual([
+      august,
+      september,
+      sameDayLater,
+    ]);
+  });
+
   it("leaves transfers out", () => {
     expect(learn([movement("Ahorro", { type: "transfer" })]).size).toBe(0);
   });

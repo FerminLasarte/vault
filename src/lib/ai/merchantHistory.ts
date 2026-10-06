@@ -50,11 +50,20 @@ export interface MerchantEntry {
   // The median of the recent amounts; null with nothing recent to go by.
   typicalAmount: number | null;
   account: UsualAccount | null;
+  // Every one of its movements, oldest first: what repeats is read from these
+  // (see series.ts) rather than from a second grouping of the history.
+  movements: Transaction[];
 }
 
 export type MerchantHistory = Map<string, MerchantEntry>;
 
-function entryId(key: string, type: CategoryType, currency: string): string {
+// How an entry is told apart, from its parts. Exported for what has to find
+// the entry behind something that is not a movement, like a recurring template.
+export function merchantEntryId(
+  key: string,
+  type: CategoryType,
+  currency: string,
+): string {
   return `${type}:${currency}:${key}`;
 }
 
@@ -68,7 +77,7 @@ interface Tally {
   key: string;
   type: CategoryType;
   currency: string;
-  count: number;
+  movements: Transaction[];
   latest: { date: string; id: number; description: string };
   recentAmounts: number[];
   recentAccounts: Map<number, number>;
@@ -101,14 +110,14 @@ export function learnMerchantHistory(
     const key = merchantKey(transaction.description);
     if (key === "") continue;
 
-    const id = entryId(key, transaction.type, transaction.currency);
+    const id = merchantEntryId(key, transaction.type, transaction.currency);
     let tally = tallies.get(id);
     if (tally === undefined) {
       tally = {
         key,
         type: transaction.type,
         currency: transaction.currency,
-        count: 0,
+        movements: [],
         latest: transaction,
         recentAmounts: [],
         recentAccounts: new Map(),
@@ -116,7 +125,7 @@ export function learnMerchantHistory(
       tallies.set(id, tally);
     }
 
-    tally.count += 1;
+    tally.movements.push(transaction);
     const { latest } = tally;
     if (
       transaction.date > latest.date ||
@@ -142,11 +151,14 @@ export function learnMerchantHistory(
       label: merchantName(tally.latest.description) ?? tally.latest.description.trim(),
       type: tally.type,
       currency: tally.currency,
-      count: tally.count,
+      count: tally.movements.length,
       recentCount: tally.recentAmounts.length,
       lastDate: tally.latest.date,
       typicalAmount: typical === null ? null : Math.round(typical * 100) / 100,
       account: usualAccount(tally.recentAccounts),
+      movements: tally.movements.sort(
+        (a, b) => a.date.localeCompare(b.date) || a.id - b.id,
+      ),
     });
   }
   return history;
@@ -159,7 +171,7 @@ export function findMerchant(
 ): MerchantEntry | null {
   const key = merchantKey(movement.description);
   if (key === "") return null;
-  return history.get(entryId(key, movement.type, movement.currency)) ?? null;
+  return history.get(merchantEntryId(key, movement.type, movement.currency)) ?? null;
 }
 
 // Why an account was assumed: "En los últimos 6 meses, 9 de tus 10 movimientos

@@ -21,6 +21,7 @@ import {
   RECURRENCE_FREQUENCY_LABELS,
 } from "@/lib/labels";
 import { todayIsoDate } from "@/lib/format";
+import { recurringFromTemplate } from "@/lib/recurring";
 import type {
   Category,
   CategoryType,
@@ -50,10 +51,39 @@ type RecurringFormValues = z.output<typeof recurringSchema>;
 // already the kind of category it accepts.
 const recurringCategoryType = (type: CategoryType) => type;
 
+function blankRecurringForm(): RecurringFormInput {
+  return {
+    description: "",
+    amount: 0,
+    type: "expense",
+    currency: CURRENCY_CODES[0],
+    categoryId: null,
+    paymentMethodId: null,
+    frequency: "monthly",
+    startDate: todayIsoDate(),
+  };
+}
+
+function draftToForm(draft: NewRecurringTransaction): RecurringFormInput {
+  return {
+    description: draft.description,
+    amount: draft.amount,
+    type: draft.type,
+    currency: draft.currency,
+    categoryId: draft.categoryId,
+    paymentMethodId: draft.paymentMethodId,
+    frequency: draft.frequency,
+    startDate: draft.startDate,
+  };
+}
+
 interface RecurringDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editing: RecurringTransactionWithNames | null;
+  // What the form opens with instead of a blank one or the template being
+  // edited: a series the local AI found, or a template's new amount.
+  draft?: NewRecurringTransaction | null;
   categories: Category[];
   paymentMethods: PaymentMethod[];
   onSubmitRecurring: (recurring: NewRecurringTransaction) => Promise<void>;
@@ -63,6 +93,7 @@ export function RecurringDialog({
   open,
   onOpenChange,
   editing,
+  draft = null,
   categories,
   paymentMethods,
   onSubmitRecurring,
@@ -70,37 +101,12 @@ export function RecurringDialog({
   const form = useDialogForm<RecurringFormInput, RecurringFormValues>({
     schema: recurringSchema,
     open,
-    defaultValues: {
-      description: "",
-      amount: 0,
-      type: "expense",
-      currency: CURRENCY_CODES[0],
-      categoryId: null,
-      paymentMethodId: null,
-      frequency: "monthly",
-      startDate: todayIsoDate(),
-    },
-    values: editing
-      ? {
-          description: editing.description,
-          amount: editing.amount,
-          type: editing.type,
-          currency: editing.currency,
-          categoryId: editing.category_id,
-          paymentMethodId: editing.payment_method_id,
-          frequency: editing.frequency,
-          startDate: editing.start_date,
-        }
-      : {
-          description: "",
-          amount: 0,
-          type: "expense",
-          currency: CURRENCY_CODES[0],
-          categoryId: null,
-          paymentMethodId: null,
-          frequency: "monthly",
-          startDate: todayIsoDate(),
-        },
+    defaultValues: blankRecurringForm(),
+    values: draft
+      ? draftToForm(draft)
+      : editing
+        ? draftToForm(recurringFromTemplate(editing))
+        : blankRecurringForm(),
   });
 
   const {

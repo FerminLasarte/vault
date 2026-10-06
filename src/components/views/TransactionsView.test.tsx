@@ -101,6 +101,7 @@ function renderView(
     categoryRules: [],
     categoryModel: null,
     merchantHistory: null,
+    series: null,
     aiEnabled: false,
     tags: [],
     today: TODAY,

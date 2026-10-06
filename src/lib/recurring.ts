@@ -1,3 +1,6 @@
+import type { NewRecurringTransaction } from "@/db";
+import type { RecurringTransaction } from "@/db/schema";
+
 export type RecurrenceFrequency = "weekly" | "monthly" | "yearly";
 
 function daysInMonth(year: number, monthIndex: number): number {
@@ -102,4 +105,22 @@ export function occurrencesBetween(
   }
 
   return found;
+}
+
+// A stored template in the shape it is written back in, for changing one part
+// of it — paused, a new amount — and saving the rest as it was.
+export function recurringFromTemplate(
+  template: RecurringTransaction,
+): NewRecurringTransaction {
+  return {
+    description: template.description,
+    amount: template.amount,
+    type: template.type,
+    categoryId: template.category_id,
+    paymentMethodId: template.payment_method_id,
+    currency: template.currency,
+    frequency: template.frequency,
+    startDate: template.start_date,
+    isActive: template.is_active === 1,
+  };
 }

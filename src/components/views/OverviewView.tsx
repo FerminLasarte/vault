@@ -22,6 +22,7 @@ import { NetWorthBar } from "@/components/NetWorthBar";
 import { MonthOverviewCards } from "@/components/MonthOverviewCards";
 import { AttentionNotice } from "@/components/AttentionNotice";
 import { UncategorisedDialog } from "@/components/UncategorisedDialog";
+import { RecurringDialog } from "@/components/RecurringDialog";
 import { RecentTransactions } from "@/components/RecentTransactions";
 import { UpcomingMonths } from "@/components/UpcomingMonths";
 import { CategoryBreakdownChart } from "@/components/charts/CategoryBreakdownChart";
@@ -62,6 +63,11 @@ import { buildAttentionItems } from "@/lib/attention";
 import type { AttentionItem } from "@/lib/attention";
 import { isDismissed } from "@/lib/ai/state";
 import { groupUncategorised } from "@/lib/ai/uncategorised";
+import { lateIncome } from "@/lib/ai/lateIncome";
+import { priceRises } from "@/lib/ai/priceRises";
+import { unregisteredSeries } from "@/lib/ai/unregisteredSeries";
+import { recurringFromTemplate } from "@/lib/recurring";
+import type { NewRecurringTransaction, RecurringTransactionWithNames } from "@/db";
 import { buildMonthOverview } from "@/lib/monthOverview";
 import { buildMonthlyClose, hasClose, lastClosedMonthKey } from "@/lib/monthlyClose";
 import { projectCommitments, projectExpected, withoutEmptyTail } from "@/lib/projection";
@@ -90,6 +96,9 @@ const RECENT_PERIOD_LABEL = "Últimos 12 meses";
 // the date picker instead of from this list.
 const CUSTOM_PERIOD = "__custom__";
 const CUSTOM_PERIOD_LABEL = "Personalizado";
+
+// What the AI read from repeating movements, with it switched off.
+const NOTHING_REPEATING = { lateIncome: [], rises: [], unregistered: [] };
 
 export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
   const [currentTab, setCurrentTab] = useRequestedTab<OverviewTab>(
@@ -120,10 +129,12 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
     aiDismissed,
     categoryRules,
     categoryModel,
+    series,
     isLoading,
   } = useAppData();
 
-  const { markCloseSeen } = useAppActions();
+  const { markCloseSeen, addRecurring, editRecurring, dismissAiSuggestions } =
+    useAppActions();
 
   const [currency, setCurrency] = useViewState("overview.currency", DEFAULT_CURRENCY);
   const [categoryId, setCategoryId] = useViewState<number | null>(
@@ -311,6 +322,32 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
   const [reviewing, setReviewing] = useState<string | null>(null);
   const reviewedGroup = uncategorised.find((group) => group.id === reviewing) ?? null;
 
+  // Income that is late, charges that went up and series nobody declared, read
+  // from the series the context worked out once.
+  const repeating = useMemo(() => {
+    if (series === null) return NOTHING_REPEATING;
+    const dismissed = (id: string) => isDismissed(aiDismissed, id, today);
+    return {
+      lateIncome: lateIncome(series, today, dismissed),
+      rises: priceRises(series, dismissed),
+      unregistered: unregisteredSeries(series, dismissed),
+    };
+  }, [series, aiDismissed, today]);
+
+  // The recurring movement a notice offers to add, or to bring up to a new
+  // amount: what the dialog opens with, and the template it edits, if any.
+  const [recurringOffer, setRecurringOffer] = useState<{
+    editing: RecurringTransactionWithNames | null;
+    draft: NewRecurringTransaction;
+  } | null>(null);
+  // Apart from the offer, so the dialog keeps its title while it closes.
+  const [isOfferOpen, setIsOfferOpen] = useState(false);
+
+  function openRecurringOffer(offer: NonNullable<typeof recurringOffer>) {
+    setRecurringOffer(offer);
+    setIsOfferOpen(true);
+  }
+
   const attention = useMemo(
     () =>
       buildAttentionItems({
@@ -323,9 +360,18 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
           size: group.rows.length,
           categoryName: group.categoryName,
         })),
+        ...repeating,
         pendingClose,
       }),
-    [overspent, backup, pendingCount, suggestedCount, uncategorised, pendingClose],
+    [
+      overspent,
+      backup,
+      pendingCount,
+      suggestedCount,
+      uncategorised,
+      repeating,
+      pendingClose,
+    ],
   );
 
   // Which of the two documents is visible to the print engine. It takes the
@@ -337,6 +383,28 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
   async function handleAttentionAction(item: AttentionItem) {
     if (item.kind === "uncategorised") {
       setReviewing(item.key);
+      return;
+    }
+    if (item.kind === "unregistered") {
+      const offer = repeating.unregistered.find((entry) => entry.id === item.key);
+      if (offer) openRecurringOffer({ editing: null, draft: offer.draft });
+      return;
+    }
+    if (item.kind === "rise") {
+      const rise = repeating.rises.find((entry) => entry.id === item.key);
+      const template = recurring.find((entry) => entry.id === rise?.recurring?.id);
+      if (rise && template) {
+        openRecurringOffer({
+          editing: template,
+          draft: { ...recurringFromTemplate(template), amount: rise.latest },
+        });
+        return;
+      }
+      // Nobody declared it: the rise carries the series' own offer to add it.
+      const offer = repeating.unregistered.find(
+        (entry) => entry.series.id === rise?.series.id,
+      );
+      if (offer) openRecurringOffer({ editing: null, draft: offer.draft });
       return;
     }
     if (item.kind !== "close") return;
@@ -474,6 +542,11 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
           <AttentionNotice
             items={attention}
             onAction={(item) => void handleAttentionAction(item)}
+            onDismiss={(item) => {
+              if (item.dismissalId !== undefined) {
+                void dismissAiSuggestions([item.dismissalId]);
+              }
+            }}
           />
 
           <NetWorthBar
@@ -609,6 +682,20 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
         key={reviewedGroup?.id}
         group={reviewedGroup}
         onClose={() => setReviewing(null)}
+      />
+
+      <RecurringDialog
+        open={isOfferOpen}
+        onOpenChange={setIsOfferOpen}
+        editing={recurringOffer?.editing ?? null}
+        draft={recurringOffer?.draft}
+        categories={categories}
+        paymentMethods={paymentMethods}
+        onSubmitRecurring={(values) =>
+          recurringOffer?.editing
+            ? editRecurring(recurringOffer.editing.id, values)
+            : addRecurring(values)
+        }
       />
     </div>
   );

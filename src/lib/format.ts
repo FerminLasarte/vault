@@ -56,6 +56,18 @@ export function toIsoDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+// Whole days from one "YYYY-MM-DD" date to another; negative when the second
+// comes first.
+export function daysBetween(fromDate: string, toDate: string): number {
+  const [fromYear, fromMonth, fromDay] = fromDate.split("-").map(Number);
+  const [toYear, toMonth, toDay] = toDate.split("-").map(Number);
+  // UTC, so a daylight-saving change in between does not shave off an hour
+  // and round a day away.
+  const elapsed =
+    Date.UTC(toYear, toMonth - 1, toDay) - Date.UTC(fromYear, fromMonth - 1, fromDay);
+  return Math.round(elapsed / 86_400_000);
+}
+
 export function todayIsoDate(): string {
   return toIsoDate(new Date());
 }
