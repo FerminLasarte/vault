@@ -32,6 +32,8 @@ export function AiMark({ reason, className }: AiMarkProps) {
 interface AiNoteProps {
   reason: ReactNode;
   children: ReactNode;
+  // A note that is prose rather than a line under a field reads at body size.
+  className?: string;
 }
 
 // A line under a field saying what the AI did there — "Sugerida por IA", "Se
@@ -40,9 +42,9 @@ interface AiNoteProps {
 //
 // The mark keeps its own column: a sentence too long for one line wraps beside
 // it, rather than dropping below and leaving the mark alone on a line.
-export function AiNote({ reason, children }: AiNoteProps) {
+export function AiNote({ reason, children, className }: AiNoteProps) {
   return (
-    <p className="flex items-start gap-2 text-xs text-muted-foreground">
+    <p className={cn("flex items-start gap-2 text-xs text-muted-foreground", className)}>
       <AiMark reason={reason} />
       <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
         {children}

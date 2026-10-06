@@ -21,6 +21,7 @@ import { SummaryBar } from "@/components/SummaryBar";
 import { NetWorthBar } from "@/components/NetWorthBar";
 import { MonthOverviewCards } from "@/components/MonthOverviewCards";
 import { AttentionNotice } from "@/components/AttentionNotice";
+import { StandoutLine } from "@/components/StandoutLine";
 import { UncategorisedDialog } from "@/components/UncategorisedDialog";
 import { DuplicateDialog } from "@/components/DuplicateDialog";
 import { RecurringDialog } from "@/components/RecurringDialog";
@@ -71,6 +72,8 @@ import { splitTransfers } from "@/lib/ai/splitTransfers";
 import { spendingPace } from "@/lib/ai/monthPace";
 import { recentUnusualSpending } from "@/lib/ai/unusualSpending";
 import { endOfMonthEstimate } from "@/lib/ai/endOfMonth";
+import { monthStandout, standoutText } from "@/lib/ai/monthStandout";
+import { narrateMonth } from "@/lib/ai/closeNarrative";
 import { declaredMerchantIds, settledThisMonth } from "@/lib/ai/series";
 import { recurringFromTemplate } from "@/lib/recurring";
 import type { NewRecurringTransaction, RecurringTransactionWithNames } from "@/db";
@@ -139,6 +142,7 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
     categoryModel,
     series,
     spendingBaselines,
+    categoryPaces,
     budgetPaces,
     ledger,
     rateAt,
@@ -413,6 +417,35 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
     };
   }, [budgetPaces, spendingBaselines, transactions, aiDismissed, today]);
 
+  // The category heading furthest above its usual month, in this currency:
+  // the line at the top of the screen, unless Atención is already saying it.
+  const categoryNames = useMemo(
+    () => new Map(categories.map((category) => [category.id, category.name])),
+    [categories],
+  );
+  const standout = useMemo(() => {
+    if (categoryPaces === null || budgetPaces === null || pace === null) return null;
+    const found = monthStandout(categoryPaces, {
+      currency,
+      typicalSpending: pace.typical,
+      budgetPaces: budgetPaces.values(),
+      unusual: statistics.unusual,
+      categoryNames,
+      isDismissed: (id) => isDismissed(aiDismissed, id, today),
+      today,
+    });
+    return found && { id: found.id, ...standoutText(found, currency) };
+  }, [
+    categoryPaces,
+    budgetPaces,
+    pace,
+    currency,
+    statistics.unusual,
+    categoryNames,
+    aiDismissed,
+    today,
+  ]);
+
   // Movements recorded twice, and transfers that came in as an expense and an
   // income, in the recent history.
   const ledgerProblems = useMemo(
@@ -481,6 +514,29 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
   // Two documents share one sheet here: the filtered report the toolbar prints,
   // and the close the notice offers. Which one is mounted follows the request.
   const { request: printRequest, requestPrint } = usePrintRequest<"report" | "close">();
+
+  // The close's sentences, worked out only once it is being printed.
+  const isPrintingClose = printRequest?.target === "close";
+  const closeNarrative = useMemo(
+    () =>
+      isPrintingClose && aiEnabled
+        ? narrateMonth(close, {
+            transactions,
+            categories,
+            commitments: { recurring, installmentPlans, loans },
+          })
+        : undefined,
+    [
+      isPrintingClose,
+      aiEnabled,
+      close,
+      transactions,
+      categories,
+      recurring,
+      installmentPlans,
+      loans,
+    ],
+  );
 
   async function handleAttentionAction(item: AttentionItem) {
     if (item.kind === "uncategorised") {
@@ -619,8 +675,12 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
       {/* Built from the same figures the user is looking at rather than from a
           second set they would have to keep in sync. */}
       <PrintableSheet>
-        {printRequest?.target === "close" ? (
-          <PrintableClose close={close} generatedAt={report.generatedAt} />
+        {isPrintingClose ? (
+          <PrintableClose
+            close={close}
+            narrative={closeNarrative}
+            generatedAt={report.generatedAt}
+          />
         ) : (
           <PrintableReport report={report} />
         )}
@@ -639,6 +699,14 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
             month is going, and what they last did. No period to choose, because every
             figure here already answers to one. */}
         <TabsContent value="general" className="flex flex-col gap-6 pt-6">
+          {standout !== null && (
+            <StandoutLine
+              title={standout.title}
+              reason={standout.reason}
+              onDismiss={() => void dismissAiSuggestions([standout.id])}
+            />
+          )}
+
           <AttentionNotice
             items={attention}
             onAction={(item) => void handleAttentionAction(item)}

@@ -11,7 +11,12 @@ import { toast } from "sonner";
 import { trainCategoryModel, type CategoryModel } from "@/lib/ai/categoryModel";
 import { learnMerchantHistory, type MerchantHistory } from "@/lib/ai/merchantHistory";
 import { detectSeries, settledThisMonth, type Series } from "@/lib/ai/series";
-import { budgetPaces, type BudgetPace } from "@/lib/ai/monthPace";
+import {
+  budgetPaces,
+  categoryPaces,
+  type BudgetPace,
+  type CategoryPace,
+} from "@/lib/ai/monthPace";
 import { spendingBaselines, type SpendingBaselines } from "@/lib/ai/unusualSpending";
 import type { LedgerContext } from "@/lib/ai/ledger";
 import {
@@ -244,8 +249,11 @@ export interface AppData {
   // What an expense is held against to tell an unusual one: the merchant's and
   // the category's earlier expenses; null with the local AI switched off.
   spendingBaselines: SpendingBaselines | null;
+  // Where each category is heading this month, by categoryPaceKey, for the
+  // line at the top of Resumen; null with the local AI switched off.
+  categoryPaces: Map<string, CategoryPace> | null;
   // Where each monthly budget is heading this month, by budget id, for its row
-  // and for Atención; null with the local AI switched off.
+  // and for Atención, from its category's pace; null with the AI switched off.
   budgetPaces: Map<number, BudgetPace> | null;
   // What the local AI checks the ledger with — for movements recorded twice
   // and transfers split in two — in Atención and on import; null with it off.
@@ -587,12 +595,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [transactions, categories, merchantHistory, series],
   );
 
-  const paces = useMemo(
+  const categoryPacesNow = useMemo(
     () =>
       series === null
         ? null
-        : budgetPaces(budgets, transactions, today, settledThisMonth(series, today)),
-    [series, budgets, transactions, today],
+        : categoryPaces(transactions, today, settledThisMonth(series, today)),
+    [series, transactions, today],
+  );
+
+  const paces = useMemo(
+    () =>
+      categoryPacesNow === null ? null : budgetPaces(budgets, categoryPacesNow, today),
+    [categoryPacesNow, budgets, today],
   );
 
   const exchangeRate = useMemo(
@@ -886,6 +900,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       merchantHistory,
       series,
       spendingBaselines: baselines,
+      categoryPaces: categoryPacesNow,
       budgetPaces: paces,
       ledger,
       today,
@@ -918,6 +933,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       merchantHistory,
       series,
       baselines,
+      categoryPacesNow,
       paces,
       ledger,
       today,

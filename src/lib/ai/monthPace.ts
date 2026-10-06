@@ -141,6 +141,53 @@ export function spendingPace(
   );
 }
 
+export interface CategoryPace {
+  categoryId: number;
+  currency: string;
+  pace: Pace;
+}
+
+// How a category's pace is looked up: `<currency>:<category id>`.
+export function categoryPaceKey(categoryId: number, currency: string): string {
+  return `${currency}:${categoryId}`;
+}
+
+// The pace of every category in every currency, by categoryPaceKey: one pass to
+// sort the recent expenses into their groups, then one pace per group. Read by
+// the budgets and by the line at the top of Resumen, so both mean the same
+// thing by a category's pace.
+export function categoryPaces(
+  transactions: readonly Transaction[],
+  today: string,
+  settled: ReadonlySet<string> = new Set(),
+): Map<string, CategoryPace> {
+  const paces = new Map<string, CategoryPace>();
+  const keys = typicalMonthKeys(transactions, today);
+  if (keys === null) return paces;
+
+  const groups = new Map<
+    string,
+    { categoryId: number; currency: string; movements: Transaction[] }
+  >();
+  const since = `${keys[0]}-01`;
+  for (const transaction of transactions) {
+    const { category_id: categoryId, currency } = transaction;
+    if (transaction.type !== "expense" || transaction.date < since) continue;
+    if (categoryId === null) continue;
+    const key = categoryPaceKey(categoryId, currency);
+    const group = groups.get(key);
+    if (group === undefined)
+      groups.set(key, { categoryId, currency, movements: [transaction] });
+    else group.movements.push(transaction);
+  }
+
+  for (const [key, { categoryId, currency, movements }] of groups) {
+    const pace = monthPace(movements, keys, today, settled);
+    if (pace !== null) paces.set(key, { categoryId, currency, pace });
+  }
+  return paces;
+}
+
 export interface BudgetPace {
   // `pace:<budget id>:<YYYY-MM>`: dismissed for this month only.
   id: string;
@@ -150,47 +197,24 @@ export interface BudgetPace {
   crossingDay: number | null;
 }
 
-// The pace of every monthly budget, by budget id. An annual cap against a month
-// has no pace to read.
+// The pace of every monthly budget, by budget id, from its category's. An
+// annual cap against a month has no pace to read.
 export function budgetPaces(
   budgets: readonly BudgetWithCategory[],
-  transactions: readonly Transaction[],
+  paces: ReadonlyMap<string, CategoryPace>,
   today: string,
-  settled: ReadonlySet<string> = new Set(),
 ): Map<number, BudgetPace> {
-  const paces = new Map<number, BudgetPace>();
-  const monthly = budgets.filter((budget) => budget.period === "monthly");
-  if (monthly.length === 0) return paces;
-  const keys = typicalMonthKeys(transactions, today);
-  if (keys === null) return paces;
-
-  // One pass to sort the recent expenses into the budgets' groups.
-  const groupKey = (categoryId: number | null, currency: string) =>
-    `${currency}:${categoryId}`;
-  const groups = new Map(
-    monthly.map((budget) => [
-      groupKey(budget.category_id, budget.currency),
-      [] as Transaction[],
-    ]),
-  );
-  const since = `${keys[0]}-01`;
-  for (const transaction of transactions) {
-    if (transaction.type !== "expense" || transaction.date < since) continue;
-    groups
-      .get(groupKey(transaction.category_id, transaction.currency))
-      ?.push(transaction);
-  }
-
-  for (const budget of monthly) {
-    const movements = groups.get(groupKey(budget.category_id, budget.currency)) ?? [];
-    const pace = monthPace(movements, keys, today, settled);
-    if (pace === null) continue;
-    paces.set(budget.id, {
+  const found = new Map<number, BudgetPace>();
+  for (const budget of budgets) {
+    if (budget.period !== "monthly") continue;
+    const entry = paces.get(categoryPaceKey(budget.category_id, budget.currency));
+    if (entry === undefined) continue;
+    found.set(budget.id, {
       id: `pace:${budget.id}:${today.slice(0, 7)}`,
       budget,
-      pace,
-      crossingDay: crossingDay(pace, budget.amount),
+      pace: entry.pace,
+      crossingDay: crossingDay(entry.pace, budget.amount),
     });
   }
-  return paces;
+  return found;
 }

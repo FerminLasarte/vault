@@ -5,6 +5,7 @@ import {
   Section,
   Table,
 } from "@/components/reports/primitives";
+import { AiMark } from "@/components/AiMark";
 import { formatCurrency, formatMonthLabel, formatPercent } from "@/lib/format";
 import { CURRENCY_LABELS } from "@/lib/currency";
 import type {
@@ -17,6 +18,9 @@ import type {
 interface PrintableCloseProps {
   close: MonthlyClose;
   generatedAt: string;
+  // The local AI's sentences for each currency (see narrateMonth); absent with
+  // it switched off.
+  narrative?: ReadonlyMap<string, string[]>;
 }
 
 // A signed figure, so a rise and a fall are told apart without colour — which
@@ -114,9 +118,11 @@ function BreakdownSection({
 function CurrencyBlock({
   block,
   showHeading,
+  sentences,
 }: {
   block: CurrencyClose;
   showHeading: boolean;
+  sentences?: string[];
 }) {
   const { currency, summary } = block;
 
@@ -127,6 +133,16 @@ function CurrencyBlock({
           {CURRENCY_LABELS[currency] ?? currency} · {block.transactionCount}{" "}
           {block.transactionCount === 1 ? "movimiento" : "movimientos"}
         </h2>
+      )}
+
+      {/* What happened, before the tables that prove it. */}
+      {sentences !== undefined && sentences.length > 0 && (
+        <Section title="En pocas palabras">
+          <p className="text-xs leading-relaxed">
+            <AiMark className="mr-1.5 align-[-2px]" />
+            {sentences.join(" ")}
+          </p>
+        </Section>
       )}
 
       <Section title="Resumen del mes">
@@ -251,7 +267,7 @@ function CurrencyBlock({
 //
 // Every section that has nothing to say is left out rather than printed empty.
 // A month with no income should not cost a sheet of paper saying so.
-export function PrintableClose({ close, generatedAt }: PrintableCloseProps) {
+export function PrintableClose({ close, generatedAt, narrative }: PrintableCloseProps) {
   const several = close.currencies.length > 1;
   const only = close.currencies[0];
 
@@ -270,7 +286,12 @@ export function PrintableClose({ close, generatedAt }: PrintableCloseProps) {
       }
     >
       {close.currencies.map((block) => (
-        <CurrencyBlock key={block.currency} block={block} showHeading={several} />
+        <CurrencyBlock
+          key={block.currency}
+          block={block}
+          showHeading={several}
+          sentences={narrative?.get(block.currency)}
+        />
       ))}
     </PrintableDocument>
   );
