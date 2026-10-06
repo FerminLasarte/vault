@@ -111,6 +111,14 @@ describe("rule proposals", () => {
     expect(proposals.map((proposal) => proposal.pattern)).toEqual(["birra bar"]);
   });
 
+  // Every word of "UBER *TRIP HELP.UBER.COM" settles the same movements; the
+  // rule should read as the merchant, not as the longest pair of filler.
+  it("proposes the merchant's name when it settles as much as anything longer", () => {
+    const { proposals } = advise(times(4, "UBER *TRIP HELP.UBER.COM", TRANSPORTE));
+
+    expect(proposals.map((proposal) => proposal.pattern)).toEqual(["uber"]);
+  });
+
   it("keeps two merchants that share a word apart", () => {
     const { proposals } = advise([
       ...times(4, "uber eats", COMIDA),
