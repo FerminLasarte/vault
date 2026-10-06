@@ -91,6 +91,26 @@ export function filterByCategory<T extends Transaction>(
   return transactions.filter((transaction) => transaction.category_id === categoryId);
 }
 
+export function filterByType<T extends Transaction>(
+  transactions: T[],
+  type: TransactionType,
+): T[] {
+  return transactions.filter((transaction) => transaction.type === type);
+}
+
+// Movements through an account on either side: a transfer into it counts as
+// much as a payment out of it.
+export function filterByAccount<T extends Transaction>(
+  transactions: T[],
+  paymentMethodId: number,
+): T[] {
+  return transactions.filter(
+    (transaction) =>
+      transaction.payment_method_id === paymentMethodId ||
+      transaction.destination_payment_method_id === paymentMethodId,
+  );
+}
+
 export function filterByAmountRange<T extends Transaction>(
   transactions: T[],
   min: number | null,
@@ -140,7 +160,9 @@ export function filterByTag<T extends { tag_names: string | null }>(
 export interface TransactionFilters {
   currency?: string | null;
   search?: string | null;
+  type?: TransactionType | null;
   categoryId?: number | null;
+  paymentMethodId?: number | null;
   dateFrom?: string | null;
   dateTo?: string | null;
   minAmount?: number | null;
@@ -162,8 +184,14 @@ export function applyTransactionFilters<T extends Transaction>(
   if (filters.search != null) {
     result = filterBySearch(result, filters.search);
   }
+  if (filters.type != null) {
+    result = filterByType(result, filters.type);
+  }
   if (filters.categoryId != null) {
     result = filterByCategory(result, filters.categoryId);
+  }
+  if (filters.paymentMethodId != null) {
+    result = filterByAccount(result, filters.paymentMethodId);
   }
   if (filters.dateFrom != null || filters.dateTo != null) {
     result = filterByDateRange(result, filters.dateFrom ?? null, filters.dateTo ?? null);

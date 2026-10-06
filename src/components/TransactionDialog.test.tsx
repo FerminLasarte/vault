@@ -3,8 +3,14 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { trainCategoryModel, type CategoryModel } from "@/lib/ai/categoryModel";
+import { learnMerchantHistory, type MerchantHistory } from "@/lib/ai/merchantHistory";
 import { TransactionDialog } from "./TransactionDialog";
-import type { Category, CategoryRuleWithCategory, PaymentMethod } from "@/db";
+import type {
+  Category,
+  CategoryRuleWithCategory,
+  PaymentMethod,
+  Transaction,
+} from "@/db";
 
 beforeAll(() => {
   Object.defineProperty(Element.prototype, "scrollIntoView", {
@@ -26,6 +32,8 @@ const CATEGORIES: Category[] = [
 
 const ACCOUNTS: PaymentMethod[] = [
   { id: 1, name: "Efectivo ARS", type: "cash", currency: "ARS", initial_balance: 0 },
+  { id: 2, name: "Visa", type: "card", currency: "ARS", initial_balance: 0 },
+  { id: 3, name: "Banco USD", type: "bank", currency: "USD", initial_balance: 0 },
 ];
 
 // The option list is rendered into the DOM alongside the trigger, so matching
@@ -47,6 +55,7 @@ function renderDialog(
     categoryRules?: CategoryRuleWithCategory[];
     aiEnabled?: boolean;
     categoryModel?: CategoryModel | null;
+    merchantHistory?: MerchantHistory | null;
   } = {},
 ) {
   return render(
@@ -60,6 +69,7 @@ function renderDialog(
       defaultCurrency="ARS"
       aiEnabled={handlers.aiEnabled ?? false}
       categoryModel={handlers.categoryModel ?? null}
+      merchantHistory={handlers.merchantHistory ?? null}
       onSubmitTransaction={handlers.onSubmitTransaction ?? vi.fn()}
     />,
   );
@@ -185,6 +195,98 @@ describe("TransactionDialog and merchant names", () => {
     await userEvent.type(screen.getByLabelText("Descripción"), "MERPAGO*RAPPI 4471");
 
     expect(screen.queryByText(/Se muestra como/)).not.toBeInTheDocument();
+  });
+});
+
+// Typing a merchant already written down offers it, and picking it fills the
+// movement in like the last ones.
+describe("TransactionDialog and past movements", () => {
+  let nextId = 1;
+  function past(description: string, overrides: Partial<Transaction> = {}): Transaction {
+    return {
+      id: nextId++,
+      amount: 9000,
+      type: "expense",
+      category_id: 3,
+      payment_method_id: 2,
+      destination_payment_method_id: null,
+      destination_amount: null,
+      description,
+      date: "2026-09-01",
+      currency: "ARS",
+      category_suggested: 0,
+      ...overrides,
+    };
+  }
+
+  const history = [
+    past("MERPAGO*RAPPI 4471", { amount: 8000 }),
+    past("MERPAGO*RAPPI 4471", { amount: 9000 }),
+    past("MERPAGO*RAPPI 4471", { amount: 12000 }),
+    ...[300, 320].map((amount) =>
+      past("Venta de la bici", {
+        type: "income",
+        category_id: 5,
+        currency: "USD",
+        payment_method_id: 3,
+        amount,
+      }),
+    ),
+  ];
+
+  function renderWithHistory() {
+    return renderDialog({
+      aiEnabled: true,
+      categoryModel: trainCategoryModel(history),
+      merchantHistory: learnMerchantHistory(history, "2026-10-06"),
+    });
+  }
+
+  it("offers a merchant with its category, usual account and usual amount", async () => {
+    renderWithHistory();
+
+    await userEvent.type(screen.getByLabelText("Descripción"), "rap");
+
+    const option = await screen.findByRole("option", { name: /Rappi/ });
+    expect(option).toHaveTextContent("Padel · Visa");
+    expect(option).toHaveTextContent("$ 9.000,00");
+  });
+
+  it("fills the movement in from the keyboard and leaves the amount selected", async () => {
+    renderWithHistory();
+
+    await userEvent.type(screen.getByLabelText("Descripción"), "rap");
+    await screen.findByRole("option", { name: /Rappi/ });
+    await userEvent.keyboard("{ArrowDown}{Enter}");
+
+    expect(screen.getByLabelText("Descripción")).toHaveValue("Rappi");
+    expect(selectedIn("#transaction-payment-method")).toContain("Visa");
+    expect(selectedCategory()).toContain("Padel");
+    const amount = screen.getByLabelText<HTMLInputElement>("Monto");
+    expect(amount).toHaveValue(9000);
+    expect(amount).toHaveFocus();
+  });
+
+  it("switches the kind and the currency to the merchant's", async () => {
+    renderWithHistory();
+
+    await userEvent.type(screen.getByLabelText("Descripción"), "bici");
+    await userEvent.click(
+      await screen.findByRole("option", { name: /Venta de la bici/ }),
+    );
+
+    expect(selectedIn("#transaction-type")).toContain("Ingreso");
+    expect(selectedIn("#transaction-currency")).toContain("US$");
+    expect(selectedIn("#transaction-payment-method")).toContain("Banco USD");
+    expect(selectedCategory()).toContain("Venta");
+  });
+
+  it("offers nothing with the local AI switched off", async () => {
+    renderDialog({ merchantHistory: null });
+
+    await userEvent.type(screen.getByLabelText("Descripción"), "rap");
+
+    expect(screen.queryByRole("option")).not.toBeInTheDocument();
   });
 });
 

@@ -5,6 +5,11 @@ import { useCategoryTypeSync } from "@/hooks/useCategoryTypeSync";
 import type { CategoryModel } from "@/lib/ai/categoryModel";
 import { suggestCategory } from "@/lib/ai/categorySuggestion";
 import {
+  descriptionSuggestions,
+  type MerchantEntry,
+  type MerchantHistory,
+} from "@/lib/ai/merchantHistory";
+import {
   transactionCategoryType,
   type TransactionFormInput,
   type TransactionFormValues,
@@ -30,6 +35,18 @@ interface TransactionFieldsOptions {
   // Changes whenever a different transaction is loaded — the dialog opening,
   // the inspector moving to another row — and starts the rules over.
   loadKey: unknown;
+  // Past merchants to offer as the description is typed. Only the dialog that
+  // creates a movement passes them: one being edited already is something,
+  // and picking a past merchant would replace its amount and account.
+  merchantHistory?: MerchantHistory | null;
+}
+
+// A past merchant offered under the description, with what picking it would
+// fill in.
+export interface DescriptionOption {
+  entry: MerchantEntry;
+  category: Category | null;
+  account: PaymentMethod | null;
 }
 
 // Everything a transaction form does on its own while the user fills it in:
@@ -50,8 +67,9 @@ export function useTransactionFields({
   paymentMethods,
   isEditing,
   loadKey,
+  merchantHistory = null,
 }: TransactionFieldsOptions) {
-  const { register, watch, setValue } = form;
+  const { register, watch, setValue, setFocus } = form;
 
   // Once the user picks a category by hand, the rules stop second-guessing them
   // until they edit the description again — an autocomplete that keeps
@@ -183,6 +201,53 @@ export function useTransactionFields({
     setValue("categoryId", suggestion.categoryId, { shouldValidate: false });
   }, [suggestion, isEditing, setValue]);
 
+  // Past merchants the description could be, each with the category the rules
+  // or the AI would give it — the same one picking it ends up with — and its
+  // usual account, when it still exists. Null when the form offers none at
+  // all, which is a plain field rather than an empty list.
+  const descriptionOptions = useMemo((): DescriptionOption[] | null => {
+    if (merchantHistory === null) return null;
+    const suggestions = { rules: categoryRules, categories, model: categoryModel };
+    return descriptionSuggestions(typedDescription ?? "", merchantHistory).map(
+      (entry) => {
+        const categoryId = suggestCategory(
+          { description: entry.label, type: entry.type },
+          suggestions,
+        )?.categoryId;
+        return {
+          entry,
+          category: categories.find((category) => category.id === categoryId) ?? null,
+          account:
+            paymentMethods.find(
+              (method) => method.id === entry.account?.paymentMethodId,
+            ) ?? null,
+        };
+      },
+    );
+  }, [
+    merchantHistory,
+    typedDescription,
+    categoryRules,
+    categories,
+    categoryModel,
+    paymentMethods,
+  ]);
+
+  // Fills the movement in like the merchant's usual one: its kind, currency and
+  // account, and its typical amount, left selected since it is the figure most
+  // likely to differ. The category follows from the description, through the
+  // rules and the AI like any other, so it is decided in one place.
+  function pickDescription({ entry, account }: DescriptionOption) {
+    descriptionEditedRef.current = true;
+    categoryTouchedRef.current = false;
+    setValue("type", entry.type);
+    setValue("currency", entry.currency);
+    if (account !== null) setValue("paymentMethodId", account.id);
+    if (entry.typicalAmount !== null) setValue("amount", entry.typicalAmount);
+    setValue("description", entry.label, { shouldValidate: true });
+    setFocus("amount", { shouldSelect: true });
+  }
+
   return {
     isTransfer,
     isCrossCurrency,
@@ -192,6 +257,8 @@ export function useTransactionFields({
     destinationAccounts,
     destinationAccount,
     descriptionField,
+    descriptionOptions,
+    pickDescription,
     suggestion,
     // A category chosen by the user, from the list or from a rule offered to
     // them, stops the rules from choosing another one.

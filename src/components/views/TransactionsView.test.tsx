@@ -10,6 +10,7 @@ import { ViewStateProvider } from "@/context/ViewStateContext";
 // The provider's three halves, read here from one object.
 type AppContext = AppData & AppActions & AppStatus;
 import type { TransactionWithCategory } from "@/db";
+import { learnMerchantHistory } from "@/lib/ai/merchantHistory";
 
 // The view reads everything through this one hook, so replacing it is enough to
 // drive the component without a database or a Tauri runtime behind it.
@@ -99,6 +100,7 @@ function renderView(
     ],
     categoryRules: [],
     categoryModel: null,
+    merchantHistory: null,
     aiEnabled: false,
     tags: [],
     today: TODAY,
@@ -569,10 +571,111 @@ describe("The quick entry", () => {
   });
 });
 
+// The account a merchant is usually paid with, over the last one used.
+describe("The quick entry and the local AI", () => {
+  const accounts = [
+    { id: 1, name: "Efectivo", type: "cash", currency: "ARS", initial_balance: 0 },
+    { id: 2, name: "Visa", type: "card", currency: "ARS", initial_balance: 0 },
+  ] as AppData["paymentMethods"];
+  const rappi = [1, 2].map((id) =>
+    aTransaction(id, {
+      description: "MERPAGO*RAPPI 4471",
+      payment_method_id: 2,
+      date: "2026-09-01",
+    }),
+  );
+
+  it("assumes the merchant's usual account, and says why", async () => {
+    const user = userEvent.setup();
+    renderView(
+      [],
+      {},
+      {
+        aiEnabled: true,
+        paymentMethods: accounts,
+        merchantHistory: learnMerchantHistory(rappi, TODAY),
+      },
+    );
+
+    await user.type(quickEntry(), "rappi 2500");
+
+    const reading = screen.getByText("«rappi»").closest("p")!;
+    expect(reading).toHaveTextContent("Visa");
+    expect(reading).not.toHaveTextContent("por defecto");
+  });
+});
+
 function clickAction(options: unknown) {
   const { action } = options as { action: { onClick: (event: unknown) => void } };
   action.onClick({});
 }
+
+// "comida en agosto más de 5000" sets the filters itself, and says so.
+describe("TransactionsView and the natural-language search", () => {
+  const rows = [
+    anEditable(1, { description: "Coto", amount: 8000, date: "2026-08-10" }),
+    anEditable(2, { description: "Coto", amount: 2000, date: "2026-08-12" }),
+    anEditable(3, { description: "Coto", amount: 9000, date: "2026-07-10" }),
+    aTransaction(4, { description: "Kiosco", amount: 9000, date: "2026-08-10" }),
+    anEditable(5, {
+      description: "Netflix",
+      amount: 10,
+      date: "2026-08-10",
+      currency: "USD",
+    }),
+  ];
+
+  function search() {
+    return screen.getByLabelText("Buscar");
+  }
+
+  it("narrows the list by what it understood, and shows it", async () => {
+    const user = userEvent.setup();
+    renderView(rows, {}, { aiEnabled: true });
+
+    await user.type(search(), "super en agosto más de 5000");
+
+    expect(screen.getByText("1 transacción")).toBeInTheDocument();
+    const understood = screen.getByLabelText("Lo que se entendió de la búsqueda");
+    expect(understood).toHaveTextContent("Categoría Super");
+    expect(understood).toHaveTextContent("Agosto de 2026");
+  });
+
+  it("takes a part away from the search with its cross", async () => {
+    const user = userEvent.setup();
+    renderView(rows, {}, { aiEnabled: true });
+
+    await user.type(search(), "super en agosto");
+    await user.click(screen.getByRole("button", { name: "Quitar Agosto de 2026" }));
+
+    expect(search()).toHaveValue("super");
+    expect(screen.getByText("3 transacciones")).toBeInTheDocument();
+  });
+
+  it("shows the currency the search names, until one is chosen on screen", async () => {
+    const user = userEvent.setup();
+    renderView(rows, {}, { aiEnabled: true });
+
+    await user.type(search(), "en dólares");
+    expect(screen.getByText("Netflix")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "ARS" }));
+    expect(search()).toHaveValue("");
+    expect(screen.queryByText("Netflix")).not.toBeInTheDocument();
+  });
+
+  it("searches the text as it always did with the local AI off", async () => {
+    const user = userEvent.setup();
+    renderView(rows, {}, { aiEnabled: false });
+
+    await user.type(search(), "super");
+
+    expect(
+      screen.getByText("No hay transacciones que coincidan con los filtros."),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Lo que se entendió de la búsqueda")).toBeNull();
+  });
+});
 
 // Categories the AI chose on import are found and confirmed from the list.
 describe("TransactionsView and categories the AI suggested", () => {

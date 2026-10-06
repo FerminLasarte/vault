@@ -9,6 +9,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { trainCategoryModel, type CategoryModel } from "@/lib/ai/categoryModel";
+import { learnMerchantHistory, type MerchantHistory } from "@/lib/ai/merchantHistory";
 import {
   DEFAULT_AI_STATE,
   parseAiState,
@@ -220,6 +221,10 @@ export interface AppData {
   // null with it switched off. Trained once per change to the history, here,
   // rather than by every screen that suggests a category.
   categoryModel: CategoryModel | null;
+  // What the history says about each merchant — its name, usual amount and
+  // usual account — for the form's autocomplete and the quick entry; null with
+  // the local AI switched off.
+  merchantHistory: MerchantHistory | null;
   // Today's date, moving on at midnight with the app left open (see useToday).
   // What depends on the date reads it from here, so it re-renders when the
   // day changes instead of keeping the day it was first drawn on.
@@ -525,6 +530,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [aiState.enabled, transactions],
   );
 
+  const merchantHistory = useMemo(
+    () => (aiState.enabled ? learnMerchantHistory(transactions, today) : null),
+    [aiState.enabled, transactions, today],
+  );
+
   const exchangeRate = useMemo(
     () => exchangeRateHistory.at(-1) ?? null,
     [exchangeRateHistory],
@@ -795,6 +805,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       aiEnabled: aiState.enabled,
       aiDismissed: aiState.dismissed,
       categoryModel,
+      merchantHistory,
       today,
       pending,
       isLoading,
@@ -821,6 +832,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       aiState.enabled,
       aiState.dismissed,
       categoryModel,
+      merchantHistory,
       today,
       pending,
       isLoading,
