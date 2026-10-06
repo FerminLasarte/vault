@@ -8,6 +8,8 @@ import type { BackupStatus } from "@/lib/backupReminder";
 import type { BudgetProgress } from "@/lib/finance";
 import type { RecurrenceFrequency } from "@/lib/recurring";
 import type { LateIncome } from "@/lib/ai/lateIncome";
+import type { BudgetPace } from "@/lib/ai/monthPace";
+import type { UnusualSpending } from "@/lib/ai/unusualSpending";
 import { merchantName } from "@/lib/ai/merchants";
 import type { NearDuplicate } from "@/lib/ai/nearDuplicates";
 import type { SplitTransfer } from "@/lib/ai/splitTransfers";
@@ -31,7 +33,9 @@ export type AttentionKind =
   | "backup"
   | "pending"
   | "late"
+  | "pace"
   | "rise"
+  | "unusual"
   | "duplicate"
   | "transfer"
   | "suggested"
@@ -184,6 +188,34 @@ function riseItem(rise: PriceRise, canAdd: boolean): AttentionItem {
   };
 }
 
+// A monthly budget the month is on course to pass, before it has.
+function paceItem(entry: BudgetPace & { crossingDay: number }): AttentionItem {
+  const { budget, pace } = entry;
+  const { currency } = budget;
+  return {
+    key: entry.id,
+    kind: "pace",
+    tone: "neutral",
+    title: `Superarías el presupuesto de ${budget.category_name} el ${entry.crossingDay}`,
+    detail: `Llevás ${formatCurrency(pace.spent, currency)} de ${formatCurrency(budget.amount, currency)}; si el resto del mes va como siempre, llegás a ${formatCurrency(pace.projected, currency)}.`,
+    dismissalId: entry.id,
+  };
+}
+
+// An expense well above what is usually spent there.
+function unusualItem(entry: UnusualSpending<TransactionWithCategory>): AttentionItem {
+  const { movement, name, typical } = entry;
+  const { currency } = movement;
+  return {
+    key: entry.id,
+    kind: "unusual",
+    tone: "neutral",
+    title: `Gastaste ${formatCurrency(movement.amount, currency)} en ${name}; lo habitual es cerca de ${formatCurrency(typical, currency)}`,
+    detail: `El ${formatDate(movement.date)}. ${entry.reason}`,
+    dismissalId: entry.id,
+  };
+}
+
 // Two movements that look like the same one. Named after what is not a
 // transfer, which is what has a merchant, by its clean name when one has it.
 function duplicateItem(pair: NearDuplicate<TransactionWithCategory>): AttentionItem {
@@ -273,6 +305,10 @@ export function buildAttentionItems(sources: {
   lateIncome: LateIncome[];
   rises: PriceRise[];
   unregistered: UnregisteredSeries[];
+  // Monthly budgets by pace, and recent expenses well above the usual, read
+  // from the statistics; empty with the AI switched off.
+  paces: BudgetPace[];
+  unusual: UnusualSpending<TransactionWithCategory>[];
   // Movements the AI read as recorded twice, or as one transfer split in two;
   // empty with it switched off.
   duplicates: NearDuplicate<TransactionWithCategory>[];
@@ -280,8 +316,9 @@ export function buildAttentionItems(sources: {
   // The month whose close is ready and unseen, or null when there is none.
   pendingClose: string | null;
 }): AttentionItem[] {
-  // Money missing and money spent beyond the usual first; then totals that
-  // count something twice; then what the AI already wrote, before what it
+  // Money missing and money spent beyond the usual first — a budget about to
+  // be passed while something can still be done about it, a charge that went
+  // up, a purchase far above the usual; then totals that count something twice; then what the AI already wrote, before what it
   // could write; and last what would only save typing.
   //
   // One notice per series: while it has gone up, the rise speaks for it and
@@ -290,7 +327,15 @@ export function buildAttentionItems(sources: {
   const addable = new Set(sources.unregistered.map((offer) => offer.series.id));
   const ai = [
     ...sources.lateIncome.map(lateIncomeItem),
+    // Only a budget not yet passed: a passed one is the first line of all.
+    ...sources.paces
+      .filter(
+        (entry): entry is BudgetPace & { crossingDay: number } =>
+          entry.crossingDay !== null,
+      )
+      .map(paceItem),
     ...sources.rises.map((rise) => riseItem(rise, addable.has(rise.series.id))),
+    ...sources.unusual.map(unusualItem),
     ...sources.duplicates.map(duplicateItem),
     ...sources.transfers.map(transferItem),
     suggestedItem(sources.suggestedCount),

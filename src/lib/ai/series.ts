@@ -111,6 +111,38 @@ export function planMerchantId(
   return declaredKey(plan.description, "expense", plan.currency);
 }
 
+function recurringMerchantId(
+  template: Pick<RecurringTransaction, "description" | "type" | "currency">,
+): string {
+  return declaredKey(template.description, template.type, template.currency);
+}
+
+// The merchants behind instalment plans and loans: an instalment or a loan
+// payment repeats by definition, and is already scheduled where the user
+// declared it.
+function scheduledMerchantIds(commitments: Commitments): string[] {
+  return [
+    ...commitments.installmentPlans.map(planMerchantId),
+    ...commitments.loans.map((loan) =>
+      declaredKey(
+        loan.description,
+        loan.direction === "borrowed" ? "expense" : "income",
+        loan.currency,
+      ),
+    ),
+  ];
+}
+
+// Every merchant whose movements the user declared as coming back — recurring
+// movements, instalment plans and loans — as merchant entry ids. What is
+// projected from those declarations is not to be read from the history again.
+export function declaredMerchantIds(commitments: Commitments): Set<string> {
+  return new Set([
+    ...commitments.recurring.map(recurringMerchantId),
+    ...scheduledMerchantIds(commitments),
+  ]);
+}
+
 export function detectSeries(
   history: MerchantHistory,
   commitments: Commitments,
@@ -120,21 +152,10 @@ export function detectSeries(
   // behind `DLO*NETFLIX 4471`.
   const recurring = new Map<string, RecurringTransaction>();
   for (const template of commitments.recurring) {
-    const key = declaredKey(template.description, template.type, template.currency);
+    const key = recurringMerchantId(template);
     if (!recurring.has(key)) recurring.set(key, template);
   }
-  // An instalment or a loan payment repeats by definition, and is already
-  // scheduled where the user declared it.
-  const scheduled = new Set([
-    ...commitments.installmentPlans.map(planMerchantId),
-    ...commitments.loans.map((loan) =>
-      declaredKey(
-        loan.description,
-        loan.direction === "borrowed" ? "expense" : "income",
-        loan.currency,
-      ),
-    ),
-  ]);
+  const scheduled = new Set(scheduledMerchantIds(commitments));
 
   const found: Series[] = [];
   for (const merchant of history.values()) {
@@ -167,5 +188,17 @@ export function detectSeries(
 
   return found.sort(
     (a, b) => b.lastDate.localeCompare(a.lastDate) || a.id.localeCompare(b.id),
+  );
+}
+
+// The merchants of monthly series already seen this month: whatever usually
+// comes from them later in the month has, this time, come already — a salary
+// paid a few days early is not still to come.
+export function settledThisMonth(series: readonly Series[], today: string): Set<string> {
+  const monthStart = `${today.slice(0, 7)}-01`;
+  return new Set(
+    series
+      .filter((entry) => entry.frequency === "monthly" && entry.lastDate >= monthStart)
+      .map((entry) => entry.merchant.id),
   );
 }

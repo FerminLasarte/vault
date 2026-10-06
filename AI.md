@@ -147,10 +147,10 @@ are one of its best sentences.
 | AI-19 | 6     | Instalments on statements                      | 8        | [x]  |
 | AI-20 | 7     | Split transfers                                | 9        | [x]  |
 | AI-21 | 7     | Near-duplicates                                | 10       | [x]  |
-| AI-22 | 8     | Unusual spending                               | 12       | [ ]  |
-| AI-23 | 8     | Pace of the month                              | 13       | [ ]  |
-| AI-24 | 8     | Suggested budgets                              | 14       | [ ]  |
-| AI-25 | 8     | End-of-month projection                        | 15       | [ ]  |
+| AI-22 | 8     | Unusual spending                               | 12       | [x]  |
+| AI-23 | 8     | Pace of the month                              | 13       | [x]  |
+| AI-24 | 8     | Suggested budgets                              | 14       | [x]  |
+| AI-25 | 8     | End-of-month projection                        | 15       | [x]  |
 | AI-26 | 9     | Narrated monthly close                         | 16       | [ ]  |
 | AI-27 | 9     | One line in Resumen                            | 17       | [ ]  |
 | AI-28 | 10    | Native text recognition                        | 20       | [ ]  |
@@ -1088,7 +1088,30 @@ by the db tests).
 8), per currency, over the recent window: flag a movement above
 median + k·MAD. A notice for recent ones, and a line in the inspector.
 
-- [ ] Done
+As built:
+
+- `unusualSpending.ts`. An expense is held against the expenses of the
+  `RECENT_MONTHS` (6) months before its date: its merchant's when there are
+  `MIN_MERCHANT_MOVEMENTS` (5), else its category's when there are
+  `MIN_CATEGORY_MOVEMENTS` (8), in its currency. Unusual is above median +
+  `MAD_FACTOR` (3) × MAD **and** at least `MIN_RATIO` (2) times the median: a
+  merchant whose every charge is the same has no MAD to speak of, and twice as
+  much is news anywhere. Boundary tests pin both.
+- A series' charge is left out: a monthly charge that went up is AI-16's notice
+  (one notice per series, as agreed for batch 5).
+- `spendingBaselines` (the merchant history, expenses by category, the series'
+  movements) is built once in `AppDataContext`, null with the AI off, and read
+  by Atención and the inspector.
+- Atención: "Gastaste $ 45.000,00 en Farmacity; lo habitual es cerca de
+  $ 7.000,00", with "El 04 oct 2026. Comparado con tus 12 gastos en Farmacity
+  de los 6 meses anteriores: la mitad fue de menos de $ 7.000,00.", for the last
+  `RECENT_DAYS` (7), furthest above the usual first; the X dismisses it
+  (`unusual:<movement id>`).
+- The inspector, under the amount, for any saved expense however old: "Más de
+  lo habitual: en Farmacity solés gastar cerca de $ 7.000,00." with the same
+  reason. `TransactionFields` gained an `amountHint` slot for it.
+
+- [x] Done
 
 ### AI-23 · Pace of the month [13]
 
@@ -1102,7 +1125,46 @@ más de lo habitual" and "superarías el presupuesto de Salidas el 22".
 the same day; projected to month end. Shown as a line on the budget and in the
 month overview; an Atención notice only when the projection crosses a budget.
 
-- [ ] Done
+As built:
+
+- **"If the rest of the month goes as usual", not "at this pace"**, agreed
+  with the user on 2026-10-06: the projection is what was spent so far plus the
+  median of what the previous months spent from tomorrow to their end, rather
+  than what was spent scaled by the days left. A rent paid on the 1st is not
+  multiplied, so the start of a month never reads as a disaster.
+- `typicalMonth.ts` is what this item, AI-24 and AI-25 share: the complete
+  months "usual" is read from (`TYPICAL_MONTHS`, 6, at least
+  `MIN_TYPICAL_MONTHS`, 3, and only months the history covers from their first
+  day, so a month before the user started recording is not a month of nothing
+  spent), each as a day-by-day running total, and the median of any stretch of
+  them. A day past a short month's end is its last.
+- `monthPace.ts`: the pace of a group (a category in a currency, or every
+  expense in one), how far it heads from a usual month (said from
+  `MIN_PACE_CHANGE`, 15%, compared in cents), and the day it would pass a cap:
+  the first day by whose end what was spent plus what usually follows is over
+  it.
+- **A monthly series already seen this month is not still to come**
+  (`settledThisMonth` in `series.ts`): a charge or a salary that came a few
+  days early would otherwise be counted again in "what usually follows". Found
+  while checking AI-25; applies to both.
+- The month card ("Gastos de este mes"): "Si el resto del mes va como siempre,
+  vas a gastar $ 561.250,00, 19,9% más de lo habitual.", only past
+  `MIN_PACE_CHANGE`; the reason says what was spent, what usually follows and
+  the usual month.
+- Each monthly budget not yet passed, when the projection crosses it: "Si el
+  resto del mes va como siempre, superarías el tope el 22." under its bar, and
+  in Atención "Superarías el presupuesto de Salidas el 22", with "Llevás
+  $ 30.000,00 de $ 35.000,00; si el resto del mes va como siempre, llegás a
+  $ 45.000,00.", dismissed for the month (`pace:<budget id>:<YYYY-MM>`). An
+  annual budget has no monthly pace. `budgetPaces` is built once in
+  `AppDataContext`.
+- Priority in Atención, an assumption worth revisiting: late income, budgets
+  about to be passed, rises, unusual spending, then the ledger's notices — the
+  money ones first, a budget while something can still be done about it.
+- `AiNote` now keeps the mark in its own column, so a sentence too long for one
+  line wraps beside it instead of leaving the mark alone on a line.
+
+- [x] Done
 
 ### AI-24 · Suggested budgets [14]
 
@@ -1113,7 +1175,26 @@ categories with steady spending and no budget.
 shows it as a suggestion with `AiMark` and its reason; `BudgetsSection` lists
 the proposals.
 
-- [ ] Done
+As built:
+
+- `budgetSuggestions.ts`: every categorised expense of the months
+  `typicalMonth.ts` reads, totalled by month, category and currency in one pass
+  (`categorySpending`). The suggestion is the median month, rounded up to two
+  significant figures (47.320 → 48.000, `roundBudget`), times 12 for an annual
+  budget; the reason gives the median itself.
+- `BudgetDialog` (create only) fills the amount with it and says "Sugerido por
+  IA" under it, following category, currency and period until the user types
+  an amount of their own; an edited budget is never touched. It takes the
+  suggestion as a function, `suggest`, so the dialog stays free of the app
+  context, and a `draft`.
+- `BudgetsSection`, under the budgets: "Sugeridos por IA", three at a time, for
+  categories spent in every month read, with no budget in that currency and a
+  spread (MAD / median) of at most `MAX_BUDGET_SPREAD` (50%), by currency and
+  biggest first. "Crear" opens "Nuevo presupuesto" with it filled in — like
+  "Actualizar" on a rise, the amount is the user's to adjust — and
+  "Descartar" dismisses it (`budget:<category id>:<currency>`).
+
+- [x] Done
 
 ### AI-25 · End-of-month projection [15]
 
@@ -1124,7 +1205,42 @@ rest of the month (commitments and expected movements), plus the typical
 variable spending still to come, excluding series already counted so nothing
 is subtracted twice. A figure in Resumen with its breakdown on hover.
 
-- [ ] Done
+As built:
+
+- `endOfMonth.ts`: what the accounts in the currency hold today, plus this
+  month's commitments and expected movements still open (`projectCommitments`
+  and `projectExpected` for the current month), plus **what usually comes in
+  and goes out** from tomorrow to the end of the month. Income too, agreed with
+  the user on 2026-10-06: a salary nobody declared as recurring is the biggest
+  movement of most months, and leaving it out made the estimate before payday
+  meaningless.
+- Nothing counted twice: the merchants the user declared (recurring
+  movements, plans, loans — `declaredMerchantIds` in `series.ts`) are read from
+  their declarations and left out of "usual", as are monthly series already
+  seen this month (see AI-23). Transfers move nothing in or out.
+- **In the net-worth row**, agreed the same day: "Fin de mes estimado" next to
+  the pesos and the dollars, in the currency on screen, with `AiMark` and "al
+  31 oct 2026"; the mark's hover lists today's balance, the commitments, the
+  expected movements, what usually comes in and what usually goes out, and
+  where "usual" comes from.
+
+- [x] Done
+
+Checked for the whole batch: every check green, and on a throwaway Vite page
+(removed) served by the running `tauri dev`, mounting the real Resumen, the
+real Presupuestos section and the real inspector with stand-in contexts and six
+months of seeded movements, driven from the in-app browser; nothing was sent to
+the native window. Atención showed "Superarías el presupuesto de Salidas el 22",
+"… de Super el 26" and "Gastaste $ 45.000,00 en Farmacity; lo habitual es cerca
+de $ 7.000,00", each with its detail on hover; dismissing the first brought the
+next one up. "Fin de mes estimado" read $ 3.128.750,00 with its breakdown, which
+adds up; the month card read "… vas a gastar $ 561.250,00, 19,9% más de lo
+habitual.". Presupuestos showed the pace line under both budgets and Vivienda,
+Comida and Farmacia under "Sugeridos por IA"; "Crear" on Comida opened the
+dialog with Comida, Mensual, ARS, 24000 and "Sugerido por IA", and switching to
+Anual made it 290000. The inspector read "Más de lo habitual…" under the amount.
+With the AI off, none of it; the dark theme read well. Not checked: the native
+app, and anything written to a database (the actions were stand-ins).
 
 ---
 

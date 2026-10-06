@@ -37,11 +37,16 @@ interface AiNoteProps {
 // A line under a field saying what the AI did there — "Sugerida por IA", "Se
 // muestra como «Rappi»" — with its mark and its reason. One look for all of
 // them, so the AI always reads the same wherever it speaks.
+//
+// The mark keeps its own column: a sentence too long for one line wraps beside
+// it, rather than dropping below and leaving the mark alone on a line.
 export function AiNote({ reason, children }: AiNoteProps) {
   return (
-    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+    <p className="flex items-start gap-2 text-xs text-muted-foreground">
       <AiMark reason={reason} />
-      {children}
+      <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        {children}
+      </span>
     </p>
   );
 }

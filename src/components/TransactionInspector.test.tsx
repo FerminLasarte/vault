@@ -3,6 +3,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { trainCategoryModel } from "@/lib/ai/categoryModel";
+import { learnMerchantHistory } from "@/lib/ai/merchantHistory";
+import { spendingBaselines, type SpendingBaselines } from "@/lib/ai/unusualSpending";
 import { TransactionInspector } from "./TransactionInspector";
 import type { AppActions, AppData, AppStatus } from "@/context/AppDataContext";
 import type {
@@ -102,11 +104,13 @@ beforeEach(() => {
 function renderInspector(
   transaction: TransactionWithCategory = aTransaction(),
   categoryRules: CategoryRuleWithCategory[] = [],
+  baselines: SpendingBaselines | null = null,
 ) {
   appData.current = {
     categories: CATEGORIES,
     categoryRules,
     categoryModel: trainCategoryModel([]),
+    spendingBaselines: baselines,
     aiEnabled: true,
     tags: [],
     paymentMethods: ACCOUNTS,
@@ -413,5 +417,44 @@ describe("TransactionInspector and a category the AI chose", () => {
       categoryId: 2,
       categorySuggested: false,
     });
+  });
+});
+
+describe("TransactionInspector and an unusual expense", () => {
+  // Five padel courts at 10.000 in the months before, and one at 50.000.
+  const earlier = [
+    "2025-03-01",
+    "2025-03-20",
+    "2025-04-08",
+    "2025-04-27",
+    "2025-05-10",
+  ].map((date, index) =>
+    aTransaction({ id: 20 + index, date, amount: 10000, description: "Cancha" }),
+  );
+
+  function baselinesWith(latest: TransactionWithCategory) {
+    const history = [...earlier, latest];
+    return spendingBaselines(
+      history,
+      CATEGORIES,
+      learnMerchantHistory(history, "2025-05-20"),
+      [],
+    );
+  }
+
+  it("says what is usually spent there, under the amount", () => {
+    const latest = aTransaction({ description: "Cancha" });
+    renderInspector(latest, [], baselinesWith(latest));
+
+    expect(
+      screen.getByText(/Más de lo habitual: en Cancha solés gastar cerca de/),
+    ).toBeTruthy();
+  });
+
+  it("says nothing of an ordinary one", () => {
+    const latest = aTransaction({ description: "Cancha", amount: 11000 });
+    renderInspector(latest, [], baselinesWith(latest));
+
+    expect(screen.queryByText(/Más de lo habitual/)).toBeNull();
   });
 });

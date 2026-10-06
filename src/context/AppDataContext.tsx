@@ -10,7 +10,9 @@ import {
 import { toast } from "sonner";
 import { trainCategoryModel, type CategoryModel } from "@/lib/ai/categoryModel";
 import { learnMerchantHistory, type MerchantHistory } from "@/lib/ai/merchantHistory";
-import { detectSeries, type Series } from "@/lib/ai/series";
+import { detectSeries, settledThisMonth, type Series } from "@/lib/ai/series";
+import { budgetPaces, type BudgetPace } from "@/lib/ai/monthPace";
+import { spendingBaselines, type SpendingBaselines } from "@/lib/ai/unusualSpending";
 import type { LedgerContext } from "@/lib/ai/ledger";
 import {
   DEFAULT_AI_STATE,
@@ -239,6 +241,12 @@ export interface AppData {
   // What repeats on its own — every month, week or year, for about the same
   // amount — read from that same history; null with the local AI switched off.
   series: Series[] | null;
+  // What an expense is held against to tell an unusual one: the merchant's and
+  // the category's earlier expenses; null with the local AI switched off.
+  spendingBaselines: SpendingBaselines | null;
+  // Where each monthly budget is heading this month, by budget id, for its row
+  // and for Atención; null with the local AI switched off.
+  budgetPaces: Map<number, BudgetPace> | null;
   // What the local AI checks the ledger with — for movements recorded twice
   // and transfers split in two — in Atención and on import; null with it off.
   ledger: LedgerContext | null;
@@ -571,6 +579,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [merchantHistory, recurring, installmentPlans, loans, today],
   );
 
+  const baselines = useMemo(
+    () =>
+      merchantHistory === null || series === null
+        ? null
+        : spendingBaselines(transactions, categories, merchantHistory, series),
+    [transactions, categories, merchantHistory, series],
+  );
+
+  const paces = useMemo(
+    () =>
+      series === null
+        ? null
+        : budgetPaces(budgets, transactions, today, settledThisMonth(series, today)),
+    [series, budgets, transactions, today],
+  );
+
   const exchangeRate = useMemo(
     () => exchangeRateHistory.at(-1) ?? null,
     [exchangeRateHistory],
@@ -861,6 +885,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       categoryModel,
       merchantHistory,
       series,
+      spendingBaselines: baselines,
+      budgetPaces: paces,
       ledger,
       today,
       pending,
@@ -891,6 +917,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       categoryModel,
       merchantHistory,
       series,
+      baselines,
+      paces,
       ledger,
       today,
       pending,

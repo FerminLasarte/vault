@@ -37,6 +37,9 @@ interface TransactionFieldsProps {
   // to say which rule matches and offer what to do about it. Null draws
   // nothing.
   categoryHint?: ReactNode;
+  // Drawn under the amount, for the inspector to say when a saved expense is
+  // well above the usual.
+  amountHint?: ReactNode;
   // Whether the local AI is on, which decides whether the merchant name the
   // lists will show is announced under the description.
   aiEnabled: boolean;
@@ -58,6 +61,7 @@ export function TransactionFields({
   tags,
   idPrefix,
   categoryHint,
+  amountHint,
   aiEnabled,
 }: TransactionFieldsProps) {
   const {
@@ -195,6 +199,7 @@ export function TransactionFields({
         {errors.amount && (
           <p className="text-xs text-destructive">{errors.amount.message}</p>
         )}
+        {amountHint}
       </div>
 
       <div className="flex flex-col gap-1.5">

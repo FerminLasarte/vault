@@ -68,6 +68,14 @@ export function daysBetween(fromDate: string, toDate: string): number {
   return Math.round(elapsed / 86_400_000);
 }
 
+// The same day `months` months earlier (later, for a negative count), as
+// "YYYY-MM-DD". A day the target month does not have rolls over, as Date does:
+// a month before 31 March is 3 March.
+export function monthsBefore(isoDate: string, months: number): string {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  return toIsoDate(new Date(year, month - 1 - months, day));
+}
+
 export function todayIsoDate(): string {
   return toIsoDate(new Date());
 }

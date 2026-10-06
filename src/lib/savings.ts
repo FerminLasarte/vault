@@ -1,19 +1,11 @@
 import type { SavingsContribution, SavingsGoalWithNames, Transaction } from "@/db/schema";
 import { calculateAccountBalances, roundToCents } from "@/lib/finance";
-import { daysBetween } from "@/lib/format";
+import { daysBetween, monthsBefore } from "@/lib/format";
 import type { PaymentMethod } from "@/db/schema";
 
 // How far back the pace is measured. Short enough to reflect what the user is
 // doing now, long enough that one unusual month does not dominate it.
 const PACE_WINDOW_MONTHS = 3;
-
-function monthsBefore(isoDate: string, months: number): string {
-  const [year, month, day] = isoDate.split("-").map(Number);
-  const date = new Date(year, month - 1 - months, day);
-  const paddedMonth = String(date.getMonth() + 1).padStart(2, "0");
-  const paddedDay = String(date.getDate()).padStart(2, "0");
-  return `${date.getFullYear()}-${paddedMonth}-${paddedDay}`;
-}
 
 function addMonths(isoDate: string, months: number): string {
   return monthsBefore(isoDate, -months);

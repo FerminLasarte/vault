@@ -1,7 +1,7 @@
 import { merchantKey, merchantName } from "@/lib/ai/merchants";
 import { median } from "@/lib/ai/stats";
 import { words } from "@/lib/ai/tokens";
-import { parseIsoDate, toIsoDate } from "@/lib/format";
+import { monthsBefore } from "@/lib/format";
 import type { CategoryType, Transaction } from "@/db/schema";
 
 // What the user's own history says about each place they spend at or get paid
@@ -65,12 +65,6 @@ export function merchantEntryId(
   currency: string,
 ): string {
   return `${type}:${currency}:${key}`;
-}
-
-function monthsBefore(today: string, months: number): string {
-  const date = parseIsoDate(today);
-  date.setMonth(date.getMonth() - months);
-  return toIsoDate(date);
 }
 
 interface Tally {
@@ -165,13 +159,34 @@ export function learnMerchantHistory(
 }
 
 // The history of the merchant a movement is at, in its own kind and currency.
+// The id of the entry a movement belongs to, whether or not the history has
+// one; null for a description with no merchant in it.
+export function merchantIdOf(movement: {
+  description: string;
+  type: CategoryType;
+  currency: string;
+}): string | null {
+  const key = merchantKey(movement.description);
+  return key === "" ? null : merchantEntryId(key, movement.type, movement.currency);
+}
+
+// Whether a movement comes from one of these merchants, given as entry ids.
+export function isFrom(movement: Transaction, merchants: ReadonlySet<string>): boolean {
+  if (merchants.size === 0 || movement.type === "transfer") return false;
+  const id = merchantIdOf({
+    description: movement.description,
+    type: movement.type,
+    currency: movement.currency,
+  });
+  return id !== null && merchants.has(id);
+}
+
 export function findMerchant(
   history: MerchantHistory,
   movement: { description: string; type: CategoryType; currency: string },
 ): MerchantEntry | null {
-  const key = merchantKey(movement.description);
-  if (key === "") return null;
-  return history.get(merchantEntryId(key, movement.type, movement.currency)) ?? null;
+  const id = merchantIdOf(movement);
+  return id === null ? null : (history.get(id) ?? null);
 }
 
 // Why an account was assumed: "En los últimos 6 meses, 9 de tus 10 movimientos

@@ -1,4 +1,5 @@
-import { Controller } from "react-hook-form";
+import { useEffect } from "react";
+import { Controller, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { FormDialog } from "@/components/FormDialog";
 import { useDialogForm } from "@/hooks/useDialogForm";
@@ -14,7 +15,9 @@ import {
 import { CURRENCY_CODES } from "@/lib/currency";
 import { BUDGET_PERIODS, BUDGET_PERIOD_LABELS } from "@/lib/labels";
 import { idSelectProps } from "@/lib/forms";
-import type { BudgetWithCategory, Category, NewBudget } from "@/db";
+import { AiNote } from "@/components/AiMark";
+import type { BudgetSuggestion } from "@/lib/ai/budgetSuggestions";
+import type { BudgetPeriod, BudgetWithCategory, Category, NewBudget } from "@/db";
 
 const budgetSchema = z.object({
   categoryId: z.coerce.number().int().positive("Seleccioná una categoría"),
@@ -31,7 +34,15 @@ interface BudgetDialogProps {
   onOpenChange: (open: boolean) => void;
   // `null` puts the dialog in create mode.
   editing: BudgetWithCategory | null;
+  // What a new budget opens with, when it comes from a proposal.
+  draft?: NewBudget | null;
   categories: Category[];
+  // What the local AI would start a new budget at; left out with it off.
+  suggest?: (
+    categoryId: number,
+    currency: string,
+    period: BudgetPeriod,
+  ) => BudgetSuggestion | null;
   onSubmitBudget: (budget: NewBudget) => Promise<void>;
 }
 
@@ -39,13 +50,17 @@ export function BudgetDialog({
   open,
   onOpenChange,
   editing,
+  draft = null,
   categories,
+  suggest,
   onSubmitBudget,
 }: BudgetDialogProps) {
   const {
     control,
     register,
     handleSubmit,
+    setValue,
+    getFieldState,
     formState: { errors, isSubmitting },
   } = useDialogForm<BudgetFormInput, BudgetFormValues>({
     schema: budgetSchema,
@@ -63,13 +78,30 @@ export function BudgetDialog({
           amount: editing.amount,
           period: editing.period,
         }
-      : {
+      : (draft ?? {
           categoryId: categories[0]?.id,
           currency: CURRENCY_CODES[0],
           amount: 0,
           period: "monthly",
-        },
+        }),
   });
+
+  // A new budget starts at what is usually spent in the category, until the
+  // user types an amount of their own. Never an edited one: its cap is theirs.
+  const [categoryId, currency, period, amount] = useWatch({
+    control,
+    name: ["categoryId", "currency", "period", "amount"],
+  });
+  const suggestion =
+    editing === null && suggest !== undefined && typeof categoryId === "number"
+      ? suggest(categoryId, currency, period)
+      : null;
+  const suggestedAmount = suggestion?.amount ?? null;
+
+  useEffect(() => {
+    if (!open || editing !== null || getFieldState("amount").isDirty) return;
+    setValue("amount", suggestedAmount ?? 0);
+  }, [open, editing, suggestedAmount, getFieldState, setValue]);
 
   async function onSubmit(values: BudgetFormValues) {
     await onSubmitBudget(values);
@@ -182,6 +214,9 @@ export function BudgetDialog({
         />
         {errors.amount && (
           <p className="text-xs text-destructive">{errors.amount.message}</p>
+        )}
+        {suggestion !== null && Number(amount) === suggestion.amount && (
+          <AiNote reason={suggestion.reason}>Sugerido por IA</AiNote>
         )}
       </div>
     </FormDialog>
