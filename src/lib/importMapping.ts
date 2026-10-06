@@ -14,7 +14,7 @@ import {
   type StatementRow,
   type StatementTransfer,
 } from "@/lib/ai/statementLedger";
-import { normalizeForSearch as normalize } from "@/lib/text";
+import { heldCopies } from "@/lib/importDuplicates";
 import type { ImportContext, ImportPlan, ImportSkip } from "@/lib/csv";
 import type { CommitmentStep, TransferJoin } from "@/db";
 import type { NewTransaction, PaymentMethod } from "@/db/schema";
@@ -191,18 +191,6 @@ function readAmount(
   return { amount: Math.abs(value), type: isExpense ? "expense" : "income" };
 }
 
-// Same identity the fixed-format importer uses, so a statement row and a row
-// exported by the app collide when they describe the same movement.
-function duplicateKey(transaction: NewTransaction): string {
-  return [
-    transaction.date,
-    transaction.type,
-    transaction.amount,
-    transaction.currency,
-    normalize(transaction.description),
-  ].join("|");
-}
-
 // Empties the mapping's account unless it is one of `accounts` and holds the
 // mapping's currency: after the currency changes, and when a remembered mapping
 // comes back after its account was deleted or moved to another currency.
@@ -297,21 +285,7 @@ export function buildMappedImportPlan(
   const skipped: ImportSkip[] = [];
   let duplicates = 0;
 
-  // How many of each movement the app already holds. A row is skipped only
-  // while the file has not yet brought more of it than that: re-importing an
-  // overlapping statement skips what came in last time, but two identical
-  // fares on the same day are two fares.
-  const alreadyHeld = new Map<string, number>();
-  for (const transaction of context.existing) {
-    const key = [
-      transaction.date,
-      transaction.type,
-      transaction.amount,
-      transaction.currency,
-      normalize(transaction.description),
-    ].join("|");
-    alreadyHeld.set(key, (alreadyHeld.get(key) ?? 0) + 1);
-  }
+  const isHeld = heldCopies(context.existing);
 
   for (let index = mapping.headerRow + 1; index < rows.length; index++) {
     const row = rows[index];
@@ -364,10 +338,7 @@ export function buildMappedImportPlan(
       transaction.date = installmentRowDate(date, installment.number, dates);
     }
 
-    const key = duplicateKey(transaction);
-    const held = alreadyHeld.get(key) ?? 0;
-    if (held > 0) {
-      alreadyHeld.set(key, held - 1);
+    if (isHeld(transaction)) {
       duplicates++;
       continue;
     }
