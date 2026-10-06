@@ -46,6 +46,15 @@ describe("DuplicateDialog", () => {
     expect(second).toBeEnabled();
   });
 
+  // A hand-typed "Uber" and the bank's "UBER *TRIP HELP.UBER.COM" both read
+  // "Uber": what the bank wrote is what tells them apart.
+  it("shows what the bank wrote under a cleaned name, and nothing more otherwise", () => {
+    render(<DuplicateDialog pair={PAIR} onClose={() => {}} />);
+
+    expect(screen.getByText("MERPAGO*RAPPI 4471")).toBeInTheDocument();
+    expect(screen.getAllByText("rappi")).toHaveLength(1);
+  });
+
   it("deletes the one picked and closes", async () => {
     const onClose = vi.fn();
     render(<DuplicateDialog pair={PAIR} onClose={onClose} />);
