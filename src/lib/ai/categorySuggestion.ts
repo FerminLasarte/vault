@@ -42,6 +42,7 @@ function learnedReason(
   categoryName: string,
 ): string {
   const { word, inCategory, total } = evidence;
+  if (total === 1) return `Tu único movimiento con «${word}» está en ${categoryName}.`;
   return inCategory === total
     ? `Tus ${total} movimientos con «${word}» están en ${categoryName}.`
     : `${inCategory} de tus ${total} movimientos con «${word}» están en ${categoryName}.`;

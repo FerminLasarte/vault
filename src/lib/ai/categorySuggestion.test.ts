@@ -72,6 +72,20 @@ describe("suggestCategory", () => {
     });
   });
 
+  // A reason resting on a single movement says so.
+  it("says when there is only one movement to go by", () => {
+    const suggestion = suggestCategory(expense("GLUCK BAR"), {
+      rules: [],
+      categories: CATEGORIES,
+      model: trainCategoryModel(history(1, "gluck", 5)),
+    });
+
+    expect(suggestion).toMatchObject({
+      categoryId: 5,
+      reason: "Tu único movimiento con «gluck» está en Ocio.",
+    });
+  });
+
   // With nothing learned yet, a merchant everyone knows still says something
   // about where it goes — in the user's own categories, or nowhere.
   describe("with no history to go by", () => {
