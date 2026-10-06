@@ -65,3 +65,17 @@ export function expectedInWindow(
 
   return { income, expenses };
 }
+
+// The movements expected ones were confirmed into: each declared by the user as
+// the income or expense it is.
+export function confirmedTransactionIds(
+  movements: readonly ExpectedMovementWithNames[],
+): Set<number> {
+  const ids = new Set<number>();
+  for (const movement of movements) {
+    if (movement.status === "confirmed" && movement.transaction_id !== null) {
+      ids.add(movement.transaction_id);
+    }
+  }
+  return ids;
+}

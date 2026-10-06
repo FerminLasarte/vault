@@ -26,6 +26,7 @@ import type {
   RecurringTransaction,
   RecurringTransactionWithNames,
   Tag,
+  Transaction,
   TransactionWithCategory,
 } from "./schema";
 
@@ -316,7 +317,10 @@ function commitmentTransactionStatements(transaction: NewTransaction): BatchStat
   ];
 }
 
-function insertTransactionStatement(transaction: NewTransaction): BatchStatement {
+// Always with its values, so a statement built on it can add to them.
+type ValuedStatement = BatchStatement & { values: unknown[] };
+
+function insertTransactionStatement(transaction: NewTransaction): ValuedStatement {
   return {
     query: `INSERT INTO transactions
               (amount, type, category_id, payment_method_id, destination_payment_method_id,
@@ -340,7 +344,7 @@ function insertTransactionStatement(transaction: NewTransaction): BatchStatement
 function updateTransactionStatement(
   id: number,
   transaction: NewTransaction,
-): BatchStatement {
+): ValuedStatement {
   return {
     query: `UPDATE transactions
             SET amount = $1,
@@ -409,6 +413,97 @@ export async function categoriseTransactions(
       expectChanges: ids.length,
     },
   ]);
+}
+
+// The transfer a split pair was: one of its halves rewritten as it, kept only
+// while that half is still what the suggestion was worked out from.
+export interface TransferJoin {
+  kept: Transaction;
+  transfer: NewTransaction;
+}
+
+function joinStatement({ kept, transfer }: TransferJoin): BatchStatement {
+  const update = updateTransactionStatement(kept.id, transfer);
+  return {
+    query: `${update.query}
+              AND type = $12 AND amount = $13 AND date = $14
+              AND payment_method_id IS $15`,
+    values: [...update.values, kept.type, kept.amount, kept.date, kept.payment_method_id],
+    expectChanges: 1,
+  };
+}
+
+// Deletes a movement nothing else hangs on — no tags, no attachments, no
+// expected movement confirmed into it — and fails if anything does by now: only
+// such a movement can be put back whole by an undo.
+function deleteBareTransactionStatement(id: number): BatchStatement {
+  return {
+    query: `DELETE FROM transactions
+            WHERE id = $1
+              AND NOT EXISTS (SELECT 1 FROM transaction_tags WHERE transaction_id = $1)
+              AND NOT EXISTS (SELECT 1 FROM attachments WHERE transaction_id = $1)
+              AND NOT EXISTS (SELECT 1 FROM expected_movements WHERE transaction_id = $1)`,
+    values: [id],
+    expectChanges: 1,
+  };
+}
+
+// Puts a deleted movement back under its own id, which AUTOINCREMENT never
+// hands out again.
+function restoreTransactionStatement(transaction: Transaction): BatchStatement {
+  const { values } = insertTransactionStatement(storedAsNew(transaction));
+  return {
+    query: `INSERT INTO transactions
+              (amount, type, category_id, payment_method_id, destination_payment_method_id,
+               destination_amount, description, date, currency, category_suggested, id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+    values: [...values, transaction.id],
+  };
+}
+
+function storedAsNew(transaction: Transaction): NewTransaction {
+  return {
+    amount: transaction.amount,
+    type: transaction.type,
+    categoryId: transaction.category_id,
+    paymentMethodId: transaction.payment_method_id,
+    destinationPaymentMethodId: transaction.destination_payment_method_id,
+    destinationAmount: transaction.destination_amount,
+    description: transaction.description,
+    date: transaction.date,
+    currency: transaction.currency,
+    categorySuggested: transaction.category_suggested === 1,
+  };
+}
+
+// Joins the two halves of a transfer: one becomes the transfer, the other is
+// deleted, in one write. The undo puts both back as they were, while the
+// transfer is still the one this wrote.
+export async function joinTransfer(
+  join: TransferJoin,
+  removed: Transaction,
+): Promise<Undo> {
+  const db = await getDb();
+  await db.batch([joinStatement(join), deleteBareTransactionStatement(removed.id)]);
+
+  const { kept, transfer } = join;
+  const back = updateTransactionStatement(kept.id, storedAsNew(kept));
+  return undoing([
+    {
+      query: `${back.query} AND type = 'transfer' AND amount = $12 AND date = $13`,
+      values: [...back.values, transfer.amount, transfer.date],
+      expectChanges: 1,
+    },
+    restoreTransactionStatement(removed),
+  ]);
+}
+
+// Deletes one of two movements that are the same one, with an undo that puts it
+// back under its own id.
+export async function deleteDuplicate(transaction: Transaction): Promise<Undo> {
+  const db = await getDb();
+  await db.batch([deleteBareTransactionStatement(transaction.id)]);
+  return undoing([restoreTransactionStatement(transaction)]);
 }
 
 export async function updateTransaction(
@@ -1688,14 +1783,16 @@ export async function deleteCategoryRule(id: number): Promise<void> {
 // a single transaction, with the existing tags read once. All or nothing — a
 // file that fails partway leaves no half of itself behind to be told apart
 // from the rest, and importing it again after the fix starts from clean.
-// Writes an import in one go: every row, and the instalments of a statement
-// registered in their plans exactly as "Registrar" registers them. All of it,
-// or nothing.
+// Writes an import in one go: every row, the instalments of a statement
+// registered in their plans exactly as "Registrar" registers them, and the
+// movements already held that a row completes into a transfer (see
+// joinTransfer). All of it, or nothing.
 export async function insertTransactions(
   entries: { transaction: NewTransaction; tags: string[] }[],
   steps: CommitmentStep[] = [],
+  joins: TransferJoin[] = [],
 ): Promise<void> {
-  if (entries.length === 0 && steps.length === 0) return;
+  if (entries.length === 0 && steps.length === 0 && joins.length === 0) return;
 
   const db = await getDb();
   const known: KnownTags = entries.some((entry) => entry.tags.length > 0)
@@ -1710,7 +1807,10 @@ export async function insertTransactions(
       ...linkTagStatements(insertedIdOf(at), entry.tags, known),
     );
   }
-  statements.push(...(await stepStatements(steps)).statements);
+  statements.push(
+    ...(await stepStatements(steps)).statements,
+    ...joins.map(joinStatement),
+  );
   await db.batch(statements);
 }
 

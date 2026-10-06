@@ -95,6 +95,7 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
     categoryModel,
     aiEnabled,
     installmentPlans,
+    ledger,
     paymentMethods,
     exchangeRateHistory,
     lastBackupAt,
@@ -105,6 +106,7 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
   const {
     importTransactions,
     addInstallmentPlan,
+    dismissAiSuggestions,
     backfillExchangeRates,
     recordBackup,
     setRateType,
@@ -134,6 +136,7 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
       categoryRules,
       categoryModel,
       installmentPlans: aiEnabled ? installmentPlans : null,
+      ledger,
       accounts: paymentMethods,
       existing: transactions,
       supportedCurrencies: CURRENCY_CODES,
@@ -144,6 +147,7 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
       categoryModel,
       aiEnabled,
       installmentPlans,
+      ledger,
       paymentMethods,
       transactions,
     ],
@@ -249,9 +253,12 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
   }
 
   async function handleConfirmStatement(plan: StatementPlan) {
-    if (plan.ready.length > 0 || plan.steps.length > 0) {
-      await importTransactions(plan.ready, plan.steps);
+    if (plan.ready.length > 0 || plan.steps.length > 0 || plan.joins.length > 0) {
+      await importTransactions(plan.ready, plan.steps, plan.joins);
     }
+    // Only once the rows are in: a "no" said about a preview that was then
+    // cancelled was never said.
+    if (plan.dismissals.length > 0) await dismissAiSuggestions(plan.dismissals);
 
     if (statement !== null) {
       const profiles = parseProfiles(await getSetting(IMPORT_PROFILES));
@@ -268,7 +275,7 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
     }
 
     setOutcome({
-      imported: plan.ready.length + plan.steps.length,
+      imported: plan.ready.length + plan.steps.length + plan.joins.length,
       duplicates: plan.duplicates,
       skipped: plan.skipped,
     });

@@ -8,6 +8,10 @@ import type { BackupStatus } from "@/lib/backupReminder";
 import type { BudgetProgress } from "@/lib/finance";
 import type { RecurrenceFrequency } from "@/lib/recurring";
 import type { LateIncome } from "@/lib/ai/lateIncome";
+import { merchantName } from "@/lib/ai/merchants";
+import type { NearDuplicate } from "@/lib/ai/nearDuplicates";
+import type { SplitTransfer } from "@/lib/ai/splitTransfers";
+import type { TransactionWithCategory } from "@/db/schema";
 import { RISE_BASELINE, type PriceRise } from "@/lib/ai/priceRises";
 import type { UnregisteredSeries } from "@/lib/ai/unregisteredSeries";
 
@@ -28,6 +32,8 @@ export type AttentionKind =
   | "pending"
   | "late"
   | "rise"
+  | "duplicate"
+  | "transfer"
   | "suggested"
   | "uncategorised"
   | "unregistered"
@@ -178,6 +184,41 @@ function riseItem(rise: PriceRise, canAdd: boolean): AttentionItem {
   };
 }
 
+// Two movements that look like the same one. Named after what is not a
+// transfer, which is what has a merchant, by its clean name when one has it.
+function duplicateItem(pair: NearDuplicate<TransactionWithCategory>): AttentionItem {
+  const movements = pair.movements.filter((movement) => movement.type !== "transfer");
+  const named = movements[0] ?? pair.movements[0];
+  const name =
+    movements.map((movement) => merchantName(movement.description)).find(Boolean) ??
+    named.description;
+  return {
+    key: pair.id,
+    kind: "duplicate",
+    tone: "neutral",
+    title: `Posible duplicado: ${name} por ${formatCurrency(named.amount, named.currency)}`,
+    detail: `${pair.reason} Revisalos y eliminá el que sobra.`,
+    actionLabel: "Revisar",
+    dismissalId: pair.id,
+  };
+}
+
+// An expense and an income that are one transfer between two of the user's
+// accounts, counted twice until joined.
+function transferItem(offer: SplitTransfer<TransactionWithCategory>): AttentionItem {
+  const from = offer.outgoing.payment_method_name ?? "una cuenta";
+  const to = offer.incoming.payment_method_name ?? "otra";
+  return {
+    key: offer.id,
+    kind: "transfer",
+    tone: "neutral",
+    title: `Parece una transferencia de ${from} a ${to}`,
+    detail: `${offer.reason} Unidos, no cuentan como gasto ni como ingreso.`,
+    actionLabel: "Unir",
+    dismissalId: offer.id,
+  };
+}
+
 const EVERY: Record<RecurrenceFrequency, string> = {
   weekly: "todas las semanas",
   monthly: "todos los meses",
@@ -232,12 +273,16 @@ export function buildAttentionItems(sources: {
   lateIncome: LateIncome[];
   rises: PriceRise[];
   unregistered: UnregisteredSeries[];
+  // Movements the AI read as recorded twice, or as one transfer split in two;
+  // empty with it switched off.
+  duplicates: NearDuplicate<TransactionWithCategory>[];
+  transfers: SplitTransfer<TransactionWithCategory>[];
   // The month whose close is ready and unseen, or null when there is none.
   pendingClose: string | null;
 }): AttentionItem[] {
-  // Money missing and money spent beyond the usual first; then what the AI
-  // already wrote, before what it could write; and last what would only save
-  // typing.
+  // Money missing and money spent beyond the usual first; then totals that
+  // count something twice; then what the AI already wrote, before what it
+  // could write; and last what would only save typing.
   //
   // One notice per series: while it has gone up, the rise speaks for it and
   // carries the offer to add it, and "Parece que pagás…" waits.
@@ -246,6 +291,8 @@ export function buildAttentionItems(sources: {
   const ai = [
     ...sources.lateIncome.map(lateIncomeItem),
     ...sources.rises.map((rise) => riseItem(rise, addable.has(rise.series.id))),
+    ...sources.duplicates.map(duplicateItem),
+    ...sources.transfers.map(transferItem),
     suggestedItem(sources.suggestedCount),
     ...sources.uncategorised.map(uncategorisedItem),
     ...sources.unregistered

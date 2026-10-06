@@ -5,6 +5,9 @@ import { MAX_AI_NOTICES, buildAttentionItems } from "@/lib/attention";
 import { lateIncome } from "@/lib/ai/lateIncome";
 import { priceRises } from "@/lib/ai/priceRises";
 import { unregisteredSeries } from "@/lib/ai/unregisteredSeries";
+import { nearDuplicates } from "@/lib/ai/nearDuplicates";
+import { splitTransfers } from "@/lib/ai/splitTransfers";
+import { LEDGER, TODAY as LEDGER_TODAY, WALLET, held } from "@/lib/ai/testing/ledger";
 import {
   MONTHLY,
   NOTHING_DECLARED,
@@ -44,6 +47,8 @@ const CALM = {
   lateIncome: [],
   rises: [],
   unregistered: [],
+  duplicates: [],
+  transfers: [],
   pendingClose: null,
 };
 
@@ -116,6 +121,8 @@ describe("buildAttentionItems", () => {
       lateIncome: [],
       rises: [],
       unregistered: [],
+      duplicates: [],
+      transfers: [],
       pendingClose: "2026-07",
     });
 
@@ -373,5 +380,74 @@ describe("notices about repeating movements", () => {
         "series:expense:ARS:spotify:monthly",
       ]);
     });
+  });
+});
+
+// Totals that count something twice: a movement recorded twice, and a transfer
+// that came in as an expense and an income.
+describe("the ledger's notices", () => {
+  const NBSP = " ";
+  const typed = held({ description: "rappi", amount: 10250, date: "2026-10-01" });
+  const imported = held({
+    description: "MERPAGO*RAPPI 4471",
+    amount: 10250,
+    date: "2026-10-02",
+  });
+  const outgoing = held({ description: "TRANSF A MP", date: "2026-10-03" });
+  const incoming = held({
+    type: "income",
+    description: "Transferencia recibida",
+    payment_method_id: WALLET,
+    payment_method_name: "Mercado Pago",
+    date: "2026-10-03",
+  });
+
+  function ledgerItems() {
+    return buildAttentionItems({
+      ...CALM,
+      duplicates: nearDuplicates([typed, imported], LEDGER, LEDGER_TODAY),
+      transfers: splitTransfers([outgoing, incoming], LEDGER, LEDGER_TODAY),
+    });
+  }
+
+  it("names a possible duplicate and offers to review it", () => {
+    const [duplicate] = ledgerItems();
+
+    expect(duplicate).toMatchObject({
+      kind: "duplicate",
+      title: `Posible duplicado: Rappi por $${NBSP}10.250,00`,
+      detail: `Dos gastos de $${NBSP}10.250,00 en la misma cuenta, con un día de diferencia, los dos de «Rappi». Revisalos y eliminá el que sobra.`,
+      actionLabel: "Revisar",
+    });
+    expect(duplicate.dismissalId).toBe(duplicate.key);
+  });
+
+  it("names the accounts of a split transfer and offers to join it", () => {
+    const [, transfer] = ledgerItems();
+
+    expect(transfer).toMatchObject({
+      kind: "transfer",
+      title: "Parece una transferencia de Banco a Mercado Pago",
+      detail: `Un gasto y un ingreso de $${NBSP}50.000,00 el mismo día, en dos de tus cuentas. Unidos, no cuentan como gasto ni como ingreso.`,
+      actionLabel: "Unir",
+    });
+    expect(transfer.dismissalId).toBe(transfer.key);
+  });
+
+  it("comes after money missing or spent, before what the AI wrote", () => {
+    const items = buildAttentionItems({
+      ...CALM,
+      suggestedCount: 2,
+      rises: priceRises(
+        detect(
+          chargesOf("DLO*NETFLIX", ["2026-06-10", ...MONTHLY], [5000, 5000, 5000, 5900]),
+        ),
+        () => false,
+      ),
+      duplicates: nearDuplicates([typed, imported], LEDGER, LEDGER_TODAY),
+      transfers: splitTransfers([outgoing, incoming], LEDGER, LEDGER_TODAY),
+    });
+
+    expect(items.map((item) => item.kind)).toEqual(["rise", "duplicate", "transfer"]);
   });
 });

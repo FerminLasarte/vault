@@ -7,9 +7,16 @@ import {
   type InstallmentLine,
   type StatementInstallmentRow,
 } from "@/lib/ai/statementInstallments";
+import {
+  duplicateFinder,
+  statementTransfers,
+  type StatementDuplicate,
+  type StatementRow,
+  type StatementTransfer,
+} from "@/lib/ai/statementLedger";
 import { normalizeForSearch as normalize } from "@/lib/text";
 import type { ImportContext, ImportPlan, ImportSkip } from "@/lib/csv";
-import type { CommitmentStep } from "@/db";
+import type { CommitmentStep, TransferJoin } from "@/db";
 import type { NewTransaction, PaymentMethod } from "@/db/schema";
 
 // How the amount is laid out in the file.
@@ -225,15 +232,40 @@ export interface StatementPlan extends ImportPlan {
   // Instalments the user's plans are waiting for, registered in them by the
   // same write that imports the rest (see insertTransactions).
   steps: CommitmentStep[];
+  // Movements already held that a row completes into a transfer, rewritten
+  // as it by that same write; the row itself is not imported.
+  joins: TransferJoin[];
   // Every row that is an instalment and what the import does with it, in the
   // file's order. Empty with the AI off.
   installments: InstallmentLine[];
+  // Rows that seem to repeat a movement already held, and rows that are the
+  // other half of a transfer, in the file's order. Empty with the AI off.
+  nearDuplicates: StatementDuplicate[];
+  transfers: StatementTransfer[];
+  // The AI's suggestions the user turned down in the preview, to be dismissed
+  // once the import is written, so Atención does not ask again.
+  dismissals: string[];
   // The statement has instalments past the first and nobody said yet which
   // date they carry: nothing can be imported until someone does.
   needsInstallmentDates: boolean;
 }
 
+// What the user decided in the preview, by line: instalments that are not
+// their plan's, rows that are not a transfer, and possible duplicates to
+// import anyway.
+export interface StatementChoices {
+  separate: ReadonlySet<number>;
+  apart: ReadonlySet<number>;
+  anyway: ReadonlySet<number>;
+}
+
 const NO_LINES: ReadonlySet<number> = new Set();
+
+export const NO_CHOICES: StatementChoices = {
+  separate: NO_LINES,
+  apart: NO_LINES,
+  anyway: NO_LINES,
+};
 
 // Turns the rows of a bank statement into transactions, using the columns the
 // user pointed at.
@@ -241,18 +273,27 @@ const NO_LINES: ReadonlySet<number> = new Set();
 // Reuses the category suggestions (the rules, then the local AI) and the
 // duplicate detection that the app's own CSV import already relies on, so a
 // statement lands classified the same way a hand-made file would. With the AI
-// on, a row that is an instalment is matched against the user's plans.
+// on, a row that is an instalment is matched against the user's plans, and the
+// rest against the history: a movement it repeats, or the half of a transfer
+// it completes.
 export function buildMappedImportPlan(
   rows: string[][],
   mapping: ColumnMapping,
   context: ImportContext,
-  // Instalment rows the user said are not their plan's, by line.
-  separate: ReadonlySet<number> = NO_LINES,
+  choices: Partial<StatementChoices> = NO_CHOICES,
 ): StatementPlan {
+  const separate = choices.separate ?? NO_LINES;
+  const apart = choices.apart ?? NO_LINES;
+  const anyway = choices.anyway ?? NO_LINES;
   const plans = context.installmentPlans ?? null;
+  const ledger = context.ledger ?? null;
+  const findDuplicate =
+    ledger === null ? null : duplicateFinder(context.existing, ledger);
   const dates = mapping.installmentDates ?? "charge";
-  const accepted: { transaction: NewTransaction; line: number }[] = [];
+  const accepted: StatementRow[] = [];
   const installmentRows: StatementInstallmentRow[] = [];
+  const nearDuplicates: StatementDuplicate[] = [];
+  const dismissals: string[] = [];
   const skipped: ImportSkip[] = [];
   let duplicates = 0;
 
@@ -331,22 +372,58 @@ export function buildMappedImportPlan(
       continue;
     }
 
-    accepted.push({ transaction, line });
     if (installment !== null) {
+      accepted.push({ transaction, line });
       installmentRows.push({ line, writtenDate: date, installment, transaction });
+      continue;
     }
+
+    // An instalment is its plan's business; anything else may repeat a
+    // movement typed before the statement arrived.
+    const duplicate = findDuplicate?.(transaction) ?? null;
+    if (duplicate !== null) {
+      const imported = anyway.has(line);
+      nearDuplicates.push({ ...duplicate, line, imported });
+      if (!imported) continue;
+      dismissals.push(duplicate.id);
+    }
+    accepted.push({ transaction, line });
   }
 
   const installments =
     plans === null ? [] : matchInstallments(installmentRows, plans, dates, separate);
   const steps: CommitmentStep[] = [];
-  // Rows a plan registers or already has are not imported on their own.
+  // Rows a plan registers or already has, or a transfer takes, are not
+  // imported on their own.
   const settled = new Set<number>();
   for (const entry of installments) {
     if (entry.kind === "registers") steps.push(entry.step);
     if (entry.kind === "registered") duplicates++;
     if (entry.kind === "registers" || entry.kind === "registered")
       settled.add(entry.line);
+  }
+
+  // Only rows that are plainly themselves can be half of a transfer.
+  const flagged = new Set([
+    ...installmentRows.map((row) => row.line),
+    ...nearDuplicates.map((row) => row.line),
+  ]);
+  const transfers =
+    ledger === null
+      ? []
+      : statementTransfers(
+          accepted.filter((row) => !flagged.has(row.line)),
+          context.existing,
+          ledger,
+        ).map((transfer) => ({ ...transfer, joined: !apart.has(transfer.line) }));
+  const joins: TransferJoin[] = [];
+  for (const transfer of transfers) {
+    if (transfer.joined) {
+      joins.push(transfer.join);
+      settled.add(transfer.line);
+    } else {
+      dismissals.push(transfer.id);
+    }
   }
 
   return {
@@ -356,7 +433,11 @@ export function buildMappedImportPlan(
     skipped,
     duplicates,
     steps,
+    joins,
     installments,
+    nearDuplicates,
+    transfers,
+    dismissals,
     needsInstallmentDates:
       mapping.installmentDates == null &&
       installmentRows.some((row) => row.installment.number > 1),

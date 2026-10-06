@@ -3,6 +3,7 @@ import { createTestDatabase } from "./testing/database";
 import {
   categoriseTransactions,
   confirmExpectedMovement,
+  deleteDuplicate,
   deletePaymentMethod,
   deleteTransaction,
   dismissExpectedMovement,
@@ -20,6 +21,7 @@ import {
   insertPaymentMethod,
   insertRecurringTransaction,
   insertTransactions,
+  joinTransfer,
   listAttachments,
   listCategories,
   listExchangeRates,
@@ -1754,5 +1756,144 @@ describe("categorising several movements at once", () => {
       null,
       salida.id,
     ]);
+  });
+});
+
+describe("ledger hygiene", () => {
+  async function stored(id: number) {
+    const rows = await listTransactionsWithCategory();
+    return rows.find((row) => row.id === id) ?? null;
+  }
+
+  async function twoHalves() {
+    const bank = await anAccount("Banco");
+    const wallet = await anAccount("Mercado Pago");
+    const comida = await anExpenseCategory();
+    const outId = await insertTransaction(
+      anExpense({
+        description: "TRANSF A MP",
+        amount: 50000,
+        paymentMethodId: bank.id,
+        categoryId: comida.id,
+        categorySuggested: true,
+      }),
+    );
+    const inId = await insertTransaction(
+      anExpense({
+        type: "income",
+        description: "Transferencia recibida",
+        amount: 50000,
+        paymentMethodId: wallet.id,
+      }),
+    );
+    const outgoing = (await stored(outId))!;
+    const incoming = (await stored(inId))!;
+    const transfer: NewTransaction = {
+      amount: 50000,
+      type: "transfer",
+      categoryId: null,
+      paymentMethodId: bank.id,
+      destinationPaymentMethodId: wallet.id,
+      destinationAmount: 50000,
+      description: "TRANSF A MP",
+      date: outgoing.date,
+      currency: "ARS",
+    };
+    return { outgoing, incoming, transfer, bank, wallet };
+  }
+
+  describe("joining the halves of a transfer", () => {
+    it("rewrites one as the transfer and deletes the other, in one write", async () => {
+      const { outgoing, incoming, transfer, wallet } = await twoHalves();
+
+      await joinTransfer({ kept: outgoing, transfer }, incoming);
+
+      expect(await stored(incoming.id)).toBeNull();
+      expect(await stored(outgoing.id)).toMatchObject({
+        type: "transfer",
+        category_id: null,
+        category_suggested: 0,
+        destination_payment_method_id: wallet.id,
+        destination_amount: 50000,
+      });
+    });
+
+    it("puts both back as they were with its undo", async () => {
+      const { outgoing, incoming, transfer } = await twoHalves();
+
+      const undo = await joinTransfer({ kept: outgoing, transfer }, incoming);
+      await undo();
+
+      expect(await stored(outgoing.id)).toEqual(outgoing);
+      expect(await stored(incoming.id)).toEqual(incoming);
+    });
+
+    // The suggestion was worked out from the movement as it was.
+    it("writes nothing when the kept half changed since", async () => {
+      const { outgoing, incoming, transfer } = await twoHalves();
+      await db.execute("UPDATE transactions SET amount = 1 WHERE id = $1", [outgoing.id]);
+
+      await expect(
+        joinTransfer({ kept: outgoing, transfer }, incoming),
+      ).rejects.toThrow();
+      expect(await stored(incoming.id)).not.toBeNull();
+    });
+
+    // Its undo could not bring a tag back.
+    it("writes nothing when the deleted half has a tag by now", async () => {
+      const { outgoing, incoming, transfer } = await twoHalves();
+      await setTransactionTags(incoming.id, ["viaje"]);
+
+      await expect(
+        joinTransfer({ kept: outgoing, transfer }, incoming),
+      ).rejects.toThrow();
+      expect((await stored(outgoing.id))?.type).toBe("expense");
+    });
+
+    it("is part of an import's write", async () => {
+      const { outgoing, incoming, transfer } = await twoHalves();
+
+      await insertTransactions(
+        [{ transaction: anExpense({ description: "Café" }), tags: [] }],
+        [],
+        [
+          {
+            kept: incoming,
+            transfer: { ...transfer, description: incoming.description },
+          },
+        ],
+      );
+
+      expect((await stored(incoming.id))?.type).toBe("transfer");
+      expect((await stored(outgoing.id))?.type).toBe("expense");
+      expect(await listTransactionsWithCategory()).toHaveLength(3);
+    });
+  });
+
+  describe("deleting a duplicate", () => {
+    it("deletes it, and puts it back under its own id with its undo", async () => {
+      const id = await insertTransaction(anExpense({ description: "RAPPI" }));
+      const duplicate = (await stored(id))!;
+
+      const undo = await deleteDuplicate(duplicate);
+      expect(await stored(id)).toBeNull();
+
+      await undo();
+      expect(await stored(id)).toEqual(duplicate);
+    });
+
+    it("refuses one with an attachment, which its undo could not bring back", async () => {
+      const id = await insertTransaction(anExpense({ description: "RAPPI" }));
+      await insertAttachment({
+        transactionId: id,
+        fileName: "ticket.png",
+        mimeType: "image/png",
+        byteSize: 5,
+        contentBase64: "aGVsbG8=",
+      });
+
+      await expect(deleteDuplicate((await stored(id))!)).rejects.toThrow();
+      expect(await stored(id)).not.toBeNull();
+    });
   });
 });
