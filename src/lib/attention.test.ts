@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { BudgetWithCategory } from "@/db/schema";
 import type { BudgetProgress } from "@/lib/finance";
-import { buildAttentionItems } from "@/lib/attention";
+import { MAX_AI_NOTICES, buildAttentionItems } from "@/lib/attention";
 
 function makeOverspent(categoryName: string, ratio: number): BudgetProgress {
   const budget = {
@@ -29,6 +29,7 @@ const CALM = {
   backup: { daysAgo: 1, isOverdue: false },
   pendingCount: 0,
   suggestedCount: 0,
+  uncategorised: [],
   pendingClose: null,
 };
 
@@ -97,6 +98,7 @@ describe("buildAttentionItems", () => {
       backup: { daysAgo: 30, isOverdue: true },
       pendingCount: 2,
       suggestedCount: 3,
+      uncategorised: [{ id: "uncategorised:4", size: 5, categoryName: "Super" }],
       pendingClose: "2026-07",
     });
 
@@ -107,6 +109,7 @@ describe("buildAttentionItems", () => {
       "backup",
       "pending",
       "suggested",
+      "uncategorised",
       "close",
     ]);
   });
@@ -122,6 +125,55 @@ describe("the suggested categories row", () => {
     expect(many.title).toBe("Revisá 12 categorías sugeridas por IA");
     expect(many.detail).toContain("Transacciones");
     expect(many.tone).toBe("neutral");
+  });
+});
+
+describe("uncategorised movements the AI can place", () => {
+  function group(id: number, size: number, categoryName: string) {
+    return { id: `uncategorised:${id}`, size, categoryName };
+  }
+
+  it("names the group and offers to review it", () => {
+    const [item] = buildAttentionItems({
+      ...CALM,
+      uncategorised: [group(4, 23, "Supermercado")],
+    });
+
+    expect(item).toMatchObject({
+      key: "uncategorised:4",
+      kind: "uncategorised",
+      tone: "neutral",
+      title: "23 movimientos sin categoría parecen Supermercado",
+      actionLabel: "Revisar",
+    });
+  });
+
+  it("gives each group its own row", () => {
+    const items = buildAttentionItems({
+      ...CALM,
+      uncategorised: [group(4, 3, "Super"), group(5, 2, "Transporte")],
+    });
+
+    expect(items.map((item) => item.key)).toEqual(["uncategorised:4", "uncategorised:5"]);
+  });
+
+  // Atención stays calm: the AI never takes the line over.
+  it(`shows at most ${MAX_AI_NOTICES} AI notices, what it already wrote first`, () => {
+    const items = buildAttentionItems({
+      ...CALM,
+      pendingCount: 1,
+      suggestedCount: 2,
+      uncategorised: [group(4, 9, "Super"), group(5, 5, "Ocio"), group(6, 2, "Salud")],
+      pendingClose: "2026-07",
+    });
+
+    expect(items.map((item) => item.key)).toEqual([
+      "pending",
+      "suggested",
+      "uncategorised:4",
+      "uncategorised:5",
+      "close",
+    ]);
   });
 });
 

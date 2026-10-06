@@ -65,17 +65,23 @@ export interface CategoryPrediction {
   evidence: { word: string; inCategory: number; total: number };
 }
 
-// Only what the user decided teaches it: their own categories, a rule's (the
-// rule is theirs), and suggestions they confirmed. A suggestion still waiting
-// would otherwise confirm itself on every import.
+// Whether the user decided this movement's category: their own choice, a
+// rule's (the rule is theirs), or a suggestion they confirmed. Only these teach
+// the AI anything; a suggestion still waiting would otherwise confirm itself on
+// every import.
+export function isUserCategorised(
+  transaction: Transaction,
+): transaction is Transaction & { category_id: number } {
+  return transaction.category_id !== null && transaction.category_suggested === 0;
+}
+
 export function trainCategoryModel(transactions: readonly Transaction[]): CategoryModel {
   const model: CategoryModel = { income: new Map(), expense: new Map() };
 
   for (const transaction of transactions) {
     // Transfers have no category; only spending and income are learned.
     if (transaction.type !== "income" && transaction.type !== "expense") continue;
-    if (transaction.category_id === null || transaction.category_suggested === 1)
-      continue;
+    if (!isUserCategorised(transaction)) continue;
 
     const counts = model[transaction.type];
     for (const token of tokenize(transaction.description)) {

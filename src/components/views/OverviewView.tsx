@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ import { SummaryBar } from "@/components/SummaryBar";
 import { NetWorthBar } from "@/components/NetWorthBar";
 import { MonthOverviewCards } from "@/components/MonthOverviewCards";
 import { AttentionNotice } from "@/components/AttentionNotice";
+import { UncategorisedDialog } from "@/components/UncategorisedDialog";
 import { RecentTransactions } from "@/components/RecentTransactions";
 import { UpcomingMonths } from "@/components/UpcomingMonths";
 import { CategoryBreakdownChart } from "@/components/charts/CategoryBreakdownChart";
@@ -58,7 +59,9 @@ import {
 import type { AnalysisPeriod } from "@/lib/finance";
 import { DEFAULT_CURRENCY } from "@/lib/currency";
 import { buildAttentionItems } from "@/lib/attention";
-import type { AttentionKind } from "@/lib/attention";
+import type { AttentionItem } from "@/lib/attention";
+import { isDismissed } from "@/lib/ai/state";
+import { groupUncategorised } from "@/lib/ai/uncategorised";
 import { buildMonthOverview } from "@/lib/monthOverview";
 import { buildMonthlyClose, hasClose, lastClosedMonthKey } from "@/lib/monthlyClose";
 import { projectCommitments, projectExpected, withoutEmptyTail } from "@/lib/projection";
@@ -114,6 +117,9 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
     today,
     pending,
     aiEnabled,
+    aiDismissed,
+    categoryRules,
+    categoryModel,
     isLoading,
   } = useAppData();
 
@@ -286,6 +292,25 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
     [aiEnabled, transactions],
   );
 
+  // Movements nobody categorised that the AI can place, by category. Only with
+  // it on, which is when there is a model.
+  const uncategorised = useMemo(
+    () =>
+      categoryModel === null
+        ? []
+        : groupUncategorised(
+            transactions,
+            { rules: categoryRules, categories, model: categoryModel },
+            (id) => isDismissed(aiDismissed, id, today),
+          ),
+    [transactions, categoryRules, categories, categoryModel, aiDismissed, today],
+  );
+
+  // The group whose dialog is open. Held by id and looked up, so applying it
+  // closes the dialog by itself once the group is gone from the list.
+  const [reviewing, setReviewing] = useState<string | null>(null);
+  const reviewedGroup = uncategorised.find((group) => group.id === reviewing) ?? null;
+
   const attention = useMemo(
     () =>
       buildAttentionItems({
@@ -293,9 +318,14 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
         backup,
         pendingCount,
         suggestedCount,
+        uncategorised: uncategorised.map((group) => ({
+          id: group.id,
+          size: group.rows.length,
+          categoryName: group.categoryName,
+        })),
         pendingClose,
       }),
-    [overspent, backup, pendingCount, suggestedCount, pendingClose],
+    [overspent, backup, pendingCount, suggestedCount, uncategorised, pendingClose],
   );
 
   // Which of the two documents is visible to the print engine. It takes the
@@ -304,8 +334,12 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
   // and the close the notice offers. Which one is mounted follows the request.
   const { request: printRequest, requestPrint } = usePrintRequest<"report" | "close">();
 
-  async function handleAttentionAction(kind: AttentionKind) {
-    if (kind !== "close") return;
+  async function handleAttentionAction(item: AttentionItem) {
+    if (item.kind === "uncategorised") {
+      setReviewing(item.key);
+      return;
+    }
+    if (item.kind !== "close") return;
     // Marked as dealt with before printing rather than after: the print dialog
     // never reports whether the user went through with it, and a notice that
     // reappears because they cancelled once would have no way to ever stop.
@@ -439,7 +473,7 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
         <TabsContent value="general" className="flex flex-col gap-6 pt-6">
           <AttentionNotice
             items={attention}
-            onAction={(kind) => void handleAttentionAction(kind)}
+            onAction={(item) => void handleAttentionAction(item)}
           />
 
           <NetWorthBar
@@ -570,6 +604,12 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
           </div>
         </TabsContent>
       </Tabs>
+
+      <UncategorisedDialog
+        key={reviewedGroup?.id}
+        group={reviewedGroup}
+        onClose={() => setReviewing(null)}
+      />
     </div>
   );
 }

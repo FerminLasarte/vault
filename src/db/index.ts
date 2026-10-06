@@ -382,6 +382,35 @@ export async function confirmSuggestedCategories(ids: number[]): Promise<void> {
   );
 }
 
+// Puts movements nobody categorised in one category, as the user's own choice:
+// they reviewed the list. All of them or none — one categorised elsewhere since
+// means the list they reviewed is gone — and the undo takes back only what is
+// still in that category.
+export async function categoriseTransactions(
+  ids: number[],
+  categoryId: number,
+): Promise<Undo> {
+  const db = await getDb();
+  const placeholders = ids.map((_, index) => `$${index + 2}`).join(", ");
+  await db.batch([
+    {
+      query: `UPDATE transactions SET category_id = $1, category_suggested = 0
+              WHERE id IN (${placeholders}) AND category_id IS NULL`,
+      values: [categoryId, ...ids],
+      expectChanges: ids.length,
+    },
+  ]);
+
+  return undoing([
+    {
+      query: `UPDATE transactions SET category_id = NULL
+              WHERE id IN (${placeholders}) AND category_id = $1`,
+      values: [categoryId, ...ids],
+      expectChanges: ids.length,
+    },
+  ]);
+}
+
 export async function updateTransaction(
   id: number,
   transaction: NewTransaction,

@@ -10,28 +10,41 @@ export function matchCategoryRule(
   description: string,
   rules: CategoryRule[],
 ): CategoryRule | null {
-  const haystack = normalizeForSearch(description);
-  if (haystack === "") return null;
+  return ruleMatcher(rules)(description);
+}
 
-  let best: CategoryRule | null = null;
-  let bestLength = 0;
+// The same decision, for matching many descriptions against the same rules:
+// each pattern is read once rather than once per description.
+export function ruleMatcher(
+  rules: CategoryRule[],
+): (description: string) => CategoryRule | null {
+  // A blank pattern would match everything; treat it as disabled rather than
+  // letting it swallow every transaction.
+  const needles = rules
+    .map((rule) => ({ rule, needle: normalizeForSearch(rule.pattern) }))
+    .filter(({ needle }) => needle !== "");
 
-  for (const rule of rules) {
-    const needle = normalizeForSearch(rule.pattern);
-    // A blank pattern would match everything; treat it as disabled rather than
-    // letting it swallow every transaction.
-    if (needle === "" || !haystack.includes(needle)) continue;
+  return (description) => {
+    const haystack = normalizeForSearch(description);
+    if (haystack === "") return null;
 
-    if (
-      needle.length > bestLength ||
-      (needle.length === bestLength && best !== null && rule.id < best.id)
-    ) {
-      best = rule;
-      bestLength = needle.length;
+    let best: CategoryRule | null = null;
+    let bestLength = 0;
+
+    for (const { rule, needle } of needles) {
+      if (!haystack.includes(needle)) continue;
+
+      if (
+        needle.length > bestLength ||
+        (needle.length === bestLength && best !== null && rule.id < best.id)
+      ) {
+        best = rule;
+        bestLength = needle.length;
+      }
     }
-  }
 
-  return best;
+    return best;
+  };
 }
 
 // The rule that decides where a movement of this kind should land, or null.

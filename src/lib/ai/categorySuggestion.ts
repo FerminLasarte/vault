@@ -37,7 +37,9 @@ function categoryForHint(hint: HintKey, categories: Category[]): Category | null
   return null;
 }
 
-function learnedReason(
+// What the user's own history says about a word, as the reason for whatever
+// rests on it: a suggested category here, a proposed rule in ruleProposals.
+export function evidenceReason(
   evidence: { word: string; inCategory: number; total: number },
   categoryName: string,
 ): string {
@@ -70,7 +72,7 @@ export function suggestCategory(
     return {
       source: "ai",
       categoryId: predicted.id,
-      reason: learnedReason(prediction.evidence, predicted.name),
+      reason: evidenceReason(prediction.evidence, predicted.name),
     };
   }
 

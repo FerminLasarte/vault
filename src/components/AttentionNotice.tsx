@@ -13,9 +13,9 @@ import type { AttentionItem, AttentionKind } from "@/lib/attention";
 
 interface AttentionNoticeProps {
   items: AttentionItem[];
-  // What an actionable item does. Keyed by kind rather than passed inside each
-  // item so `attention.ts` stays free of functions and testable as data.
-  onAction?: (kind: AttentionKind) => void;
+  // What an actionable item does. Handed the item rather than passed inside it
+  // so `attention.ts` stays free of functions and testable as data.
+  onAction?: (item: AttentionItem) => void;
 }
 
 const ICONS: Record<AttentionKind, LucideIcon> = {
@@ -23,6 +23,7 @@ const ICONS: Record<AttentionKind, LucideIcon> = {
   backup: HardDriveDownload,
   pending: Repeat,
   suggested: Sparkles,
+  uncategorised: Sparkles,
   close: FileText,
 };
 
@@ -51,7 +52,7 @@ export function AttentionNotice({ items, onAction }: AttentionNoticeProps) {
         const isCritical = item.tone === "critical";
 
         return (
-          <li key={item.kind} className="flex items-center gap-2">
+          <li key={item.key} className="flex items-center gap-2">
             <Icon
               aria-hidden
               className={cn(
@@ -76,7 +77,7 @@ export function AttentionNotice({ items, onAction }: AttentionNoticeProps) {
                 // Underlined from the start rather than on hover: on a line of
                 // quiet text it is the one thing that can be pressed.
                 className="px-1 text-foreground underline decoration-muted-foreground/50"
-                onClick={() => onAction(item.kind)}
+                onClick={() => onAction(item)}
               >
                 {item.actionLabel}
               </Button>
