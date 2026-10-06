@@ -11,6 +11,7 @@ import type {
 import { TRANSACTION_TYPE_LABELS } from "@/lib/labels";
 import { normalizeForSearch as normalize } from "@/lib/text";
 import type { CategoryModel } from "@/lib/ai/categoryModel";
+import type { LedgerContext } from "@/lib/ai/ledger";
 import { suggestCategory } from "@/lib/ai/categorySuggestion";
 import { parseFlexibleAmount, parseFlexibleDate } from "@/lib/importMapping";
 import { splitTagNames } from "@/lib/text";
@@ -205,6 +206,10 @@ export interface ImportContext {
   // The instalment plans a statement's instalments are matched against;
   // absent or null with the AI off, when instalments are plain text.
   installmentPlans?: readonly InstallmentPlan[] | null;
+  // What a statement's rows are checked against the history with: the
+  // movements they repeat, and the transfers they complete. Absent or null
+  // with the AI off.
+  ledger?: LedgerContext | null;
   accounts: PaymentMethod[];
   existing: Transaction[];
   supportedCurrencies: string[];

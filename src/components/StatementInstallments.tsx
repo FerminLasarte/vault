@@ -1,5 +1,6 @@
 import { AiMark } from "@/components/AiMark";
 import { InlineAction } from "@/components/InlineAction";
+import { StatementLine, StatementLines } from "@/components/StatementLines";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -72,29 +73,22 @@ export function StatementInstallments({
         </div>
       )}
 
-      <ul className="flex flex-col divide-y divide-border rounded-lg border border-border">
+      <StatementLines>
         {lines.map((line) => (
-          <li
+          <StatementLine
             key={line.line}
-            className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3 py-2 text-xs"
+            description={line.description}
+            detail={`Cuota ${line.number} de ${line.count}`}
           >
-            <div className="min-w-0">
-              <p className="max-w-64 truncate">{line.description}</p>
-              <p className="text-muted-foreground">
-                Cuota {line.number} de {line.count}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-x-2 text-muted-foreground">
-              <InstallmentOutcome
-                line={line}
-                canCreatePlan={!undecided}
-                onSeparate={onSeparate}
-                onCreatePlan={onCreatePlan}
-              />
-            </div>
-          </li>
+            <InstallmentOutcome
+              line={line}
+              canCreatePlan={!undecided}
+              onSeparate={onSeparate}
+              onCreatePlan={onCreatePlan}
+            />
+          </StatementLine>
         ))}
-      </ul>
+      </StatementLines>
     </div>
   );
 }

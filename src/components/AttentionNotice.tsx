@@ -28,6 +28,8 @@ const ICONS: Record<AttentionKind, LucideIcon> = {
   pending: Repeat,
   late: Sparkles,
   rise: Sparkles,
+  duplicate: Sparkles,
+  transfer: Sparkles,
   suggested: Sparkles,
   uncategorised: Sparkles,
   unregistered: Sparkles,

@@ -196,6 +196,7 @@ describe("an import", () => {
     expect(db.insertTransactions).toHaveBeenCalledWith(
       [anImported("Café")],
       [{ kind: "installment", id: 1, index: 3, date: "2026-09-10", amount: 100 }],
+      [],
     );
     expect(toast.success).toHaveBeenCalledWith("2 transacciones importadas");
   });
@@ -227,6 +228,28 @@ describe("a step that can be taken back", () => {
 
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Se deshizo"));
     expect(undo).toHaveBeenCalledOnce();
+  });
+
+  // The local AI's fixes to the ledger rewrite or delete what the user had, so
+  // both can be taken back from their toast.
+  it("offers Deshacer for joining a transfer and for deleting a duplicate", async () => {
+    const data = await mount();
+    vi.mocked(db.joinTransfer).mockResolvedValueOnce(vi.fn());
+    vi.mocked(db.deleteDuplicate).mockResolvedValueOnce(vi.fn());
+    const movement = { id: 1 } as db.Transaction;
+
+    await act(async () => {
+      await data.current.joinTransfer(
+        { kept: movement, transfer: aTransaction },
+        movement,
+      );
+    });
+    expect(toastOptions("Unidos en una transferencia")?.action?.label).toBe("Deshacer");
+
+    await act(async () => {
+      await data.current.deleteDuplicate(movement);
+    });
+    expect(toastOptions("Transacción eliminada")?.action?.label).toBe("Deshacer");
   });
 
   it("says so when the step can no longer be taken back", async () => {

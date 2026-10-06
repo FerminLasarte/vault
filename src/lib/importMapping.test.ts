@@ -8,12 +8,13 @@ import {
   parseFlexibleDate,
   withFittingAccount,
 } from "./importMapping";
-import type { ColumnMapping } from "./importMapping";
+import type { ColumnMapping, StatementChoices } from "./importMapping";
 import { detectDelimiter, parseCsv } from "@/lib/csv";
 import type { ImportContext } from "@/lib/csv";
-import type { PaymentMethod } from "@/db/schema";
+import type { PaymentMethod, TransactionWithCategory } from "@/db/schema";
 import { ARGENTINE_STATEMENT } from "@/lib/ai/testing/statements";
 import { installmentPlan } from "@/lib/ai/testing/series";
+import { BANK, LEDGER, WALLET, held } from "@/lib/ai/testing/ledger";
 
 const CONTEXT: ImportContext = {
   categories: [],
@@ -599,7 +600,7 @@ describe("instalments on a statement", () => {
       [["Fecha", "Concepto", "Importe"], ...lines],
       { ...MAPPING, ...mapping },
       context,
-      separate,
+      { separate },
     );
   }
 
@@ -685,5 +686,128 @@ describe("instalments on a statement", () => {
     expect(result.steps).toEqual([]);
     expect(result.installments).toEqual([]);
     expect(result.needsInstallmentDates).toBe(false);
+  });
+});
+
+describe("a statement against the history", () => {
+  const MAPPING: ColumnMapping = {
+    ...EMPTY_MAPPING,
+    date: 0,
+    description: 1,
+    amount: 2,
+    currency: "ARS",
+    paymentMethodId: BANK,
+  };
+
+  function plan(
+    lines: string[][],
+    existing: TransactionWithCategory[],
+    choices: Partial<StatementChoices> = {},
+    ledger: ImportContext["ledger"] = LEDGER,
+  ) {
+    return buildMappedImportPlan(
+      [["Fecha", "Concepto", "Importe"], ...lines],
+      MAPPING,
+      { ...CONTEXT, existing, ledger },
+      choices,
+    );
+  }
+
+  describe("a movement typed before the statement arrived", () => {
+    const typed = held({ description: "rappi", amount: 10250, date: "2026-10-01" });
+    const LINES = [
+      ["02/10/2026", "MERPAGO*RAPPI 4471", "-10.250,00"],
+      ["02/10/2026", "COTO", "-5.000,00"],
+    ];
+
+    it("is left out, and shown as a possible duplicate", () => {
+      const result = plan(LINES, [typed]);
+
+      expect(result.ready.map((entry) => entry.transaction.description)).toEqual([
+        "COTO",
+      ]);
+      expect(result.nearDuplicates).toMatchObject([
+        { line: 2, description: "MERPAGO*RAPPI 4471", other: typed, imported: false },
+      ]);
+      expect(result.dismissals).toEqual([]);
+    });
+
+    // Said once, in the preview: Atención does not ask about it again.
+    it("goes in anyway when the user says so, and is not asked about again", () => {
+      const result = plan(LINES, [typed], { anyway: new Set([2]) });
+
+      expect(result.ready).toHaveLength(2);
+      expect(result.nearDuplicates[0].imported).toBe(true);
+      expect(result.dismissals).toEqual([result.nearDuplicates[0].id]);
+    });
+
+    it("answers for one row only", () => {
+      const result = plan([LINES[0], LINES[0]], [typed]);
+
+      expect(result.ready).toHaveLength(1);
+      expect(result.nearDuplicates).toHaveLength(1);
+    });
+  });
+
+  describe("the other half of a transfer already held", () => {
+    const into = held({
+      type: "income",
+      description: "Transferencia recibida",
+      payment_method_id: WALLET,
+      date: "2026-10-01",
+    });
+    const LINES = [["01/10/2026", "TRANSF A MP", "-50.000,00"]];
+
+    it("joins the row to it instead of importing it", () => {
+      const result = plan(LINES, [into]);
+
+      expect(result.ready).toEqual([]);
+      expect(result.joins).toEqual([
+        {
+          kept: into,
+          transfer: {
+            amount: 50000,
+            type: "transfer",
+            categoryId: null,
+            paymentMethodId: BANK,
+            destinationPaymentMethodId: WALLET,
+            destinationAmount: 50000,
+            description: "Transferencia recibida",
+            date: "2026-10-01",
+            currency: "ARS",
+          },
+        },
+      ]);
+      expect(result.transfers).toMatchObject([{ line: 2, other: into, joined: true }]);
+    });
+
+    it("imports the row on its own when the user says it is not a transfer", () => {
+      const result = plan(LINES, [into], { apart: new Set([2]) });
+
+      expect(result.ready).toHaveLength(1);
+      expect(result.joins).toEqual([]);
+      expect(result.dismissals).toEqual([result.transfers[0].id]);
+    });
+
+    it("leaves alone a movement confirmed from an expected one", () => {
+      const result = plan(
+        LINES,
+        [into],
+        {},
+        { ...LEDGER, fromExpected: new Set([into.id]) },
+      );
+
+      expect(result.ready).toHaveLength(1);
+      expect(result.transfers).toEqual([]);
+    });
+  });
+
+  it("checks nothing against the history with the AI off", () => {
+    const typed = held({ description: "rappi", amount: 10250, date: "2026-10-01" });
+    const result = plan([["02/10/2026", "RAPPI", "-10.250,00"]], [typed], {}, null);
+
+    expect(result.ready).toHaveLength(1);
+    expect(result.nearDuplicates).toEqual([]);
+    expect(result.transfers).toEqual([]);
   });
 });

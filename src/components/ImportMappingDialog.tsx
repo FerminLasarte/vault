@@ -29,6 +29,7 @@ import {
   buildMappedImportPlan,
   columnLabel,
   isMappingComplete,
+  NO_CHOICES,
   withFittingAccount,
 } from "@/lib/importMapping";
 import { CURRENCIES } from "@/lib/currency";
@@ -42,8 +43,9 @@ import type { AmountLayout, ColumnMapping } from "@/lib/importMapping";
 import type { ColumnGuess, GuessedField } from "@/lib/ai/columnGuess";
 import { InstallmentPlanDialog } from "@/components/InstallmentPlanDialog";
 import { StatementInstallments } from "@/components/StatementInstallments";
+import { StatementLedger } from "@/components/StatementLedger";
 import type { ImportContext } from "@/lib/csv";
-import type { StatementPlan } from "@/lib/importMapping";
+import type { StatementChoices, StatementPlan } from "@/lib/importMapping";
 import type { InstallmentPlanDraft } from "@/lib/ai/statementInstallments";
 import type { NewInstallmentPlan, PaymentMethod } from "@/db";
 import type { PickedStatement } from "@/lib/files";
@@ -56,8 +58,6 @@ const PREVIEW_RESULTS = 5;
 // Sentinel for "this column is not used": a Select needs a concrete value and
 // no real column index can collide with it.
 const NONE = "__none__";
-
-const NO_LINES: ReadonlySet<number> = new Set();
 
 interface ImportMappingDialogProps {
   statement: PickedStatement | null;
@@ -87,13 +87,13 @@ export function ImportMappingDialog({
   onCreatePlan,
 }: ImportMappingDialogProps) {
   const [isImporting, setIsImporting] = useState(false);
-  // Instalment rows the user said are not their plan's, for the statement
-  // they were said about: a new file starts with none.
-  const [separated, setSeparated] = useState<{
+  // What the user decided about particular rows, for the statement it was
+  // decided about: a new file starts with nothing decided.
+  const [chosen, setChosen] = useState<{
     statement: PickedStatement | null;
-    lines: ReadonlySet<number>;
-  }>({ statement: null, lines: NO_LINES });
-  const separate = separated.statement === statement ? separated.lines : NO_LINES;
+    choices: StatementChoices;
+  }>({ statement: null, choices: NO_CHOICES });
+  const choices = chosen.statement === statement ? chosen.choices : NO_CHOICES;
   // Kept while the plan dialog closes, so it does not empty as it fades.
   const [planDraft, setPlanDraft] = useState<InstallmentPlanDraft | null>(null);
   const [isPlanOpen, setIsPlanOpen] = useState(false);
@@ -123,16 +123,19 @@ export function ImportMappingDialog({
   // visible before anything is written.
   const plan = useMemo(() => {
     if (!isMappingComplete(mapping) || rows.length === 0) return null;
-    return buildMappedImportPlan(rows, mapping, context, separate);
-  }, [rows, mapping, context, separate]);
+    return buildMappedImportPlan(rows, mapping, context, choices);
+  }, [rows, mapping, context, choices]);
 
-  const importCount = plan === null ? 0 : plan.ready.length + plan.steps.length;
+  const importCount =
+    plan === null ? 0 : plan.ready.length + plan.steps.length + plan.joins.length;
+  const leftOut =
+    plan === null ? 0 : plan.nearDuplicates.filter((row) => !row.imported).length;
 
-  function setSeparate(line: number, isSeparate: boolean) {
-    const lines = new Set(separate);
-    if (isSeparate) lines.add(line);
+  function choose(kind: keyof StatementChoices, line: number, isChosen: boolean) {
+    const lines = new Set(choices[kind]);
+    if (isChosen) lines.add(line);
     else lines.delete(line);
-    setSeparated({ statement, lines });
+    setChosen({ statement, choices: { ...choices, [kind]: lines } });
   }
 
   const categoryNames = useMemo(
@@ -402,6 +405,10 @@ export function ImportMappingDialog({
                   {plan.ready.length === 1 ? "movimiento" : "movimientos"} a importar
                   {plan.steps.length > 0 &&
                     ` · ${plan.steps.length} ${plan.steps.length === 1 ? "cuota" : "cuotas"} a registrar en sus planes`}
+                  {plan.joins.length > 0 &&
+                    ` · ${plan.joins.length} ${plan.joins.length === 1 ? "transferencia" : "transferencias"} a unir`}
+                  {leftOut > 0 &&
+                    ` · ${leftOut} ${leftOut === 1 ? "posible duplicado" : "posibles duplicados"} sin importar`}
                   {plan.duplicates > 0 && ` · ${plan.duplicates} ya existían`}
                   {plan.skipped.length > 0 && ` · ${plan.skipped.length} sin poder leer`}
                 </p>
@@ -462,13 +469,21 @@ export function ImportMappingDialog({
                     lines={plan.installments}
                     dates={mapping.installmentDates}
                     onDatesChange={(dates) => set("installmentDates", dates)}
-                    onSeparate={setSeparate}
+                    onSeparate={(line, separate) => choose("separate", line, separate)}
                     onCreatePlan={(draft) => {
                       setPlanDraft(draft);
                       setIsPlanOpen(true);
                     }}
                   />
                 )}
+
+                <StatementLedger
+                  transfers={plan.transfers}
+                  nearDuplicates={plan.nearDuplicates}
+                  paymentMethods={paymentMethods}
+                  onApart={(line, apart) => choose("apart", line, apart)}
+                  onAnyway={(line, anyway) => choose("anyway", line, anyway)}
+                />
 
                 {plan.skipped.length > 0 && (
                   <ul className="flex max-h-24 flex-col gap-1 overflow-y-auto">

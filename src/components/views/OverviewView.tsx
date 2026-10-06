@@ -22,6 +22,7 @@ import { NetWorthBar } from "@/components/NetWorthBar";
 import { MonthOverviewCards } from "@/components/MonthOverviewCards";
 import { AttentionNotice } from "@/components/AttentionNotice";
 import { UncategorisedDialog } from "@/components/UncategorisedDialog";
+import { DuplicateDialog } from "@/components/DuplicateDialog";
 import { RecurringDialog } from "@/components/RecurringDialog";
 import { RecentTransactions } from "@/components/RecentTransactions";
 import { UpcomingMonths } from "@/components/UpcomingMonths";
@@ -45,7 +46,6 @@ import {
   periodRange,
   totalBalanceByCurrency,
   buildMonthlyTrend,
-  buildRateLookup,
   calculateBudgetProgress,
   calculateSummary,
   currentMonthKey,
@@ -66,6 +66,8 @@ import { groupUncategorised } from "@/lib/ai/uncategorised";
 import { lateIncome } from "@/lib/ai/lateIncome";
 import { priceRises } from "@/lib/ai/priceRises";
 import { unregisteredSeries } from "@/lib/ai/unregisteredSeries";
+import { nearDuplicates } from "@/lib/ai/nearDuplicates";
+import { splitTransfers } from "@/lib/ai/splitTransfers";
 import { recurringFromTemplate } from "@/lib/recurring";
 import type { NewRecurringTransaction, RecurringTransactionWithNames } from "@/db";
 import { buildMonthOverview } from "@/lib/monthOverview";
@@ -99,6 +101,7 @@ const CUSTOM_PERIOD_LABEL = "Personalizado";
 
 // What the AI read from repeating movements, with it switched off.
 const NOTHING_REPEATING = { lateIncome: [], rises: [], unregistered: [] };
+const NOTHING_IN_THE_LEDGER = { duplicates: [], transfers: [] };
 
 export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
   const [currentTab, setCurrentTab] = useRequestedTab<OverviewTab>(
@@ -130,11 +133,18 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
     categoryRules,
     categoryModel,
     series,
+    ledger,
+    rateAt,
     isLoading,
   } = useAppData();
 
-  const { markCloseSeen, addRecurring, editRecurring, dismissAiSuggestions } =
-    useAppActions();
+  const {
+    markCloseSeen,
+    addRecurring,
+    editRecurring,
+    dismissAiSuggestions,
+    joinTransfer,
+  } = useAppActions();
 
   const [currency, setCurrency] = useViewState("overview.currency", DEFAULT_CURRENCY);
   const [categoryId, setCategoryId] = useViewState<number | null>(
@@ -334,6 +344,25 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
     };
   }, [series, aiDismissed, today]);
 
+  // Movements recorded twice, and transfers that came in as an expense and an
+  // income, in the recent history.
+  const ledgerProblems = useMemo(
+    () =>
+      ledger === null
+        ? NOTHING_IN_THE_LEDGER
+        : {
+            duplicates: nearDuplicates(transactions, ledger, today),
+            transfers: splitTransfers(transactions, ledger, today),
+          },
+    [transactions, ledger, today],
+  );
+
+  // The pair whose dialog is open, held by id like the group above, so
+  // deleting one of them closes it by itself.
+  const [comparing, setComparing] = useState<string | null>(null);
+  const comparedPair =
+    ledgerProblems.duplicates.find((pair) => pair.id === comparing) ?? null;
+
   // The recurring movement a notice offers to add, or to bring up to a new
   // amount: what the dialog opens with, and the template it edits, if any.
   const [recurringOffer, setRecurringOffer] = useState<{
@@ -361,6 +390,7 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
           categoryName: group.categoryName,
         })),
         ...repeating,
+        ...ledgerProblems,
         pendingClose,
       }),
     [
@@ -370,6 +400,7 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
       suggestedCount,
       uncategorised,
       repeating,
+      ledgerProblems,
       pendingClose,
     ],
   );
@@ -383,6 +414,15 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
   async function handleAttentionAction(item: AttentionItem) {
     if (item.kind === "uncategorised") {
       setReviewing(item.key);
+      return;
+    }
+    if (item.kind === "duplicate") {
+      setComparing(item.key);
+      return;
+    }
+    if (item.kind === "transfer") {
+      const offer = ledgerProblems.transfers.find((entry) => entry.id === item.key);
+      if (offer) await joinTransfer(offer.join, offer.removed);
       return;
     }
     if (item.kind === "unregistered") {
@@ -445,17 +485,6 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
   const isCustomPeriod = !isRecentPeriod && selectedYear === null;
 
   const summary = useMemo(() => calculateSummary(filtered), [filtered]);
-
-  // Built from the cached series so each movement is valued at the rate that
-  // was in force on its own date. Falls back to today's quote when no history
-  // has been downloaded yet, which is the previous behaviour.
-  const rateAt = useMemo(
-    () =>
-      exchangeRateHistory.length > 0
-        ? buildRateLookup(exchangeRateHistory)
-        : buildRateLookup(exchangeRate ? [exchangeRate] : []),
-    [exchangeRateHistory, exchangeRate],
-  );
 
   const otherCurrency = currency === "ARS" ? "USD" : "ARS";
 
@@ -683,6 +712,8 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
         group={reviewedGroup}
         onClose={() => setReviewing(null)}
       />
+
+      <DuplicateDialog pair={comparedPair} onClose={() => setComparing(null)} />
 
       <RecurringDialog
         open={isOfferOpen}

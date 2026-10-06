@@ -11,8 +11,10 @@ import { toast } from "sonner";
 import { trainCategoryModel, type CategoryModel } from "@/lib/ai/categoryModel";
 import { learnMerchantHistory, type MerchantHistory } from "@/lib/ai/merchantHistory";
 import { detectSeries, type Series } from "@/lib/ai/series";
+import type { LedgerContext } from "@/lib/ai/ledger";
 import {
   DEFAULT_AI_STATE,
+  isDismissed,
   parseAiState,
   withDismissed,
   type AiState,
@@ -53,6 +55,8 @@ import {
   insertPaymentMethod,
   insertTransactionWithTags,
   insertTransactions,
+  joinTransfer,
+  deleteDuplicate,
   listBudgets,
   listCategories,
   listInstallmentPlans,
@@ -112,7 +116,9 @@ import {
   type PaymentMethod,
   type RecurringTransactionWithNames,
   type Tag,
+  type Transaction,
   type TransactionWithCategory,
+  type TransferJoin,
   type Undo,
 } from "@/db";
 import {
@@ -125,6 +131,8 @@ import {
 } from "@/lib/exchangeRate";
 import type { RateType } from "@/lib/exchangeRate";
 import { todayIsoDate } from "@/lib/format";
+import { buildRateLookup, type RateLookup } from "@/lib/finance";
+import { confirmedTransactionIds } from "@/lib/expected";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useToday } from "@/hooks/useToday";
 import { collectPendingCommitments } from "@/lib/pendingCommitments";
@@ -205,6 +213,8 @@ export interface AppData {
   // Every cached quote, used to value each movement at the rate of its own
   // date instead of restating the past at today's.
   exchangeRateHistory: ExchangeRate[];
+  // The quote in force on any date, built once from that series.
+  rateAt: RateLookup;
   // When the last backup was taken, or null if there has never been one.
   lastBackupAt: string | null;
   // The last month whose close the user acted on, so the notice can stop
@@ -229,6 +239,9 @@ export interface AppData {
   // What repeats on its own — every month, week or year, for about the same
   // amount — read from that same history; null with the local AI switched off.
   series: Series[] | null;
+  // What the local AI checks the ledger with — for movements recorded twice
+  // and transfers split in two — in Atención and on import; null with it off.
+  ledger: LedgerContext | null;
   // Today's date, moving on at midnight with the app left open (see useToday).
   // What depends on the date reads it from here, so it re-renders when the
   // day changes instead of keeping the day it was first drawn on.
@@ -267,12 +280,18 @@ export interface AppActions {
   // Puts movements nobody categorised in one category, all or none, as the
   // user's own choice, with a "Deshacer".
   categoriseTransactions: (ids: number[], categoryId: number) => Promise<void>;
-  // Imports the rows, and registers a statement's instalments in their plans,
-  // in one write.
+  // Imports the rows, registers a statement's instalments in their plans and
+  // turns the halves of transfers already held into those transfers, in one
+  // write.
   importTransactions: (
     entries: { transaction: NewTransaction; tags: string[] }[],
     steps?: CommitmentStep[],
+    joins?: TransferJoin[],
   ) => Promise<void>;
+  // Joins the two halves of a transfer into it, with a "Deshacer".
+  joinTransfer: (join: TransferJoin, removed: Transaction) => Promise<void>;
+  // Deletes one of two movements that are the same one, with a "Deshacer".
+  deleteDuplicate: (transaction: Transaction) => Promise<void>;
 
   addSavingsGoal: (goal: NewSavingsGoal) => Promise<void>;
   editSavingsGoal: (id: number, goal: NewSavingsGoal) => Promise<void>;
@@ -557,6 +576,23 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [exchangeRateHistory],
   );
 
+  const rateAt = useMemo(
+    () => buildRateLookup(exchangeRateHistory),
+    [exchangeRateHistory],
+  );
+
+  const ledger = useMemo<LedgerContext | null>(
+    () =>
+      aiState.enabled
+        ? {
+            rateAt,
+            fromExpected: confirmedTransactionIds(expectedMovements),
+            isDismissed: (id) => isDismissed(aiState.dismissed, id, today),
+          }
+        : null,
+    [aiState.enabled, aiState.dismissed, rateAt, expectedMovements, today],
+  );
+
   // Fetches the current quote and caches it. A failure is not exceptional —
   // the app is local-first and expected to run offline — so the cached rate is
   // kept and only an explicit, user-triggered refresh reports the problem.
@@ -816,6 +852,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       rateType,
       exchangeRate,
       exchangeRateHistory,
+      rateAt,
       lastBackupAt,
       lastSeenClose,
       notificationsEnabled,
@@ -824,6 +861,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       categoryModel,
       merchantHistory,
       series,
+      ledger,
       today,
       pending,
       isLoading,
@@ -844,6 +882,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       rateType,
       exchangeRate,
       exchangeRateHistory,
+      rateAt,
       lastBackupAt,
       lastSeenClose,
       notificationsEnabled,
@@ -852,6 +891,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       categoryModel,
       merchantHistory,
       series,
+      ledger,
       today,
       pending,
       isLoading,
@@ -923,14 +963,30 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           "No se pudo aplicar la categoría",
           { offerUndo: true },
         ),
-      importTransactions: (imported, steps = []) =>
+      importTransactions: (imported, steps = [], joins = []) =>
         runMutation(
-          () => insertTransactions(imported, steps),
+          () => insertTransactions(imported, steps, joins),
           steps.length === 0
             ? ["transactions"]
             : ["installments", ...LEDGER_FROM_COMMITMENT],
-          transactionCount(imported.length + steps.length, "importada"),
+          transactionCount(imported.length + steps.length + joins.length, "importada"),
           "No se pudieron importar las transacciones",
+        ),
+      joinTransfer: (join, removed) =>
+        runMutation(
+          () => joinTransfer(join, removed),
+          ["transactions"],
+          "Unidos en una transferencia",
+          "No se pudo unir en una transferencia",
+          { offerUndo: true },
+        ),
+      deleteDuplicate: (transaction) =>
+        runMutation(
+          () => deleteDuplicate(transaction),
+          ["transactions"],
+          "Transacción eliminada",
+          "No se pudo eliminar la transacción",
+          { offerUndo: true },
         ),
 
       addSavingsGoal: (goal) =>

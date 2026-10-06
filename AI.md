@@ -145,8 +145,8 @@ are one of its best sentences.
 | AI-17 | 5     | Expected income that has not arrived           | 11       | [x]  |
 | AI-18 | 6     | Column detection                               | 18       | [x]  |
 | AI-19 | 6     | Instalments on statements                      | 8        | [x]  |
-| AI-20 | 7     | Split transfers                                | 9        | [ ]  |
-| AI-21 | 7     | Near-duplicates                                | 10       | [ ]  |
+| AI-20 | 7     | Split transfers                                | 9        | [x]  |
+| AI-21 | 7     | Near-duplicates                                | 10       | [x]  |
 | AI-22 | 8     | Unusual spending                               | 12       | [ ]  |
 | AI-23 | 8     | Pace of the month                              | 13       | [ ]  |
 | AI-24 | 8     | Suggested budgets                              | 14       | [ ]  |
@@ -974,7 +974,45 @@ tolerance of that day's cached rate). Atención notice and import preview mark;
 "Unir en una transferencia" replaces both with one transfer in a single batch,
 with "Deshacer".
 
-- [ ] Done
+As built:
+
+- `ledger.ts` holds what both checks share: the shape they read
+  (`LedgerRow`, which an imported row is put into), a movement's sides (the
+  account, which way and how many cents), `RECENT_DAYS` (90: how far back
+  Atención looks), and `isBare` — no tags, no attachments, not confirmed from
+  an expected movement. Only a bare movement is ever deleted from here, so
+  "Deshacer" brings all of it back; the database refuses the delete otherwise.
+- `splitTransfers.ts`. **Which pairs**, agreed with the user on 2026-10-06: an
+  expense and an income in two different accounts, `MAX_DAYS_APART` (1) day
+  apart at most, for the same amount to the cent — or, between pesos and
+  dollars, with the rate they imply within `RATE_TOLERANCE` (5%) of that day's
+  quote — and **only when neither half could pair with another**: a half with
+  two candidates is a guess. No word in the description is required.
+- Joining rewrites one half as the transfer (from the expense's account and
+  date, to the income's account with what arrived) and deletes the other, in
+  one batch: the income goes unless something hangs on it, then the expense;
+  with something on both, nothing is offered. A movement confirmed from an
+  expected one was declared as what it is and is left out. The rewrite is a
+  compare-and-set on the movement as it was, and its undo puts both back,
+  the deleted one under its own id.
+- Atención: "Parece una transferencia de Banco a Mercado Pago" with "Un gasto y
+  un ingreso de $ 50.000,00 el mismo día, en dos de tus cuentas. Unidos, no
+  cuentan como gasto ni como ingreso." and "Unir", which joins at once with
+  "Deshacer"; the X dismisses it. The id is derived from the pair
+  (`transfer:<from>:<to>:<date>:<cents>:<cents>`), not from the movements' ids.
+- **On import**, agreed the same day: a statement row that is the other half
+  of a movement already held is joined to it by the import's own write — the
+  held movement becomes the transfer, under its own description, and the row
+  is not imported. The preview lists it ("Se une con «…» de Mercado Pago",
+  with the reason on the mark) with "No es una transferencia", which imports it
+  on its own and dismisses the pair once the import is written, so Atención
+  does not ask again. Instalments and possible duplicates are never half of a
+  transfer.
+- `rateAt` moved to `AppDataContext`, built once from the rate series (Resumen
+  built its own), and `ledger` — the quote, the movements confirmed from
+  expected ones and the dismissals — is built there too, null with the AI off.
+
+- [x] Done
 
 ### AI-21 · Near-duplicates [10]
 
@@ -988,7 +1026,55 @@ same merchant name or overlapping tokens. In the import preview the row is
 unticked with "Posible duplicado del 12/09"; in the history, an Atención
 notice with "Eliminar uno" (with undo) or "No es un duplicado" (dismissed).
 
-- [ ] Done
+As built:
+
+- `nearDuplicates.ts`: two incomes or two expenses in the same account, for the
+  same amount to the cent, `MAX_DAYS_APART` (2) days apart at most, whose text
+  names the same place — the same clean name, or a telling word they share
+  (`tokenize`, so "super coto" meets `COTO CICSA 123`).
+- **Against a transfer too**, agreed with the user on 2026-10-06: an expense
+  that is where a transfer typed by hand left the same account, or an income
+  where one arrived, with the same amount and dates. No text is required
+  there: "Ahorro" and `TRANSF 0012` never agree. Two transfers are one when
+  both of their sides are.
+- Only movements sharing a side are compared (`groupBySide`), so the history is
+  not walked once per movement.
+- Atención: "Posible duplicado: Rappi por $ 10.250,00", with "Dos gastos de
+  $ 10.250,00 en la misma cuenta, con un día de diferencia, los dos de «Rappi».
+  Revisalos y eliminá el que sobra." and "Revisar". **The user picks which one
+  goes**, agreed the same day: `DuplicateDialog` shows both side by side, each
+  with "Eliminar este" (disabled, with the reason on hover, when something
+  hangs on it), and "No es un duplicado", which dismisses the pair. Deleting
+  offers "Deshacer", which puts it back under its own id.
+- On import, a row that repeats a held movement is left out and listed as
+  "Posible duplicado" ("Ya está como «rappi» del 1 oct 2026"), with "Importar
+  igual", which imports it and dismisses the pair once written. Each held
+  movement answers for one row at most. Instalments are left to their plans.
+- Priority in Atención, an assumption worth revisiting: after late income and
+  rises, before the suggested categories — a total that counts something
+  twice is wrong now; a category still to confirm is not.
+- The preview's lists of particular rows — instalments, transfers, possible
+  duplicates — share `StatementLines`.
+
+- [x] Done
+
+Checked for the whole batch: every check green, and on a throwaway Vite page
+(removed) served by the running `tauri dev`, mounting the real Resumen and the
+real import dialog with stand-in contexts, driven from the in-app browser;
+nothing was sent to the native window. Atención showed "Posible duplicado:
+Rappi por $ 10.250,00" and "Parece una transferencia de Banco a Mercado Pago",
+each with its reason on hover. "Revisar" opened the dialog with both rows; the
+tagged one's "Eliminar este" was disabled with its hint, and deleting the
+other closed the dialog, removed the notice and showed "Transacción eliminada"
+with "Deshacer". "Unir" took $ 50.000 off the month's spending and left the
+movement as a transfer. "No es un duplicado" removed its notice. The import
+preview read "1 movimiento a importar · 1 transferencia a unir · 1 posible
+duplicado sin importar"; "No es una transferencia" and "Importar igual" made it
+three rows to import and handed over both pairs to dismiss. Both screens read
+well in the dark theme. Not checked: the native app, a real bank's export, a
+pair between pesos and dollars on screen (tests only), and anything written to
+a database (the actions were stand-ins; the writes and their undos are covered
+by the db tests).
 
 ---
 
