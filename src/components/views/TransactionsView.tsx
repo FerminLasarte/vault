@@ -682,14 +682,21 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
                             </div>
                           </TableCell>
                           <TableCell className="text-muted-foreground">
-                            {transaction.type === "transfer"
-                              ? "—"
-                              : transaction.category_name
-                                ? `${transaction.category_icon ?? ""} ${transaction.category_name}`.trim()
-                                : "Sin categoría"}
-                            {aiEnabled && transaction.category_suggested === 1 && (
-                              <AiMark className="ml-2 align-middle" />
-                            )}
+                            {/* The mark drops under the category when the
+                                table is short of room, rather than pushing
+                                the row's actions out of view. */}
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <span>
+                                {transaction.type === "transfer"
+                                  ? "—"
+                                  : transaction.category_name
+                                    ? `${transaction.category_icon ?? ""} ${transaction.category_name}`.trim()
+                                    : "Sin categoría"}
+                              </span>
+                              {aiEnabled && transaction.category_suggested === 1 && (
+                                <AiMark />
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-wrap items-center gap-1">
