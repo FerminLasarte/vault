@@ -2,6 +2,17 @@ import { describe, expect, it } from "vitest";
 import type { BudgetWithCategory } from "@/db/schema";
 import type { BudgetProgress } from "@/lib/finance";
 import { MAX_AI_NOTICES, buildAttentionItems } from "@/lib/attention";
+import { lateIncome } from "@/lib/ai/lateIncome";
+import { priceRises } from "@/lib/ai/priceRises";
+import { unregisteredSeries } from "@/lib/ai/unregisteredSeries";
+import {
+  MONTHLY,
+  NOTHING_DECLARED,
+  charges,
+  chargesOf,
+  detect,
+  recurringTemplate,
+} from "@/lib/ai/testing/series";
 
 function makeOverspent(categoryName: string, ratio: number): BudgetProgress {
   const budget = {
@@ -30,6 +41,9 @@ const CALM = {
   pendingCount: 0,
   suggestedCount: 0,
   uncategorised: [],
+  lateIncome: [],
+  rises: [],
+  unregistered: [],
   pendingClose: null,
 };
 
@@ -99,6 +113,9 @@ describe("buildAttentionItems", () => {
       pendingCount: 2,
       suggestedCount: 3,
       uncategorised: [{ id: "uncategorised:4", size: 5, categoryName: "Super" }],
+      lateIncome: [],
+      rises: [],
+      unregistered: [],
       pendingClose: "2026-07",
     });
 
@@ -189,5 +206,172 @@ describe("the monthly close row", () => {
   it("is neutral: nothing is wrong, something is ready", () => {
     const [item] = buildAttentionItems({ ...CALM, pendingClose: "2026-07" });
     expect(item.tone).toBe("neutral");
+  });
+});
+
+// Read from what repeats on its own (see series.ts).
+describe("notices about repeating movements", () => {
+  const NBSP = "\u00a0";
+  const nothingDismissed = () => false;
+  const FOUR_MONTHS = ["2026-06-10", ...MONTHLY];
+
+  function late(today = "2026-10-08") {
+    const salary = charges(
+      "Sueldo",
+      ["2026-06-04", "2026-07-03", "2026-08-05", "2026-09-04"],
+      { type: "income" },
+    );
+    return lateIncome(detect(salary, NOTHING_DECLARED, today), today, nothingDismissed);
+  }
+
+  function rises(recurring = NOTHING_DECLARED.recurring) {
+    const netflix = chargesOf("DLO*NETFLIX", FOUR_MONTHS, [5000, 5000, 5000, 5900]);
+    return priceRises(
+      detect(netflix, { ...NOTHING_DECLARED, recurring }),
+      nothingDismissed,
+    );
+  }
+
+  function unregistered() {
+    return unregisteredSeries(detect(charges("Spotify", MONTHLY)), nothingDismissed);
+  }
+
+  it("says when income is late, and when it usually comes in", () => {
+    const [item] = buildAttentionItems({ ...CALM, lateIncome: late() });
+
+    expect(item).toMatchObject({
+      key: "late:income:ARS:sueldo:monthly:2026-10",
+      kind: "late",
+      tone: "neutral",
+      title: "Sueldo suele entrar alrededor del 4 y todavía no llegó",
+      detail: "En los últimos 4 meses entró entre el 3 y el 5.",
+      dismissalId: "late:income:ARS:sueldo:monthly:2026-10",
+    });
+    expect(item.actionLabel).toBeUndefined();
+  });
+
+  it("says how much a charge went up", () => {
+    const [item] = buildAttentionItems({ ...CALM, rises: rises() });
+
+    expect(item).toMatchObject({
+      kind: "rise",
+      tone: "neutral",
+      title: `Netflix pasó de $${NBSP}5.000,00 a $${NBSP}5.900,00 (+18%)`,
+      detail: "Comparado con los 3 cobros anteriores.",
+      dismissalId: "rise:expense:ARS:netflix:monthly:5900",
+    });
+    expect(item.actionLabel).toBeUndefined();
+  });
+
+  it("offers to update a declared recurring movement that went up", () => {
+    const [item] = buildAttentionItems({
+      ...CALM,
+      rises: rises([recurringTemplate({ amount: 5000 })]),
+    });
+
+    expect(item.detail).toBe(
+      `Comparado con los 3 cobros anteriores. Tu recurrente todavía dice $${NBSP}5.000,00.`,
+    );
+    expect(item.actionLabel).toBe("Actualizar");
+  });
+
+  it("offers to add what repeats as a recurring movement", () => {
+    const [item] = buildAttentionItems({ ...CALM, unregistered: unregistered() });
+
+    expect(item).toMatchObject({
+      key: "series:expense:ARS:spotify:monthly",
+      kind: "unregistered",
+      tone: "neutral",
+      title: "Parece que pagás Spotify todos los meses",
+      detail: `3 veces seguidas, cerca de $${NBSP}5.000,00; la última el 10 sept 2026.`,
+      actionLabel: "Agregar",
+      dismissalId: "series:expense:ARS:spotify:monthly",
+    });
+  });
+
+  it("says what comes in, for income", () => {
+    const salary = charges("Sueldo", MONTHLY, { type: "income" });
+    const [item] = buildAttentionItems({
+      ...CALM,
+      unregistered: unregisteredSeries(detect(salary), nothingDismissed),
+    });
+
+    expect(item.title).toBe("Parece que cobrás Sueldo todos los meses");
+  });
+
+  // Atención stays calm, and what costs the most to ignore gets the places.
+  it(`puts money missing or spent first, within the ${MAX_AI_NOTICES} AI notices`, () => {
+    const items = buildAttentionItems({
+      ...CALM,
+      suggestedCount: 2,
+      uncategorised: [{ id: "uncategorised:4", size: 9, categoryName: "Super" }],
+      lateIncome: late(),
+      rises: rises(),
+      unregistered: unregistered(),
+    });
+
+    expect(items.map((item) => item.kind)).toEqual(["late", "rise", "suggested"]);
+  });
+
+  it("lets only these be dismissed from the line", () => {
+    const items = buildAttentionItems({
+      ...CALM,
+      suggestedCount: 2,
+      uncategorised: [{ id: "uncategorised:4", size: 9, categoryName: "Super" }],
+      unregistered: unregistered(),
+    });
+
+    expect(items.map((item) => item.dismissalId)).toEqual([
+      undefined,
+      undefined,
+      "series:expense:ARS:spotify:monthly",
+    ]);
+  });
+
+  // One notice per series: the rise says more, and costs more to ignore.
+  describe("a series that went up and was never declared", () => {
+    const netflix = chargesOf("DLO*NETFLIX", FOUR_MONTHS, [5000, 5000, 5000, 5900]);
+
+    it("is one notice, the rise, which offers to add it", () => {
+      const series = detect(netflix);
+      const items = buildAttentionItems({
+        ...CALM,
+        rises: priceRises(series, nothingDismissed),
+        unregistered: unregisteredSeries(series, nothingDismissed),
+      });
+
+      expect(items.map((item) => [item.kind, item.actionLabel])).toEqual([
+        ["rise", "Agregar"],
+      ]);
+    });
+
+    it("offers nothing to add once adding it was turned down", () => {
+      const series = detect(netflix);
+      const [item] = buildAttentionItems({
+        ...CALM,
+        rises: priceRises(series, nothingDismissed),
+        unregistered: unregisteredSeries(
+          series,
+          (id) => id === "series:expense:ARS:netflix:monthly",
+        ),
+      });
+
+      expect(item.kind).toBe("rise");
+      expect(item.actionLabel).toBeUndefined();
+    });
+
+    it("leaves the other series alone", () => {
+      const series = detect([...netflix, ...charges("Spotify", MONTHLY)]);
+      const items = buildAttentionItems({
+        ...CALM,
+        rises: priceRises(series, nothingDismissed),
+        unregistered: unregisteredSeries(series, nothingDismissed),
+      });
+
+      expect(items.map((item) => item.key)).toEqual([
+        "rise:expense:ARS:netflix:monthly:5900",
+        "series:expense:ARS:spotify:monthly",
+      ]);
+    });
   });
 });

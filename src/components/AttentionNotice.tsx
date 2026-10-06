@@ -4,8 +4,10 @@ import {
   HardDriveDownload,
   Repeat,
   Sparkles,
+  X,
   type LucideIcon,
 } from "lucide-react";
+import { ActionButton } from "@/components/ActionButton";
 import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/Hint";
 import { cn } from "@/lib/utils";
@@ -16,14 +18,19 @@ interface AttentionNoticeProps {
   // What an actionable item does. Handed the item rather than passed inside it
   // so `attention.ts` stays free of functions and testable as data.
   onAction?: (item: AttentionItem) => void;
+  // Waves away a notice that carries a `dismissalId`.
+  onDismiss?: (item: AttentionItem) => void;
 }
 
 const ICONS: Record<AttentionKind, LucideIcon> = {
   budget: AlertTriangle,
   backup: HardDriveDownload,
   pending: Repeat,
+  late: Sparkles,
+  rise: Sparkles,
   suggested: Sparkles,
   uncategorised: Sparkles,
+  unregistered: Sparkles,
   close: FileText,
 };
 
@@ -42,7 +49,7 @@ const ICONS: Record<AttentionKind, LucideIcon> = {
 // headline taking the destructive colour.
 //
 // On a narrow window the notices wrap onto a second line rather than scroll.
-export function AttentionNotice({ items, onAction }: AttentionNoticeProps) {
+export function AttentionNotice({ items, onAction, onDismiss }: AttentionNoticeProps) {
   if (items.length === 0) return null;
 
   return (
@@ -81,6 +88,21 @@ export function AttentionNotice({ items, onAction }: AttentionNoticeProps) {
               >
                 {item.actionLabel}
               </Button>
+            )}
+            {/* Last and quietest: the AI's notices can be turned down where
+                they sit, since nothing else would make them go away. */}
+            {item.dismissalId !== undefined && onDismiss && (
+              <ActionButton
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                label="Descartar"
+                className="text-muted-foreground"
+                onClick={() => onDismiss(item)}
+              >
+                <X />
+                <span className="sr-only">Descartar {item.title}</span>
+              </ActionButton>
             )}
           </li>
         );

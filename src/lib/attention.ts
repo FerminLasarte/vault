@@ -1,6 +1,15 @@
-import { formatMonthLabel } from "@/lib/format";
+import {
+  formatCurrency,
+  formatDate,
+  formatMonthLabel,
+  formatPercent,
+} from "@/lib/format";
 import type { BackupStatus } from "@/lib/backupReminder";
 import type { BudgetProgress } from "@/lib/finance";
+import type { RecurrenceFrequency } from "@/lib/recurring";
+import type { LateIncome } from "@/lib/ai/lateIncome";
+import { RISE_BASELINE, type PriceRise } from "@/lib/ai/priceRises";
+import type { UnregisteredSeries } from "@/lib/ai/unregisteredSeries";
 
 // What the overview needs to tell the user before it shows them a
 // single figure.
@@ -14,7 +23,15 @@ import type { BudgetProgress } from "@/lib/finance";
 export type AttentionTone = "critical" | "neutral";
 
 export type AttentionKind =
-  "budget" | "backup" | "pending" | "suggested" | "uncategorised" | "close";
+  | "budget"
+  | "backup"
+  | "pending"
+  | "late"
+  | "rise"
+  | "suggested"
+  | "uncategorised"
+  | "unregistered"
+  | "close";
 
 // The local AI's notices share the line with everything else, and never take
 // it over: at most this many at once, the most pressing first; the rest wait
@@ -35,6 +52,9 @@ export interface AttentionItem {
   // this module stays data, so what the button *does* is the screen's business
   // and the wording stays testable without a DOM.
   actionLabel?: string;
+  // The local AI's id for it, when it can be waved away from the line itself
+  // (see isDismissed). The rest go away once dealt with.
+  dismissalId?: string;
 }
 
 function budgetItem(overspent: BudgetProgress[]): AttentionItem | null {
@@ -121,6 +141,64 @@ function uncategorisedItem(group: {
   };
 }
 
+// Monthly income that has not come in when it usually has by now.
+function lateIncomeItem(late: LateIncome): AttentionItem {
+  const { usualDay, earliestDay, latestDay, months } = late;
+  return {
+    key: late.id,
+    kind: "late",
+    tone: "neutral",
+    title: `${late.series.merchant.label} suele entrar alrededor del ${usualDay} y todavía no llegó`,
+    detail:
+      earliestDay === latestDay
+        ? `En los últimos ${months} meses entró el ${usualDay}.`
+        : `En los últimos ${months} meses entró entre el ${earliestDay} y el ${latestDay}.`,
+    dismissalId: late.id,
+  };
+}
+
+// A monthly charge that just went up. For a declared recurring movement still
+// at an older amount, the offer to bring it up to date; for one nobody declared
+// and that was not turned down as recurring, the offer to add it, which its own
+// notice would have made (see buildAttentionItems).
+function riseItem(rise: PriceRise, canAdd: boolean): AttentionItem {
+  const { currency, label } = rise.series.merchant;
+  const compared = `Comparado con los ${RISE_BASELINE} cobros anteriores.`;
+  return {
+    key: rise.id,
+    kind: "rise",
+    tone: "neutral",
+    title: `${label} pasó de ${formatCurrency(rise.previous, currency)} a ${formatCurrency(rise.latest, currency)} (+${formatPercent(rise.rise)})`,
+    detail:
+      rise.recurring === null
+        ? compared
+        : `${compared} Tu recurrente todavía dice ${formatCurrency(rise.recurring.amount, currency)}.`,
+    actionLabel: rise.recurring !== null ? "Actualizar" : canAdd ? "Agregar" : undefined,
+    dismissalId: rise.id,
+  };
+}
+
+const EVERY: Record<RecurrenceFrequency, string> = {
+  weekly: "todas las semanas",
+  monthly: "todos los meses",
+  yearly: "todos los años",
+};
+
+// Something that repeats and was never declared as recurring.
+function unregisteredItem(offer: UnregisteredSeries): AttentionItem {
+  const { merchant, frequency, movements, typicalAmount, lastDate } = offer.series;
+  const verb = merchant.type === "expense" ? "pagás" : "cobrás";
+  return {
+    key: offer.id,
+    kind: "unregistered",
+    tone: "neutral",
+    title: `Parece que ${verb} ${merchant.label} ${EVERY[frequency]}`,
+    detail: `${movements.length} veces seguidas, cerca de ${formatCurrency(typicalAmount, merchant.currency)}; la última el ${formatDate(lastDate)}.`,
+    actionLabel: "Agregar",
+    dismissalId: offer.id,
+  };
+}
+
 // A month that has finished, has something in it, and has not been dealt with
 // yet. Informational rather than a warning: nothing is wrong, something is
 // ready — which is why it carries a neutral tone and sits last.
@@ -150,13 +228,29 @@ export function buildAttentionItems(sources: {
   // Uncategorised movements the AI can place, biggest group first; empty with
   // it switched off.
   uncategorised: { id: string; size: number; categoryName: string }[];
+  // What the AI read from repeating movements; empty with it switched off.
+  lateIncome: LateIncome[];
+  rises: PriceRise[];
+  unregistered: UnregisteredSeries[];
   // The month whose close is ready and unseen, or null when there is none.
   pendingClose: string | null;
 }): AttentionItem[] {
-  // What the AI already wrote comes before what it could write.
+  // Money missing and money spent beyond the usual first; then what the AI
+  // already wrote, before what it could write; and last what would only save
+  // typing.
+  //
+  // One notice per series: while it has gone up, the rise speaks for it and
+  // carries the offer to add it, and "Parece que pagás…" waits.
+  const risen = new Set(sources.rises.map((rise) => rise.series.id));
+  const addable = new Set(sources.unregistered.map((offer) => offer.series.id));
   const ai = [
+    ...sources.lateIncome.map(lateIncomeItem),
+    ...sources.rises.map((rise) => riseItem(rise, addable.has(rise.series.id))),
     suggestedItem(sources.suggestedCount),
     ...sources.uncategorised.map(uncategorisedItem),
+    ...sources.unregistered
+      .filter((offer) => !risen.has(offer.series.id))
+      .map(unregisteredItem),
   ]
     .filter((item): item is AttentionItem => item !== null)
     .slice(0, MAX_AI_NOTICES);

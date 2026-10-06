@@ -18,6 +18,7 @@ import { RecurringDialog } from "@/components/RecurringDialog";
 import { useAppActions, useAppData, useAppStatus } from "@/hooks/useAppData";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { RECURRENCE_FREQUENCY_LABELS, TRANSACTION_TYPE_LABELS } from "@/lib/labels";
+import { recurringFromTemplate } from "@/lib/recurring";
 import { cn } from "@/lib/utils";
 import type { NewRecurringTransaction, RecurringTransactionWithNames } from "@/db";
 
@@ -85,14 +86,7 @@ export function RecurringSection() {
 
   async function togglePaused(template: RecurringTransactionWithNames) {
     await editRecurring(template.id, {
-      description: template.description,
-      amount: template.amount,
-      type: template.type,
-      categoryId: template.category_id,
-      paymentMethodId: template.payment_method_id,
-      currency: template.currency,
-      frequency: template.frequency,
-      startDate: template.start_date,
+      ...recurringFromTemplate(template),
       isActive: template.is_active !== 1,
     });
   }

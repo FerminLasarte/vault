@@ -3,7 +3,12 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { RecurringDialog } from "./RecurringDialog";
-import type { Category, PaymentMethod, RecurringTransactionWithNames } from "@/db";
+import type {
+  Category,
+  NewRecurringTransaction,
+  PaymentMethod,
+  RecurringTransactionWithNames,
+} from "@/db";
 
 beforeAll(() => {
   Object.defineProperty(Element.prototype, "scrollIntoView", {
@@ -41,12 +46,22 @@ const RENT: RecurringTransactionWithNames = {
   payment_method_name: "Banco ARS",
 };
 
-function renderDialog(onSubmitRecurring = vi.fn(() => Promise.resolve())) {
+function renderDialog(
+  onSubmitRecurring = vi.fn(() => Promise.resolve()),
+  {
+    editing = RENT,
+    draft = null,
+  }: {
+    editing?: RecurringTransactionWithNames | null;
+    draft?: NewRecurringTransaction | null;
+  } = {},
+) {
   render(
     <RecurringDialog
       open
       onOpenChange={vi.fn()}
-      editing={RENT}
+      editing={editing}
+      draft={draft}
       categories={CATEGORIES}
       paymentMethods={ACCOUNTS}
       onSubmitRecurring={onSubmitRecurring}
@@ -93,6 +108,55 @@ describe("RecurringDialog", () => {
 
     expect(onSubmitRecurring).toHaveBeenCalledWith(
       expect.objectContaining({ currency: "USD", paymentMethodId: null }),
+    );
+  });
+
+  // What the local AI found repeating, handed over to be added in one step.
+  it("opens a new one on the draft it is handed", async () => {
+    const user = userEvent.setup();
+    const draft: NewRecurringTransaction = {
+      description: "Spotify",
+      amount: 4500,
+      type: "expense",
+      currency: "ARS",
+      categoryId: 1,
+      paymentMethodId: 2,
+      frequency: "monthly",
+      startDate: "2026-10-10",
+      isActive: true,
+    };
+    const onSubmitRecurring = renderDialog(undefined, { editing: null, draft });
+
+    expect(screen.getByRole("heading", { name: "Nueva recurrente" })).toBeTruthy();
+    expect(screen.getByLabelText("Descripción")).toHaveProperty("value", "Spotify");
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+
+    expect(onSubmitRecurring).toHaveBeenCalledWith(draft);
+  });
+
+  // A price that went up: the template, with the new amount already in.
+  it("edits a template from the draft it is handed", async () => {
+    const user = userEvent.setup();
+    const onSubmitRecurring = renderDialog(undefined, {
+      draft: {
+        description: RENT.description,
+        amount: 330000,
+        type: RENT.type,
+        currency: RENT.currency,
+        categoryId: RENT.category_id,
+        paymentMethodId: RENT.payment_method_id,
+        frequency: RENT.frequency,
+        startDate: RENT.start_date,
+        isActive: true,
+      },
+    });
+
+    expect(screen.getByRole("heading", { name: "Editar recurrente" })).toBeTruthy();
+    expect(screen.getByLabelText("Monto")).toHaveProperty("value", "330000");
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+
+    expect(onSubmitRecurring).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 330000, startDate: RENT.start_date }),
     );
   });
 });

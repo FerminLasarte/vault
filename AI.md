@@ -92,7 +92,7 @@ src/lib/ai/
   categoryModel.ts      the most telling word, learned from the history
   categorySuggestion.ts the one entry point for "which category"
   ruleProposals.ts      rules to create, rules to fix
-  stats.ts              median, MAD, percentiles
+  stats.ts              median, MAD
   series.ts             repeating movements
   ...                   one module per later item
 ```
@@ -139,10 +139,10 @@ are one of its best sentences.
 | AI-11 | 4     | Autocomplete from history                      | 19       | [x]  |
 | AI-12 | 4     | Account by merchant in quick entry             | 19       | [x]  |
 | AI-13 | 4     | Natural-language search                        | 21       | [x]  |
-| AI-14 | 5     | Series detection                               | 6        | [ ]  |
-| AI-15 | 5     | Unregistered recurring movements               | 6        | [ ]  |
-| AI-16 | 5     | Subscriptions that went up                     | 7        | [ ]  |
-| AI-17 | 5     | Expected income that has not arrived           | 11       | [ ]  |
+| AI-14 | 5     | Series detection                               | 6        | [x]  |
+| AI-15 | 5     | Unregistered recurring movements               | 6        | [x]  |
+| AI-16 | 5     | Subscriptions that went up                     | 7        | [x]  |
+| AI-17 | 5     | Expected income that has not arrived           | 11       | [x]  |
 | AI-18 | 6     | Column detection                               | 18       | [ ]  |
 | AI-19 | 6     | Instalments on statements                      | 8        | [ ]  |
 | AI-20 | 7     | Split transfers                                | 9        | [ ]  |
@@ -683,7 +683,38 @@ a tolerance, and whose amounts are stable relative to their median. A series
 is active when its last occurrence is within one and a half periods. Series
 already covered by a recurring movement, plan or loan are excluded.
 
-- [ ] Done
+As built:
+
+- **Grouped as `merchantHistory.ts` groups, not also by account.** Each
+  `MerchantEntry` now keeps its movements, oldest first, and `series.ts` reads
+  those instead of grouping the history a second time. A card replaced halfway
+  through a year of Netflix is still one Netflix; the series keeps the
+  merchant's usual account.
+- `stats.ts` gained `mad` (the median distance from the median). Percentiles
+  were left out: nothing reads them yet.
+- A series is the **trailing run**: walking back from the latest movement while
+  the gap stays in one frequency's band, so an old one-off or a gap at the same
+  place does not break it. Bands, as `PERIODS`: a week is 7 ± 2 days, a month
+  30 ± 6 (months run 28–31 and charges move with weekends), a year 365 ± 20.
+  At least `MIN_OCCURRENCES` (3).
+- Amounts: `mad / median` of the last `RECENT_OCCURRENCES` (6) at most
+  `MAX_AMOUNT_SPREAD` (25%). A price rise keeps the series (the MAD does not
+  move with one new price); the weekly shop does not become one. The typical
+  amount is the median of those same occurrences.
+- Active within `ACTIVE_PERIODS` (1.5) periods of today: 45 days for a month.
+- Plans and loans are matched by their description's merchant key, kind and
+  currency, and left out. **A series a recurring movement covers is kept, with
+  `recurring` set**: AI-16 needs it, and AI-15 and AI-17 leave it out.
+- `detectSeries` runs once per change in `AppDataContext` (`series`, null with
+  the AI off), on the merchant history it already builds.
+- `daysBetween` moved from `savings.ts` to `format.ts`, next to the other date
+  helpers, so both use one.
+
+Boundary tests pin each constant: a month 36 days and 24 days apart is one, 37
+and 23 are not; a spread of exactly 25% is, 26% is not; 45 days after the last
+is active, 46 is not.
+
+- [x] Done
 
 ### AI-15 · Unregistered recurring movements [6]
 
@@ -694,7 +725,30 @@ recurrente?"
 `RecurringDialog`, which gains a `draft` prop like `TransactionDialog` has,
 pre-filled from the series.
 
-- [ ] Done
+As built:
+
+- `unregisteredSeries.ts`: id `series:<series id>`
+  (`series:expense:ARS:netflix:monthly`), the most-seen first. The draft is
+  the series as it is now: the clean name, the latest amount, the category it
+  was last given, the merchant's usual account (else the latest one's), and
+  **the next occurrence as its start**, so nothing already recorded comes back
+  as due.
+- Atención: "Parece que pagás Spotify todos los meses" ("cobrás" for income;
+  "todas las semanas", "todos los años"), with "3 veces seguidas, cerca de
+  $ 4.500,00; la última el 15 sept 2026." as its detail and "Agregar".
+- **Dismissed from the line itself**, agreed with the user on 2026-10-06: an
+  X with the hint "Descartar" after the action, as in Esperados and
+  Recurrentes, only on notices that carry a `dismissalId`. The suggested
+  categories and the uncategorised groups keep their own ways out.
+- **Priority within the three AI notices**, agreed the same day: income that is
+  late, charges that went up, suggested categories, uncategorised groups, and
+  last the series nobody declared, which only save typing.
+- `RecurringDialog` takes `draft`, read before `editing`. Turning a stored
+  template back into a `NewRecurringTransaction` is one function,
+  `recurringFromTemplate` in `recurring.ts`, now shared by the dialog, pausing
+  in Recurrentes and AI-16.
+
+- [x] Done
 
 ### AI-16 · Subscriptions that went up [7]
 
@@ -705,7 +759,26 @@ latest amount against the median of the previous three. Only jumps above
 `MIN_RISE`, so ordinary monthly drift is not a notice every month. For a
 declared recurring movement, the action offers to update its amount.
 
-- [ ] Done
+As built: `priceRises.ts`, monthly expense series with more than
+`RISE_BASELINE` (3) occurrences, a rise of at least `MIN_RISE` (10%), biggest
+first. The id carries the new amount (`rise:<series id>:5900`), so a dismissed
+rise stays out of sight while the price stays there, and the next one is news.
+"Netflix pasó de $ 5.000,00 a $ 5.900,00 (+18%)", with "Comparado con los 3
+cobros anteriores." For a declared recurring movement still at an older
+amount, "Tu recurrente todavía dice $ 5.000,00." and **"Actualizar", which
+opens "Editar recurrente" with the new amount filled in** (the user's choice on
+2026-10-06, over writing it straight away with undo). Once the template has
+the new amount, the notice is gone.
+
+**One notice per series**, agreed with the user on 2026-10-06 after the first
+check showed "Megatlon pasó de…" and "Parece que pagás Megatlon…" side by
+side, two of the three AI places on one gym: while a series has gone up, its
+AI-15 notice waits, and the rise of a series nobody declared offers "Agregar"
+itself, opening "Nueva recurrente" at the new amount. If adding it was turned
+down before, the rise offers nothing; dismissing the rise brings the AI-15
+notice back. Checked in tests only (`attention.test.ts`), not on the page.
+
+- [x] Done
 
 ### AI-17 · Expected income that has not arrived [11]
 
@@ -715,7 +788,31 @@ declared recurring movement, the action offers to update its amount.
 tolerance; past it with no occurrence this month, a neutral notice. Never for
 series with fewer than four occurrences.
 
-- [ ] Done
+As built: `lateIncome.ts`. The usual day is the median of the days of the last
+6 occurrences, rounded; late is past it by more than `LATE_TOLERANCE_DAYS` (3)
+with nothing since the 1st, and at least `MIN_INCOME_OCCURRENCES` (4). Silent
+when those days are more than `MAX_DAY_SPREAD` (7) apart: no usual day to speak
+of, or one straddling the turn of the month, where the median of the 30th and
+the 1st is the 15th. Left out for a declared recurring income, which
+Compromisos already asks about once due. "Sueldo suele entrar alrededor del 4 y
+todavía no llegó", with "En los últimos 4 meses entró entre el 3 y el 5.", and
+dismissed for that month only (`late:<series id>:2026-10`).
+
+- [x] Done
+
+Checked for the whole batch: every check green, and on a throwaway Vite page
+(removed) mounting the real Resumen screen with stand-in contexts, driven from
+the in-app browser; nothing was sent to the native window. With a late salary,
+two rises (a gym series and a declared Netflix) and an undeclared Spotify,
+Atención showed the late salary and the two rises, Spotify waiting behind the
+cap. "Actualizar" opened "Editar recurrente" with 5900 and the rest of the
+template; saving it removed the Netflix notice and "Ya comprometido" read
+$ 5.900. The X ("Descartar" on hover) removed the salary notice and the next
+one took its place. "Agregar" on the gym (then still its own notice, see
+AI-16) opened "Nueva recurrente" with Megatlon, 36000, Salud, Visa and 5 Oct
+2026, and saving it removed both of its notices. The details read well on hover, and the line in the dark theme. Not
+checked: the native app, and anything written to a database (the actions were
+stand-ins).
 
 ---
 

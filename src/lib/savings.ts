@@ -1,5 +1,6 @@
 import type { SavingsContribution, SavingsGoalWithNames, Transaction } from "@/db/schema";
 import { calculateAccountBalances, roundToCents } from "@/lib/finance";
+import { daysBetween } from "@/lib/format";
 import type { PaymentMethod } from "@/db/schema";
 
 // How far back the pace is measured. Short enough to reflect what the user is
@@ -164,16 +165,6 @@ function requiredPace(remaining: number, today: string, targetDate: string): num
 
 // The month a pace is scaled down by when less than one is left.
 const DAYS_PER_MONTH = 30;
-
-function daysBetween(fromDate: string, toDate: string): number {
-  const [fromYear, fromMonth, fromDay] = fromDate.split("-").map(Number);
-  const [toYear, toMonth, toDay] = toDate.split("-").map(Number);
-  // UTC, so a daylight-saving change in between does not shave off an hour
-  // and round a day away.
-  const elapsed =
-    Date.UTC(toYear, toMonth - 1, toDay) - Date.UTC(fromYear, fromMonth - 1, fromDay);
-  return Math.round(elapsed / 86_400_000);
-}
 
 // Whole months from one date to another; negative or zero when the second date
 // is not in the future.

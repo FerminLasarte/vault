@@ -21,6 +21,15 @@ const CLOSE: AttentionItem = {
   actionLabel: "Guardar como PDF",
 };
 
+const RISE: AttentionItem = {
+  key: "rise:expense:ARS:netflix:monthly:5900",
+  kind: "rise",
+  tone: "neutral",
+  title: "Netflix pasó de $ 5.000 a $ 5.900 (+18%)",
+  detail: "Comparado con los 3 cobros anteriores.",
+  dismissalId: "rise:expense:ARS:netflix:monthly:5900",
+};
+
 describe("AttentionNotice", () => {
   it("draws nothing when there is nothing to raise", () => {
     const { container } = render(<AttentionNotice items={[]} />);
@@ -63,5 +72,15 @@ describe("AttentionNotice", () => {
     render(<AttentionNotice items={[CLOSE]} />);
 
     expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("lets the AI's notices be dismissed where they sit, and says which", () => {
+    const onDismiss = vi.fn();
+    render(<AttentionNotice items={[CLOSE, RISE]} onDismiss={onDismiss} />);
+
+    fireEvent.click(screen.getByRole("button", { name: `Descartar ${RISE.title}` }));
+    expect(onDismiss).toHaveBeenCalledExactlyOnceWith(RISE);
+    // Only the one that can be.
+    expect(screen.getAllByRole("button", { name: /^Descartar/ })).toHaveLength(1);
   });
 });

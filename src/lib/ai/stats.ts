@@ -11,3 +11,12 @@ export function median(values: readonly number[]): number | null {
     ? sorted[middle]
     : (sorted[middle - 1] + sorted[middle]) / 2;
 }
+
+// The median distance from the median: how far the values typically sit from
+// their middle. Like the median, one charge far from the rest leaves it where it
+// was, so a price rise does not make a steady series look erratic.
+export function mad(values: readonly number[]): number | null {
+  const middle = median(values);
+  if (middle === null) return null;
+  return median(values.map((value) => Math.abs(value - middle)));
+}
