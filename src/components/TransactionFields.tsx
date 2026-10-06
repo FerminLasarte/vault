@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { AiNote } from "@/components/AiMark";
 import { DatePicker } from "@/components/DatePicker";
+import { DescriptionAutocomplete } from "@/components/DescriptionAutocomplete";
 import { TagInput } from "@/components/TagInput";
 import type {
   TransactionFieldsState,
@@ -43,6 +44,10 @@ interface TransactionFieldsProps {
 
 // The fields of a transaction, drawn the same way wherever one is written.
 //
+// The description comes first, the way a movement is said — what it was, then
+// how much and with what — and because picking a past merchant there fills in
+// the fields below it.
+//
 // Only the drawing: what the form does on its own lives in useTransactionFields,
 // which the owner of the form calls. The column spans only take effect inside
 // the dialog's two-column grid; in the inspector's single column they do
@@ -69,11 +74,16 @@ export function TransactionFields({
     destinationAccounts,
     destinationAccount,
     descriptionField,
+    descriptionOptions,
+    pickDescription,
     suggestion,
     markCategoryChosen,
   } = fields;
 
   const id = (name: string) => `${idPrefix}-${name}`;
+  const descriptionPlaceholder = isTransfer
+    ? "Ej. Compra de dólares"
+    : "Ej. Compra en el supermercado";
 
   // The name the lists will show for what is being typed, when the AI
   // recognises a merchant in it. Said here so a row never changes name without
@@ -118,6 +128,34 @@ export function TransactionFields({
 
   return (
     <>
+      <div className="flex flex-col gap-1.5 sm:col-span-2">
+        <Label htmlFor={id("description")}>Descripción</Label>
+        {descriptionOptions === null ? (
+          <Input
+            id={id("description")}
+            placeholder={descriptionPlaceholder}
+            {...descriptionField}
+          />
+        ) : (
+          <DescriptionAutocomplete
+            id={id("description")}
+            placeholder={descriptionPlaceholder}
+            {...descriptionField}
+            value={description ?? ""}
+            options={descriptionOptions}
+            onPick={pickDescription}
+          />
+        )}
+        {shownAs !== null && (
+          <AiNote reason="Vault reconoce el comercio en el texto del banco. La descripción guardada no cambia.">
+            Se muestra como «{shownAs}»
+          </AiNote>
+        )}
+        {errors.description && (
+          <p className="text-xs text-destructive">{errors.description.message}</p>
+        )}
+      </div>
+
       <div className="flex flex-col gap-1.5">
         <Label htmlFor={id("type")}>Tipo</Label>
         <Controller
@@ -330,25 +368,6 @@ export function TransactionFields({
           )}
         />
         {errors.date && <p className="text-xs text-destructive">{errors.date.message}</p>}
-      </div>
-
-      <div className="flex flex-col gap-1.5 sm:col-span-2">
-        <Label htmlFor={id("description")}>Descripción</Label>
-        <Input
-          id={id("description")}
-          placeholder={
-            isTransfer ? "Ej. Compra de dólares" : "Ej. Compra en el supermercado"
-          }
-          {...descriptionField}
-        />
-        {shownAs !== null && (
-          <AiNote reason="Vault reconoce el comercio en el texto del banco. La descripción guardada no cambia.">
-            Se muestra como «{shownAs}»
-          </AiNote>
-        )}
-        {errors.description && (
-          <p className="text-xs text-destructive">{errors.description.message}</p>
-        )}
       </div>
 
       <div className="flex flex-col gap-1.5 sm:col-span-2">

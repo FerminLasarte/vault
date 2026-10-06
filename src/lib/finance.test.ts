@@ -10,6 +10,7 @@ import {
   buildMonthlyTrend,
   calculateSummary,
   currentMonthKey,
+  filterByAccount,
   filterByAmountRange,
   filterByCategory,
   filterByCurrency,
@@ -17,6 +18,7 @@ import {
   filterByTag,
   filterByDateRange,
   filterByMonth,
+  filterByType,
   getMonthKeysBetween,
   getRecentMonthKeys,
   groupByCategory,
@@ -361,6 +363,32 @@ describe("filterByCategory", () => {
   });
 });
 
+describe("filterByType", () => {
+  it("keeps only movements of the given kind", () => {
+    const transactions = [
+      makeTransaction({ id: 1, type: "expense" }),
+      makeTransaction({ id: 2, type: "income" }),
+    ];
+    expect(filterByType(transactions, "income").map((t) => t.id)).toEqual([2]);
+  });
+});
+
+describe("filterByAccount", () => {
+  it("keeps movements through the account on either side", () => {
+    const transactions = [
+      makeTransaction({ id: 1, payment_method_id: 7 }),
+      makeTransaction({ id: 2, payment_method_id: 8 }),
+      makeTransaction({
+        id: 3,
+        type: "transfer",
+        payment_method_id: 8,
+        destination_payment_method_id: 7,
+      }),
+    ];
+    expect(filterByAccount(transactions, 7).map((t) => t.id)).toEqual([1, 3]);
+  });
+});
+
 describe("filterByAmountRange", () => {
   const transactions = [
     makeTransaction({ id: 1, amount: 10 }),
@@ -456,6 +484,19 @@ describe("applyTransactionFilters", () => {
         maxAmount: null,
       }),
     ).toHaveLength(4);
+  });
+
+  it("narrows by kind and by account", () => {
+    const mixed = [
+      makeTransaction({ id: 1, type: "expense", payment_method_id: 1 }),
+      makeTransaction({ id: 2, type: "income", payment_method_id: 1 }),
+      makeTransaction({ id: 3, type: "expense", payment_method_id: 2 }),
+    ];
+    expect(
+      applyTransactionFilters(mixed, { type: "expense", paymentMethodId: 1 }).map(
+        (t) => t.id,
+      ),
+    ).toEqual([1]);
   });
 
   it("combines currency, category, date and amount constraints", () => {

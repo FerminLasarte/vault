@@ -35,6 +35,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
+import { RemovableBadge } from "@/components/RemovableBadge";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { CurrencyFilter } from "@/components/CurrencyFilter";
 import { CategorySelect } from "@/components/filters/CategorySelect";
@@ -46,6 +47,7 @@ import { useAppActions, useAppData, useAppStatus } from "@/hooks/useAppData";
 import { useBriefly } from "@/hooks/useBriefly";
 import { useMerchantName } from "@/hooks/useMerchantName";
 import { useViewState } from "@/hooks/useViewState";
+import { parseSearchQuery, withoutChips } from "@/lib/ai/searchQuery";
 import {
   applyTransactionFilters,
   EMPTY_DATE_RANGE,
@@ -147,6 +149,8 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
     paymentMethods,
     aiEnabled,
     categoryModel,
+    merchantHistory,
+    today,
     isLoading,
   } = useAppData();
   const { isMutating } = useAppStatus();
@@ -191,21 +195,48 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
     setFilters((current) => ({ ...current, [key]: value }));
   }
 
+  // The search read as filters — "comida en agosto más de 5000" — with the AI
+  // on. Off, it is the text it always was.
+  const understood = useMemo(
+    () =>
+      aiEnabled
+        ? parseSearchQuery(search, { today, categories, paymentMethods, tags, currency })
+        : null,
+    [aiEnabled, search, today, categories, paymentMethods, tags, currency],
+  );
+  // A currency named in the search is the one on screen while it is there.
+  const shownCurrency = understood?.filters.currency ?? currency;
+
+  function chooseCurrency(value: string) {
+    setCurrency(value);
+    // Choosing one on screen overrides one named in the search, which goes.
+    const naming = understood?.chips.filter((chip) => chip.setsCurrency) ?? [];
+    if (naming.length > 0) setFilter("search", withoutChips(search, naming));
+  }
+
   const filtered = useMemo(() => {
     const matching = applyTransactionFilters(transactions, {
-      currency,
-      search: filters.search,
+      currency: shownCurrency,
+      search: understood?.rest ?? filters.search,
       categoryId: filters.categoryId,
       dateFrom: filters.dateRange.from,
       dateTo: filters.dateRange.to,
       minAmount: parseAmountBound(filters.minAmount),
       maxAmount: parseAmountBound(filters.maxAmount),
     });
-    const tagged = filters.tag === null ? matching : filterByTag(matching, filters.tag);
+    // What the search says narrows what the controls already chose: both apply.
+    const searched =
+      understood === null
+        ? matching
+        : applyTransactionFilters(matching, understood.filters);
+    const tagged = [filters.tag, understood?.filters.tag ?? null].reduce(
+      (rows, name) => (name === null ? rows : filterByTag(rows, name)),
+      searched,
+    );
     return suggestedOnly
       ? tagged.filter((transaction) => transaction.category_suggested === 1)
       : tagged;
-  }, [transactions, currency, filters, suggestedOnly]);
+  }, [transactions, shownCurrency, understood, filters, suggestedOnly]);
 
   // Categories the AI chose on import and nobody has looked at yet, in the
   // currency on screen.
@@ -213,9 +244,9 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
     () =>
       transactions.filter(
         (transaction) =>
-          transaction.category_suggested === 1 && transaction.currency === currency,
+          transaction.category_suggested === 1 && transaction.currency === shownCurrency,
       ).length,
-    [transactions, currency],
+    [transactions, shownCurrency],
   );
 
   async function confirmShown() {
@@ -229,7 +260,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
   // browser has already painted, so the user would see one frame of page 7 of
   // the old results before it snapped back. Re-rendering from here happens
   // before anything is committed, so nothing flickers.
-  const filterSignature = JSON.stringify([currency, filters]);
+  const filterSignature = JSON.stringify([shownCurrency, filters]);
   const [lastFilterSignature, setLastFilterSignature] = useState(filterSignature);
   if (filterSignature !== lastFilterSignature) {
     setLastFilterSignature(filterSignature);
@@ -433,17 +464,21 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
         <CardContent className="flex flex-wrap items-end gap-4">
           <div className="flex flex-col gap-1.5">
             <Label>Moneda</Label>
-            <CurrencyFilter value={currency} onChange={setCurrency} />
+            <CurrencyFilter value={shownCurrency} onChange={chooseCurrency} />
           </div>
 
-          <div className="flex min-w-56 flex-col gap-1.5">
+          <div
+            className={cn("flex flex-col gap-1.5", aiEnabled ? "min-w-72" : "min-w-56")}
+          >
             <Label htmlFor="transactions-search">Buscar</Label>
             <div className="relative">
               <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 ref={searchRef}
                 id="transactions-search"
-                placeholder="Descripción..."
+                placeholder={
+                  aiEnabled ? "Ej. comida en agosto más de 5000" : "Descripción..."
+                }
                 className="pl-8"
                 value={search}
                 onChange={(event) => setFilter("search", event.target.value)}
@@ -557,6 +592,24 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
             <Button type="button" variant="ghost" onClick={resetFilters}>
               Limpiar filtros
             </Button>
+          )}
+
+          {understood !== null && understood.chips.length > 0 && (
+            <div
+              aria-label="Lo que se entendió de la búsqueda"
+              className="arrive flex basis-full flex-wrap items-center gap-2"
+            >
+              <AiMark reason="Lo que la IA entendió de tu búsqueda, aplicado como filtros. Lo demás se busca como texto." />
+              {understood.chips.map((chip) => (
+                <RemovableBadge
+                  key={chip.tokens.join(",")}
+                  removeLabel={`Quitar ${chip.label}`}
+                  onRemove={() => setFilter("search", withoutChips(search, [chip]))}
+                >
+                  {chip.label}
+                </RemovableBadge>
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>
@@ -803,6 +856,7 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
         draft={draft}
         aiEnabled={aiEnabled}
         categoryModel={categoryModel}
+        merchantHistory={merchantHistory}
         onSubmitTransaction={handleSubmitTransaction}
       />
 

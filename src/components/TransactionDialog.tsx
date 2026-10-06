@@ -3,6 +3,7 @@ import { useTransactionFields } from "@/hooks/useTransactionFields";
 import { FormDialog } from "@/components/FormDialog";
 import { TransactionFields } from "@/components/TransactionFields";
 import type { CategoryModel } from "@/lib/ai/categoryModel";
+import type { MerchantHistory } from "@/lib/ai/merchantHistory";
 import {
   blankTransactionForm,
   draftToForm,
@@ -35,6 +36,9 @@ interface TransactionDialogProps {
   aiEnabled: boolean;
   // What the local AI learned; null with it switched off.
   categoryModel: CategoryModel | null;
+  // The merchants offered as the description is typed; null with the local AI
+  // switched off.
+  merchantHistory: MerchantHistory | null;
   onSubmitTransaction: (transaction: NewTransaction, tags: string[]) => Promise<void>;
 }
 
@@ -51,6 +55,7 @@ export function TransactionDialog({
   draft = null,
   aiEnabled,
   categoryModel,
+  merchantHistory,
   onSubmitTransaction,
 }: TransactionDialogProps) {
   const form = useDialogForm<TransactionFormInput, TransactionFormValues>({
@@ -69,6 +74,7 @@ export function TransactionDialog({
     paymentMethods,
     isEditing: false,
     loadKey: open,
+    merchantHistory,
   });
 
   const {

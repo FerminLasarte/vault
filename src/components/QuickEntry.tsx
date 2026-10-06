@@ -39,7 +39,7 @@ interface Part {
 // transfer between currencies and far too much for a coffee. Here the line is
 // read as it is typed (see quickEntry.ts), and what was understood is shown
 // under it before anything is saved — the type, the amount, the category and
-// the rule that chose it, the account and the date. Enter saves it; Tab opens
+// the rule that chose it, the account and why it was assumed, and the date. Enter saves it; Tab opens
 // the whole form with all of that filled in. A line with something missing
 // goes to the form on either key, since the form is where that gets filled.
 export function QuickEntry({ defaultCurrency, onSave, onExpand }: QuickEntryProps) {
@@ -48,6 +48,7 @@ export function QuickEntry({ defaultCurrency, onSave, onExpand }: QuickEntryProp
     categories,
     categoryRules,
     categoryModel,
+    merchantHistory,
     transactions,
     today,
   } = useAppData();
@@ -69,6 +70,7 @@ export function QuickEntry({ defaultCurrency, onSave, onExpand }: QuickEntryProp
             categories,
             rules: categoryRules,
             model: categoryModel,
+            merchants: merchantHistory,
             lastUsedAccounts,
             defaultCurrency,
           }),
@@ -79,6 +81,7 @@ export function QuickEntry({ defaultCurrency, onSave, onExpand }: QuickEntryProp
       categories,
       categoryRules,
       categoryModel,
+      merchantHistory,
       lastUsedAccounts,
       defaultCurrency,
     ],
@@ -114,10 +117,12 @@ export function QuickEntry({ defaultCurrency, onSave, onExpand }: QuickEntryProp
             },
       account === undefined
         ? { key: "account", text: "Sin cuenta", missing: true }
-        : {
-            key: "account",
-            text: entry.accountAssumed ? `${account.name}, por defecto` : account.name,
-          },
+        : entry.accountReason !== null
+          ? { key: "account", text: account.name, aiReason: entry.accountReason }
+          : {
+              key: "account",
+              text: entry.accountAssumed ? `${account.name}, por defecto` : account.name,
+            },
       entry.date > today
         ? { key: "date", text: `${formatDate(entry.date)}, es futura`, missing: true }
         : { key: "date", text: formatDate(entry.date) },

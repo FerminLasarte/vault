@@ -136,9 +136,9 @@ are one of its best sentences.
 | AI-08 | 3     | Rule proposals                                 | 2        | [x]  |
 | AI-09 | 3     | Rule hygiene                                   | 3        | [x]  |
 | AI-10 | 3     | Bulk categorisation of uncategorised movements | 4        | [x]  |
-| AI-11 | 4     | Autocomplete from history                      | 19       | [ ]  |
-| AI-12 | 4     | Account by merchant in quick entry             | 19       | [ ]  |
-| AI-13 | 4     | Natural-language search                        | 21       | [ ]  |
+| AI-11 | 4     | Autocomplete from history                      | 19       | [x]  |
+| AI-12 | 4     | Account by merchant in quick entry             | 19       | [x]  |
+| AI-13 | 4     | Natural-language search                        | 21       | [x]  |
 | AI-14 | 5     | Series detection                               | 6        | [ ]  |
 | AI-15 | 5     | Unregistered recurring movements               | 6        | [ ]  |
 | AI-16 | 5     | Subscriptions that went up                     | 7        | [ ]  |
@@ -539,7 +539,37 @@ account and median amount over the recent window. Rendered with the existing
 `Popover`; keyboard first (arrows, Enter, Esc). Amount stays editable and
 selected, since it is the field most likely to differ.
 
-- [ ] Done
+As built:
+
+- `merchantHistory.ts` learns, once per transaction list in `AppDataContext`
+  and only with the AI on, one entry per merchant, kind and currency
+  (`merchantKey`: the name the lists show, read as words, so
+  `MERPAGO*RAPPI 4471` and a typed "rappi" meet). Each has its label (how its
+  latest movement is shown), counts, the median amount of the last
+  `RECENT_MONTHS` (6) and its usual account. Account and amount are facts, not
+  guesses, so every income and expense counts, suggested category or not.
+  `median` is the first piece of `stats.ts`; the rest lands with batch 5.
+- `descriptionSuggestions` matches from `MIN_TYPED` (2) characters, at the
+  start of any word ("libre" finds Mercado Libre), recent count first, then
+  all-time count, then the latest; at most `MAX_SUGGESTIONS` (5).
+- **Description first.** Agreed with the user on 2026-10-06: the description
+  was the seventh field, so picking a merchant would have overwritten what was
+  already filled in. It now leads the form (the inspector too, which shares the
+  fields), the order the quick entry reads a line in.
+- Picking one sets the kind, the currency, the usual account when there is a
+  clear one and the typical amount, and leaves the amount selected. The
+  category is **not** copied from the merchant: the new description goes
+  through `suggestCategory` like any other, so rules-then-AI is still decided in
+  one place (AI-05), and the option shows that same category.
+- Not the plain `Popover` but Base UI's `Autocomplete`
+  (`src/components/ui/autocomplete.tsx`), from the same library and styled like
+  `Select`: it keeps the focus in the field and gives the combobox roles and
+  keyboard handling a screen reader expects, which a hand-rolled popover would
+  have had to reimplement.
+- Only in the dialog that creates a movement: in the inspector, a past
+  merchant would replace the amount and account of one already saved.
+
+- [x] Done
 
 ### AI-12 · Account by merchant in quick entry [19]
 
@@ -553,7 +583,17 @@ is a clear one, and fall back to today's rule otherwise.
 when it holds at least `MIN_SHARE` of its movements. The screen already says
 when an account was assumed; it adds the reason.
 
-- [ ] Done
+As built: from the same `merchantHistory.ts`, in the line's kind and currency.
+A usual account needs `MIN_ACCOUNT_MOVEMENTS` (2) recent movements through it
+and `MIN_ACCOUNT_SHARE` (60%) of them; boundary tests pin both. The account is
+now resolved after the kind, since what is spent at a place and what comes in
+from it are two habits. An account typed on the line still wins, and one that
+no longer exists is never assumed. The reading shows "Visa ✨ IA" instead of
+"Efectivo, por defecto", with the reason on the mark: "En los últimos 6
+meses, 9 de tus 10 movimientos con «Rappi» se pagaron con Visa." The form's
+autocomplete fills the same account.
+
+- [x] Done
 
 ### AI-13 · Natural-language search [21]
 
@@ -576,7 +616,54 @@ amounts are separate controls.
   lacks today and the queries need.
 - Understood parts appear as removable chips under the box, with `AiMark`.
 
-- [ ] Done
+As built:
+
+- **Live, with chips.** Agreed with the user on 2026-10-06: what is understood
+  applies as it is typed and shows as chips under the filters; the existing
+  controls stay and both apply. A chip's cross removes the words it was read
+  from, joining words included ("en agosto" goes as one).
+- Only what is distinctive is read, so a plain search keeps working: kinds in
+  the plural ("gastos", "ingresos", "transferencias"; the singular
+  "transferencia" a bank writes stays text), a category by its whole name
+  (longest first; a name two categories share only when the kind tells them
+  apart), an account only after "con", "en" or "desde", an amount only after a
+  comparison ("más de", "menos de", "entre … y …", "desde", "hasta", ">", "<"),
+  and a tag only if it exists. A query with nothing understood is the text it
+  was. Joining words next to something understood go with it; between two
+  searched words they stay, since "pago de luz" is not "pago luz".
+- Periods: a month (the last one that came round, or with a year: "agosto
+  2025", "agosto de 2025"), "este mes", "el mes pasado", "este año", "el año
+  pasado", and any single day the quick entry reads ("ayer", "viernes",
+  "15/9").
+- `typedText.ts` is the shared module: amounts, dates, currencies and
+  accounts, moved out of `quickEntry.ts` with its tests untouched.
+- `TransactionFilters` gained `type` and `paymentMethodId`; an account matches
+  on either side of a transfer.
+- A currency in the search ("en dólares", or "us$" in an amount) is the one on
+  screen while it is there; choosing one in the currency tabs takes it out of
+  the search.
+- Amount chips say "Desde" and "Hasta": the bounds are inclusive, as in the
+  amount controls.
+- With the AI off, none of it: the box searches text, as before.
+
+- [x] Done
+
+Checked for the whole batch on a throwaway Vite page (removed) mounting the
+real Transacciones screen with stand-in data shaped like a seeded `.smoke`
+database (deleted afterwards). The native window could not be driven: a
+system password dialog sat over it and took the keystrokes, so nothing was
+typed into the app there. On the page: "rappi 2500" read "Mercado Pago ✨ IA"
+over the last account used, with "En los últimos 6 meses, 3 de tus 4
+movimientos con «Rappi» se pagaron con Mercado Pago."; "Nueva transacción"
+opened on the description, "rap" offered Rappi with "Comida · Mercado Pago"
+and $ 10.250, and arrow-Enter filled Gasto, 10250 (selected), Comida
+("Sugerida por IA") and Mercado Pago without submitting; "suel", picked with
+the mouse, switched to Ingreso, Salario and Cuenta Bancaria ARS; Escape closed
+the list and left the dialog. "comida en agosto más de 9000" showed three
+chips and two rows, its "agosto" cross left "comida más de 9000", "netflix en
+dólares" switched the tabs to USD and choosing ARS took the chip away, and the
+chips read well in the dark theme. Not checked: the inspector with the
+description first, and anything written to a database.
 
 ---
 

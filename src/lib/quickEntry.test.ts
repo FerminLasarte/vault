@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { trainCategoryModel } from "@/lib/ai/categoryModel";
+import { learnMerchantHistory } from "@/lib/ai/merchantHistory";
 import {
   lastUsedAccountByCurrency,
   parseQuickEntry,
@@ -7,7 +8,7 @@ import {
   quickEntryToTransaction,
   type QuickEntryContext,
 } from "./quickEntry";
-import type { Category, CategoryRule, PaymentMethod } from "@/db";
+import type { Category, CategoryRule, PaymentMethod, Transaction } from "@/db";
 
 // A Monday, so the weekday cases have a fixed point to count back from.
 const TODAY = "2026-09-28";
@@ -45,6 +46,7 @@ function context(overrides: Partial<QuickEntryContext> = {}): QuickEntryContext 
     categories: CATEGORIES,
     rules: RULES,
     model: null,
+    merchants: null,
     lastUsedAccounts: new Map([
       ["ARS", 1],
       ["USD", 3],
@@ -186,6 +188,71 @@ describe("parseQuickEntry", () => {
 
     it("has no account when the currency has none", () => {
       expect(parse("almuerzo 2500", { paymentMethods: [] }).paymentMethodId).toBeNull();
+    });
+  });
+
+  describe("the merchant's usual account", () => {
+    let nextId = 1;
+    function paidWith(accountId: number): Transaction {
+      return {
+        id: nextId++,
+        amount: 9000,
+        type: "expense",
+        category_id: null,
+        payment_method_id: accountId,
+        destination_payment_method_id: null,
+        destination_amount: null,
+        description: "MERPAGO*RAPPI 4471",
+        date: "2026-09-01",
+        currency: "ARS",
+        category_suggested: 0,
+      };
+    }
+
+    const merchants = learnMerchantHistory(
+      [paidWith(4), paidWith(4), paidWith(4), paidWith(1)],
+      TODAY,
+    );
+
+    it("is assumed over the last account used, and says why", () => {
+      const entry = parse("rappi 2500", { merchants });
+
+      expect(entry.paymentMethodId).toBe(4);
+      expect(entry.accountAssumed).toBe(true);
+      expect(entry.accountReason).toBe(
+        "En los últimos 6 meses, 3 de tus 4 movimientos con «Rappi» se pagaron con Banco Galicia.",
+      );
+    });
+
+    it("gives way to an account typed on the line", () => {
+      const entry = parse("rappi 2500 mp", { merchants });
+
+      expect(entry.paymentMethodId).toBe(2);
+      expect(entry.accountReason).toBeNull();
+    });
+
+    it("only counts in the line's currency", () => {
+      const entry = parse("rappi 20 usd", { merchants });
+
+      expect(entry.paymentMethodId).toBe(3);
+      expect(entry.accountReason).toBeNull();
+    });
+
+    it("is not assumed with the local AI off", () => {
+      const entry = parse("rappi 2500");
+
+      expect(entry.paymentMethodId).toBe(1);
+      expect(entry.accountReason).toBeNull();
+    });
+
+    it("is not assumed once the account is gone", () => {
+      const entry = parse("rappi 2500", {
+        merchants,
+        paymentMethods: ACCOUNTS.filter((account) => account.id !== 4),
+      });
+
+      expect(entry.paymentMethodId).toBe(1);
+      expect(entry.accountReason).toBeNull();
     });
   });
 

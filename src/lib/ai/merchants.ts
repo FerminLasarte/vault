@@ -113,3 +113,11 @@ export function merchantName(description: string): string | null {
   }
   return name;
 }
+
+// What two movements share when they are "the same place": the name the lists
+// show, read as words, so `MERPAGO*RAPPI 4471` and a typed "rappi" meet, and
+// "Café" and "cafe" are one. Typed text is its own name (see above), so "nafta
+// ypf" and a statement's `YPF 1234` stay apart.
+export function merchantKey(description: string): string {
+  return words(merchantName(description) ?? description).join(" ");
+}

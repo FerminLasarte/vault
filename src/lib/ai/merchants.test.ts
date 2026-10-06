@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import dictionary from "./data/merchants.json";
-import { knownMerchant, merchantName } from "./merchants";
+import { knownMerchant, merchantKey, merchantName } from "./merchants";
 import { words } from "./tokens";
 
 describe("merchantName", () => {
@@ -122,5 +122,20 @@ describe("the merchant dictionary", () => {
     const names = dictionary.merchants.map((merchant) => merchant.name);
 
     expect(new Set(names).size).toBe(names.length);
+  });
+});
+
+describe("merchantKey", () => {
+  it("is the same for a statement line and the merchant typed by hand", () => {
+    expect(merchantKey("MERPAGO*RAPPI 4471 CABA AR")).toBe("rappi");
+    expect(merchantKey("rappi")).toBe("rappi");
+  });
+
+  it("ignores accents, case and punctuation in typed text", () => {
+    expect(merchantKey("Café con Juan")).toBe(merchantKey("cafe con juan."));
+  });
+
+  it("keeps typed text apart from the merchant it mentions", () => {
+    expect(merchantKey("nafta ypf")).not.toBe(merchantKey("YPF 1234 CABA"));
   });
 });
