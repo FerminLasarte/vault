@@ -1,6 +1,7 @@
 import type {
   Category,
   CategoryRule,
+  InstallmentPlan,
   NewTransaction,
   PaymentMethod,
   Transaction,
@@ -201,6 +202,9 @@ export interface ImportContext {
   // What the local AI learned, for rows no rule places; absent or null with
   // it switched off. Its choices arrive flagged as suggested, to be reviewed.
   categoryModel?: CategoryModel | null;
+  // The instalment plans a statement's instalments are matched against;
+  // absent or null with the AI off, when instalments are plain text.
+  installmentPlans?: readonly InstallmentPlan[] | null;
   accounts: PaymentMethod[];
   existing: Transaction[];
   supportedCurrencies: string[];

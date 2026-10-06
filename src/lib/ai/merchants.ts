@@ -1,4 +1,5 @@
 import dictionary from "@/lib/ai/data/merchants.json";
+import { readInstallment } from "@/lib/ai/installmentText";
 import { words } from "@/lib/ai/tokens";
 import { normalizeForSearch } from "@/lib/text";
 
@@ -96,7 +97,9 @@ function cleanedName(text: string): string | null {
 function computeMerchantName(description: string): string | null {
   if (!readsLikeABank(description)) return null;
 
-  const text = withoutProcessor(description);
+  // "C.04/12" says which instalment, not who was paid: every instalment of a
+  // purchase goes by the same name.
+  const text = withoutProcessor(readInstallment(description)?.text ?? description);
   const name = findMerchant(text)?.name ?? cleanedName(text);
   return name !== null && name !== description.trim() ? name : null;
 }

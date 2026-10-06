@@ -1,5 +1,8 @@
 import { occurrenceAt } from "@/lib/recurring";
 
+// The most instalments a plan can have.
+export const MAX_INSTALLMENT_COUNT = 120;
+
 // Splits a total into `count` instalments.
 //
 // Dividing evenly almost never lands on whole cents, and paying the rounded

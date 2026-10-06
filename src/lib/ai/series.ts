@@ -102,6 +102,15 @@ function declaredKey(description: string, type: CategoryType, currency: string):
   return merchantEntryId(merchantKey(description), type, currency);
 }
 
+// The merchant whose movements an instalment plan accounts for: the one its
+// description names, so a plan typed as "Fravega" is behind the statement's
+// `FRAVEGA C.04/12`.
+export function planMerchantId(
+  plan: Pick<InstallmentPlan, "description" | "currency">,
+): string {
+  return declaredKey(plan.description, "expense", plan.currency);
+}
+
 export function detectSeries(
   history: MerchantHistory,
   commitments: Commitments,
@@ -117,9 +126,7 @@ export function detectSeries(
   // An instalment or a loan payment repeats by definition, and is already
   // scheduled where the user declared it.
   const scheduled = new Set([
-    ...commitments.installmentPlans.map((plan) =>
-      declaredKey(plan.description, "expense", plan.currency),
-    ),
+    ...commitments.installmentPlans.map(planMerchantId),
     ...commitments.loans.map((loan) =>
       declaredKey(
         loan.description,

@@ -12,6 +12,8 @@ import type { ColumnMapping } from "./importMapping";
 import { detectDelimiter, parseCsv } from "@/lib/csv";
 import type { ImportContext } from "@/lib/csv";
 import type { PaymentMethod } from "@/db/schema";
+import { ARGENTINE_STATEMENT } from "@/lib/ai/testing/statements";
+import { installmentPlan } from "@/lib/ai/testing/series";
 
 const CONTEXT: ImportContext = {
   categories: [],
@@ -489,22 +491,7 @@ describe("buildMappedImportPlan", () => {
 });
 
 describe("a real Argentine bank statement", () => {
-  // Semicolon separated because the comma is already the decimal separator,
-  // day-first dates, a preamble above the table, separate Débito and Crédito
-  // columns, a blank spacer row and a totals line at the end. Every one of
-  // those is normal, and every one breaks a naive parser.
-  const FILE = [
-    "Resumen de cuenta;;;",
-    "Cuenta 123-456/7;;;",
-    ";;;",
-    "Fecha;Concepto;Débito;Crédito",
-    "05/08/2026;COMPRA COTO DIGITAL;12.345,67;0,00",
-    "06/08/2026;TRANSFERENCIA RECIBIDA;0,00;500.000,00",
-    ";;;",
-    "07/08/2026;DEBITO AUTOMATICO EDESUR;8.900,50;",
-    "08/08/2026;PAGO TARJETA;150.000,00;0,00",
-    "Saldo final;;;",
-  ].join("\n");
+  const FILE = ARGENTINE_STATEMENT;
 
   const MAPPING: ColumnMapping = {
     ...EMPTY_MAPPING,
@@ -580,5 +567,123 @@ describe("a real Argentine bank statement", () => {
     // Re-downloading an overlapping period is how anyone actually uses this.
     expect(second.ready).toHaveLength(0);
     expect(second.duplicates).toBe(4);
+  });
+});
+
+describe("instalments on a statement", () => {
+  const MAPPING: ColumnMapping = {
+    ...EMPTY_MAPPING,
+    date: 0,
+    description: 1,
+    amount: 2,
+    currency: "ARS",
+    paymentMethodId: 2,
+  };
+  const FRAVEGA = installmentPlan({
+    id: 1,
+    description: "Fravega",
+    total_amount: 120000,
+    installment_count: 12,
+    first_due_date: "2026-06-10",
+    confirmed_count: 3,
+  });
+  const WITH_PLANS: ImportContext = { ...CONTEXT, installmentPlans: [FRAVEGA] };
+
+  function plan(
+    lines: string[][],
+    mapping: Partial<ColumnMapping> = { installmentDates: "charge" },
+    context: ImportContext = WITH_PLANS,
+    separate?: ReadonlySet<number>,
+  ) {
+    return buildMappedImportPlan(
+      [["Fecha", "Concepto", "Importe"], ...lines],
+      { ...MAPPING, ...mapping },
+      context,
+      separate,
+    );
+  }
+
+  it("registers the instalment a plan is waiting for, instead of importing it", () => {
+    const result = plan([
+      ["10/09/2026", "FRAVEGA C.04/12", "-10.000,00"],
+      ["11/09/2026", "COTO", "-5.000,00"],
+    ]);
+
+    expect(result.ready.map((entry) => entry.transaction.description)).toEqual(["COTO"]);
+    expect(result.steps).toEqual([
+      { kind: "installment", id: 1, index: 3, date: "2026-09-10", amount: 10000 },
+    ]);
+    expect(result.installments.map((line) => line.kind)).toEqual(["registers"]);
+  });
+
+  it("leaves out an instalment the plan already has, as already there", () => {
+    const result = plan([["10/08/2026", "FRAVEGA C.03/12", "-10.000,00"]]);
+
+    expect(result.ready).toEqual([]);
+    expect(result.duplicates).toBe(1);
+  });
+
+  it("imports an instalment with no plan, offering one", () => {
+    const result = plan([["10/09/2026", "TIENDA LUNA C.04/12", "-2.500,00"]]);
+
+    expect(result.ready).toHaveLength(1);
+    expect(result.installments[0].kind).toBe("unplanned");
+  });
+
+  it("imports it on its own when the user says so", () => {
+    const result = plan(
+      [["10/09/2026", "FRAVEGA C.04/12", "-10.000,00"]],
+      { installmentDates: "charge" },
+      WITH_PLANS,
+      new Set([2]),
+    );
+
+    expect(result.ready).toHaveLength(1);
+    expect(result.steps).toEqual([]);
+  });
+
+  it("dates an instalment by its month when the statement writes the purchase", () => {
+    const result = plan([["02/06/2026", "TIENDA LUNA C.04/12", "-2.500,00"]], {
+      installmentDates: "purchase",
+    });
+
+    expect(result.ready[0].transaction.date).toBe("2026-09-02");
+  });
+
+  describe("asks which date an instalment carries", () => {
+    it("when there is one past the first and nobody said yet", () => {
+      const result = plan([["10/09/2026", "TIENDA LUNA C.02/12", "-2.500,00"]], {
+        installmentDates: null,
+      });
+
+      expect(result.needsInstallmentDates).toBe(true);
+    });
+
+    it("not when every instalment is a first one, where both dates are one", () => {
+      const result = plan([["10/09/2026", "TIENDA LUNA C.01/12", "-2.500,00"]], {
+        installmentDates: null,
+      });
+
+      expect(result.needsInstallmentDates).toBe(false);
+    });
+
+    it("not once it was answered", () => {
+      expect(
+        plan([["10/09/2026", "TIENDA LUNA C.02/12", "-2.500,00"]]).needsInstallmentDates,
+      ).toBe(false);
+    });
+  });
+
+  it("reads none of it with the AI off", () => {
+    const result = plan(
+      [["10/09/2026", "FRAVEGA C.04/12", "-10.000,00"]],
+      { installmentDates: null },
+      CONTEXT,
+    );
+
+    expect(result.ready).toHaveLength(1);
+    expect(result.steps).toEqual([]);
+    expect(result.installments).toEqual([]);
+    expect(result.needsInstallmentDates).toBe(false);
   });
 });

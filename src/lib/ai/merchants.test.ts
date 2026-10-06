@@ -70,6 +70,11 @@ describe("merchantName", () => {
       expect(merchantName("Netflix")).toBeNull();
     });
 
+    it("leaves the instalment out of a statement's name for it", () => {
+      expect(merchantName("TIENDA LUNA C.04/12")).toBe("Tienda Luna");
+      expect(merchantKey("FRAVEGA CUOTA 03/12")).toBe(merchantKey("Fravega"));
+    });
+
     it("says nothing when there is no name left to give", () => {
       expect(merchantName("")).toBeNull();
       expect(merchantName("1234 5678")).toBeNull();

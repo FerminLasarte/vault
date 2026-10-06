@@ -182,6 +182,23 @@ describe("an import", () => {
 
     expect(toast.success).toHaveBeenCalledWith("2 transacciones importadas");
   });
+
+  it("counts the instalments a statement registered in their plans", async () => {
+    const data = await mount();
+
+    await act(async () => {
+      await data.current.importTransactions(
+        [anImported("Café")],
+        [{ kind: "installment", id: 1, index: 3, date: "2026-09-10", amount: 100 }],
+      );
+    });
+
+    expect(db.insertTransactions).toHaveBeenCalledWith(
+      [anImported("Café")],
+      [{ kind: "installment", id: 1, index: 3, date: "2026-09-10", amount: 100 }],
+    );
+    expect(toast.success).toHaveBeenCalledWith("2 transacciones importadas");
+  });
 });
 
 describe("a step that can be taken back", () => {

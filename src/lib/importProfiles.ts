@@ -1,5 +1,10 @@
-import { EMPTY_MAPPING, withFittingAccount } from "@/lib/importMapping";
+import {
+  EMPTY_MAPPING,
+  MAX_HEADER_SEARCH,
+  withFittingAccount,
+} from "@/lib/importMapping";
 import { CURRENCY_CODES } from "@/lib/currency";
+import { applyGuess, guessColumns, type ColumnGuess } from "@/lib/ai/columnGuess";
 import type { ColumnMapping } from "@/lib/importMapping";
 import type { PaymentMethod } from "@/db/schema";
 
@@ -45,11 +50,6 @@ export function rememberProfile(
   return Object.fromEntries([...kept, [signature, mapping]]);
 }
 
-// How far down to look for a header row that has been seen before. Statements
-// put a title and an account summary above the table, never more than a few
-// lines of it.
-const MAX_HEADER_SEARCH = 10;
-
 export interface FoundProfile {
   mapping: ColumnMapping;
   headerRow: number;
@@ -78,17 +78,38 @@ export function findProfile(
 }
 
 // The mapping a statement opens with: one worked out before for this bank's
-// format, so the second import of the same export is one click, or an empty
-// one to fill in.
+// format, so the second import of the same export is one click; else, with the
+// AI on, the columns guessed from the file itself; else an empty one to fill in.
 //
 // A remembered account is checked against the accounts as they are now; one
 // deleted or moved to another currency since would otherwise be written to.
+export interface StartingMapping {
+  mapping: ColumnMapping;
+  // What was guessed and why, while the dialog marks it; null for a
+  // remembered or empty mapping.
+  guess: ColumnGuess | null;
+}
+
 export function startingMapping(
   profiles: ImportProfiles,
   rows: readonly (readonly string[])[],
   accounts: readonly PaymentMethod[],
-): ColumnMapping {
+  aiEnabled: boolean,
+): StartingMapping {
   const found = findProfile(profiles, rows);
-  if (found === null) return { ...EMPTY_MAPPING, currency: CURRENCY_CODES[0] };
-  return withFittingAccount({ ...found.mapping, headerRow: found.headerRow }, accounts);
+  if (found !== null) {
+    return {
+      // Laid over the empty mapping, so a profile stored before a field
+      // existed reads it as unset.
+      mapping: withFittingAccount(
+        { ...EMPTY_MAPPING, ...found.mapping, headerRow: found.headerRow },
+        accounts,
+      ),
+      guess: null,
+    };
+  }
+
+  const empty = { ...EMPTY_MAPPING, currency: CURRENCY_CODES[0] };
+  const guess = aiEnabled ? guessColumns(rows) : null;
+  return { mapping: applyGuess(empty, guess), guess };
 }

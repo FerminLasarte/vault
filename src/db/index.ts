@@ -640,12 +640,33 @@ export interface NewInstallmentPlan {
 }
 
 export async function insertInstallmentPlan(plan: NewInstallmentPlan): Promise<void> {
+  await insertInstallmentPlanPaidUpTo(plan, 0);
+}
+
+// A plan found halfway through, on a statement: the instalments before the one
+// on the statement were paid before the app knew of it, so they start counted,
+// with no movement behind them. At least one is left to pay: the one the
+// statement brings.
+export async function insertInstallmentPlanPaidUpTo(
+  plan: NewInstallmentPlan,
+  paidCount: number,
+): Promise<void> {
+  if (
+    !Number.isInteger(paidCount) ||
+    paidCount < 0 ||
+    paidCount >= plan.installmentCount
+  ) {
+    throw new Error(
+      `A plan of ${plan.installmentCount} instalments cannot start with ${paidCount} paid`,
+    );
+  }
+
   const db = await getDb();
   await db.execute(
     `INSERT INTO installment_plans
        (description, total_amount, installment_count, currency, category_id,
-        payment_method_id, first_due_date, cash_price, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        payment_method_id, first_due_date, cash_price, confirmed_count, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
     [
       plan.description,
       plan.totalAmount,
@@ -655,6 +676,7 @@ export async function insertInstallmentPlan(plan: NewInstallmentPlan): Promise<v
       plan.paymentMethodId,
       plan.firstDueDate,
       plan.cashPrice,
+      paidCount,
       new Date().toISOString(),
     ],
   );
@@ -1194,18 +1216,42 @@ export type CommitmentStep =
 // step, so if any step is no longer the last one taken on its plan, none of
 // them is taken back.
 export async function recordSteps(steps: CommitmentStep[]): Promise<Undo> {
+  const { statements, planned } = await stepStatements(steps);
+  if (statements.length === 0) return async () => {};
+
+  const db = await getDb();
+  const results = await db.batch(statements);
+
+  // Last step first: two steps on one plan have to come off in the reverse of
+  // the order they went on. The tag sweep each one carries runs once, at the
+  // end.
+  const undoStatements = planned
+    .map(({ insertAt, undo }) => undo(results[insertAt].lastInsertId as number))
+    .reverse()
+    .flat()
+    .filter((statement) => statement !== DELETE_UNUSED_TAGS);
+  return undoing([...undoStatements, DELETE_UNUSED_TAGS]);
+}
+
+// For a registered step, where its transaction is inserted and how to take it
+// back once that transaction's id is known.
+interface PlannedStep {
+  insertAt: number;
+  undo: (transactionId: number) => BatchStatement[];
+}
+
+// What registering the steps writes, each checked against where the one before
+// left its plan.
+async function stepStatements(
+  steps: CommitmentStep[],
+): Promise<{ statements: BatchStatement[]; planned: PlannedStep[] }> {
   // Where each plan stands, read once and moved on as the steps are planned.
   const loans = new Map<number, Loan>();
   const plans = new Map<number, InstallmentPlan>();
   const series = new Map<number, RecurringTransaction>();
 
   const statements: BatchStatement[] = [];
-  // For each step, where its transaction is inserted and how to take it back
-  // once that transaction's id is known.
-  const planned: {
-    insertAt: number;
-    undo: (transactionId: number) => BatchStatement[];
-  }[] = [];
+  const planned: PlannedStep[] = [];
 
   for (const step of steps) {
     switch (step.kind) {
@@ -1274,20 +1320,7 @@ export async function recordSteps(steps: CommitmentStep[]): Promise<Undo> {
     }
   }
 
-  if (statements.length === 0) return async () => {};
-
-  const db = await getDb();
-  const results = await db.batch(statements);
-
-  // Last step first: two steps on one plan have to come off in the reverse of
-  // the order they went on. The tag sweep each one carries runs once, at the
-  // end.
-  const undoStatements = planned
-    .map(({ insertAt, undo }) => undo(results[insertAt].lastInsertId as number))
-    .reverse()
-    .flat()
-    .filter((statement) => statement !== DELETE_UNUSED_TAGS);
-  return undoing([...undoStatements, DELETE_UNUSED_TAGS]);
+  return { statements, planned };
 }
 
 // Soonest first: the list is a queue of what is coming, and the thing that is
@@ -1655,10 +1688,14 @@ export async function deleteCategoryRule(id: number): Promise<void> {
 // a single transaction, with the existing tags read once. All or nothing — a
 // file that fails partway leaves no half of itself behind to be told apart
 // from the rest, and importing it again after the fix starts from clean.
+// Writes an import in one go: every row, and the instalments of a statement
+// registered in their plans exactly as "Registrar" registers them. All of it,
+// or nothing.
 export async function insertTransactions(
   entries: { transaction: NewTransaction; tags: string[] }[],
+  steps: CommitmentStep[] = [],
 ): Promise<void> {
-  if (entries.length === 0) return;
+  if (entries.length === 0 && steps.length === 0) return;
 
   const db = await getDb();
   const known: KnownTags = entries.some((entry) => entry.tags.length > 0)
@@ -1673,6 +1710,7 @@ export async function insertTransactions(
       ...linkTagStatements(insertedIdOf(at), entry.tags, known),
     );
   }
+  statements.push(...(await stepStatements(steps)).statements);
   await db.batch(statements);
 }
 

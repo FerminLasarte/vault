@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { InstallmentPlan, Loan } from "@/db/schema";
+import type { Loan } from "@/db/schema";
 import {
   ACTIVE_PERIODS,
   MAX_AMOUNT_SPREAD,
@@ -14,6 +14,7 @@ import {
   chargesOf,
   datesEvery,
   detect,
+  installmentPlan,
   movement,
   recurringTemplate,
 } from "./testing/series";
@@ -163,19 +164,7 @@ describe("detectSeries", () => {
     });
 
     it("leaves out what an instalment plan or a loan already accounts for", () => {
-      const plan: InstallmentPlan = {
-        id: 1,
-        description: "Heladera",
-        total_amount: 60000,
-        installment_count: 12,
-        currency: "ARS",
-        category_id: null,
-        payment_method_id: 1,
-        first_due_date: "2026-01-10",
-        confirmed_count: 9,
-        created_at: "2026-01-01",
-        cash_price: null,
-      };
+      const plan = installmentPlan();
       const loan: Loan = {
         id: 1,
         direction: "lent",
@@ -199,6 +188,19 @@ describe("detectSeries", () => {
             ...charges("Préstamo a Juan", MONTHLY, { type: "income" }),
           ],
           { recurring: [], installmentPlans: [plan], loans: [loan] },
+        ),
+      ).toEqual([]);
+    });
+
+    // A plan created from a statement is named after the merchant, and the
+    // statement keeps writing the instalment next to it.
+    it("leaves out a plan's instalments as the statement writes them", () => {
+      const plan = installmentPlan({ description: "Tienda Luna" });
+
+      expect(
+        detect(
+          MONTHLY.map((date, index) => movement(`TIENDA LUNA C.0${index + 7}/12`, date)),
+          { recurring: [], installmentPlans: [plan], loans: [] },
         ),
       ).toEqual([]);
     });
