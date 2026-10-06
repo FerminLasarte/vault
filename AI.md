@@ -338,8 +338,9 @@ until confirmed.
 **How:**
 
 - Migration 29: `category_suggested INTEGER NOT NULL DEFAULT 0` on
-  `transactions`, with `CHECK (category_suggested IN (0, 1))`. Not yet applied
-  to a real database (no `tauri dev` was running); pin its hash once it is.
+  `transactions`, with `CHECK (category_suggested IN (0, 1))`. Applied to the
+  user's database by `tauri dev` on 2026-10-06 and pinned in
+  `SHIPPED_MIGRATIONS` the same day.
 - `NewTransaction.categorySuggested` (optional, so nothing else that writes a
   movement changes) is set by both imports only when the suggestion's source
   is the AI.
