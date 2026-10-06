@@ -15,6 +15,7 @@ import {
   insertAttachment,
   insertCategory,
   insertInstallmentPlan,
+  insertInstallmentPlanPaidUpTo,
   insertLoan,
   insertPaymentMethod,
   insertRecurringTransaction,
@@ -1160,6 +1161,62 @@ describe("importing a file", () => {
     expect((await listTags()).map((tag) => tag.name)).toEqual(["Ñandú"]);
   });
 
+  // A statement's instalment goes into its plan the way "Registrar" puts it
+  // there, in the same write as the rest of the file.
+  describe("with instalments a plan is waiting for", () => {
+    async function aPlan() {
+      await insertInstallmentPlan({
+        description: "Fravega",
+        totalAmount: 1200,
+        installmentCount: 12,
+        currency: "ARS",
+        categoryId: null,
+        paymentMethodId: null,
+        firstDueDate: "2026-07-10",
+        cashPrice: null,
+      });
+      return (await listInstallmentPlans())[0];
+    }
+
+    it("imports the rows and registers the instalments in one write", async () => {
+      const plan = await aPlan();
+      const batch = vi.spyOn(db, "batch");
+
+      await insertTransactions(
+        [{ transaction: anExpense({ description: "COTO" }), tags: [] }],
+        [{ kind: "installment", id: plan.id, index: 0, date: "2026-07-12", amount: 101 }],
+      );
+
+      expect(batch).toHaveBeenCalledOnce();
+      expect((await listInstallmentPlans())[0].confirmed_count).toBe(1);
+      expect(
+        (await listTransactionsWithCategory()).map((row) => row.description).sort(),
+      ).toEqual(["COTO", "Fravega (1/12)"]);
+    });
+
+    it("imports nothing when the instalment is no longer the next one", async () => {
+      const plan = await aPlan();
+      await recordInstallment(plan.id, 0, "2026-07-10", 100);
+
+      await expect(
+        insertTransactions(
+          [{ transaction: anExpense({ description: "COTO" }), tags: [] }],
+          [
+            {
+              kind: "installment",
+              id: plan.id,
+              index: 0,
+              date: "2026-07-12",
+              amount: 100,
+            },
+          ],
+        ),
+      ).rejects.toThrow();
+
+      expect(await listTransactionsWithCategory()).toHaveLength(1);
+    });
+  });
+
   it("adds a transaction without tags as a single statement", async () => {
     const batch = vi.spyOn(db, "batch");
     const select = vi.spyOn(db, "select");
@@ -1168,6 +1225,32 @@ describe("importing a file", () => {
 
     expect(select).not.toHaveBeenCalled();
     expect(batch.mock.calls[0][0]).toHaveLength(1);
+  });
+});
+
+describe("a plan already paid up to an instalment", () => {
+  const PLAN = {
+    description: "Tienda Luna",
+    totalAmount: 30000,
+    installmentCount: 12,
+    currency: "ARS",
+    categoryId: null,
+    paymentMethodId: null,
+    firstDueDate: "2026-06-10",
+    cashPrice: null,
+  };
+
+  it("starts with those instalments counted, and no movement for them", async () => {
+    await insertInstallmentPlanPaidUpTo(PLAN, 3);
+
+    expect((await listInstallmentPlans())[0].confirmed_count).toBe(3);
+    expect(await listTransactionsWithCategory()).toEqual([]);
+  });
+
+  it("cannot start with every instalment paid, or fewer than none", async () => {
+    await expect(insertInstallmentPlanPaidUpTo(PLAN, 12)).rejects.toThrow();
+    await expect(insertInstallmentPlanPaidUpTo(PLAN, -1)).rejects.toThrow();
+    expect(await listInstallmentPlans()).toEqual([]);
   });
 });
 

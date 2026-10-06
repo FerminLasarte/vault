@@ -15,7 +15,11 @@ import {
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/DatePicker";
 import { CURRENCY_CODES, CURRENCY_LABELS } from "@/lib/currency";
-import { financingCost, installmentAmounts } from "@/lib/installments";
+import {
+  financingCost,
+  installmentAmounts,
+  MAX_INSTALLMENT_COUNT,
+} from "@/lib/installments";
 import { formatCurrency, formatPercent, todayIsoDate } from "@/lib/format";
 import type {
   Category,
@@ -24,6 +28,8 @@ import type {
   PaymentMethod,
 } from "@/db";
 import { idSelectProps } from "@/lib/forms";
+import { AiNote } from "@/components/AiMark";
+import type { InstallmentPlanDraft } from "@/lib/ai/statementInstallments";
 
 const planSchema = z.object({
   description: z.string().trim().min(1, "La descripción es obligatoria"),
@@ -32,7 +38,7 @@ const planSchema = z.object({
     .number()
     .int()
     .min(2, "Una compra en cuotas necesita al menos 2")
-    .max(120, "Como máximo 120 cuotas"),
+    .max(MAX_INSTALLMENT_COUNT, `Como máximo ${MAX_INSTALLMENT_COUNT} cuotas`),
   currency: z.string().min(1, "Seleccioná una moneda"),
   categoryId: z.coerce.number().int().positive().nullable(),
   paymentMethodId: z.coerce.number().int().positive().nullable(),
@@ -53,6 +59,8 @@ interface InstallmentPlanDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editing: InstallmentPlanWithNames | null;
+  // A plan worked out from a statement's instalment, read before `editing`.
+  draft?: InstallmentPlanDraft | null;
   categories: Category[];
   paymentMethods: PaymentMethod[];
   onSubmitPlan: (plan: NewInstallmentPlan) => Promise<void>;
@@ -62,6 +70,7 @@ export function InstallmentPlanDialog({
   open,
   onOpenChange,
   editing,
+  draft = null,
   categories,
   paymentMethods,
   onSubmitPlan,
@@ -79,27 +88,29 @@ export function InstallmentPlanDialog({
       firstDueDate: todayIsoDate(),
       cashPrice: null,
     },
-    values: editing
-      ? {
-          description: editing.description,
-          totalAmount: editing.total_amount,
-          installmentCount: editing.installment_count,
-          currency: editing.currency,
-          categoryId: editing.category_id,
-          paymentMethodId: editing.payment_method_id,
-          firstDueDate: editing.first_due_date,
-          cashPrice: editing.cash_price,
-        }
-      : {
-          description: "",
-          totalAmount: 0,
-          installmentCount: 12,
-          currency: CURRENCY_CODES[0],
-          categoryId: null,
-          paymentMethodId: null,
-          firstDueDate: todayIsoDate(),
-          cashPrice: null,
-        },
+    values: draft
+      ? draft.plan
+      : editing
+        ? {
+            description: editing.description,
+            totalAmount: editing.total_amount,
+            installmentCount: editing.installment_count,
+            currency: editing.currency,
+            categoryId: editing.category_id,
+            paymentMethodId: editing.payment_method_id,
+            firstDueDate: editing.first_due_date,
+            cashPrice: editing.cash_price,
+          }
+        : {
+            description: "",
+            totalAmount: 0,
+            installmentCount: 12,
+            currency: CURRENCY_CODES[0],
+            categoryId: null,
+            paymentMethodId: null,
+            firstDueDate: todayIsoDate(),
+            cashPrice: null,
+          },
   });
 
   const {
@@ -148,6 +159,14 @@ export function InstallmentPlanDialog({
   });
 
   async function onSubmit(values: PlanFormValues) {
+    // The draft's earlier instalments are already paid, and the one on the
+    // statement has to be left to register.
+    if (draft !== null && values.installmentCount <= draft.paidCount) {
+      form.setError("installmentCount", {
+        message: `Ya ${draft.paidCount === 1 ? "hay 1 cuota pagada" : `hay ${draft.paidCount} cuotas pagadas`}`,
+      });
+      return;
+    }
     await onSubmitPlan(values);
     onOpenChange(false);
   }
@@ -163,6 +182,16 @@ export function InstallmentPlanDialog({
       onSubmit={handleSubmit(onSubmit)}
       isSubmitting={isSubmitting}
     >
+      {draft && (
+        <div className="sm:col-span-2">
+          <AiNote reason={`Armado con «${draft.source}» del resumen.`}>
+            {draft.paidCount === 0
+              ? "La cuota 1 entra con este resumen."
+              : `Empieza con ${draft.paidCount === 1 ? "1 cuota pagada" : `${draft.paidCount} cuotas pagadas`}; la ${draft.paidCount + 1} entra con este resumen.`}
+          </AiNote>
+        </div>
+      )}
+
       <div className="flex flex-col gap-1.5 sm:col-span-2">
         <Label htmlFor="plan-description">Descripción</Label>
         <Input

@@ -1,6 +1,15 @@
 import { suggestCategory } from "@/lib/ai/categorySuggestion";
+import {
+  installmentRowDate,
+  matchInstallments,
+  statementInstallment,
+  type InstallmentDates,
+  type InstallmentLine,
+  type StatementInstallmentRow,
+} from "@/lib/ai/statementInstallments";
 import { normalizeForSearch as normalize } from "@/lib/text";
 import type { ImportContext, ImportPlan, ImportSkip } from "@/lib/csv";
+import type { CommitmentStep } from "@/db";
 import type { NewTransaction, PaymentMethod } from "@/db/schema";
 
 // How the amount is laid out in the file.
@@ -30,6 +39,9 @@ export interface ColumnMapping {
   // banks sign it the other way round, listing what left the account as
   // positive.
   negativeIsExpense: boolean;
+  // Which date the statement writes on an instalment's line; null until the
+  // user says, the first time a statement of this format has instalments.
+  installmentDates: InstallmentDates | null;
 }
 
 export const EMPTY_MAPPING: ColumnMapping = {
@@ -43,7 +55,18 @@ export const EMPTY_MAPPING: ColumnMapping = {
   currency: "ARS",
   paymentMethodId: null,
   negativeIsExpense: true,
+  installmentDates: null,
 };
+
+// How far down to look for the header row. Statements put a title and an
+// account summary above the table, never more than a few lines of it.
+export const MAX_HEADER_SEARCH = 10;
+
+// How a column is called on screen. A statement's header cells are sometimes
+// blank; the position is still a usable way to point at the column.
+export function columnLabel(header: string, index: number): string {
+  return header.trim() === "" ? `Columna ${index + 1}` : header.trim();
+}
 
 // Reads a date the way a statement writes one.
 //
@@ -198,18 +221,38 @@ export function isMappingComplete(mapping: ColumnMapping): boolean {
   return mapping.debit !== null || mapping.credit !== null;
 }
 
+export interface StatementPlan extends ImportPlan {
+  // Instalments the user's plans are waiting for, registered in them by the
+  // same write that imports the rest (see insertTransactions).
+  steps: CommitmentStep[];
+  // Every row that is an instalment and what the import does with it, in the
+  // file's order. Empty with the AI off.
+  installments: InstallmentLine[];
+  // The statement has instalments past the first and nobody said yet which
+  // date they carry: nothing can be imported until someone does.
+  needsInstallmentDates: boolean;
+}
+
+const NO_LINES: ReadonlySet<number> = new Set();
+
 // Turns the rows of a bank statement into transactions, using the columns the
 // user pointed at.
 //
 // Reuses the category suggestions (the rules, then the local AI) and the
 // duplicate detection that the app's own CSV import already relies on, so a
-// statement lands classified the same way a hand-made file would.
+// statement lands classified the same way a hand-made file would. With the AI
+// on, a row that is an instalment is matched against the user's plans.
 export function buildMappedImportPlan(
   rows: string[][],
   mapping: ColumnMapping,
   context: ImportContext,
-): ImportPlan {
-  const ready: ImportPlan["ready"] = [];
+  // Instalment rows the user said are not their plan's, by line.
+  separate: ReadonlySet<number> = NO_LINES,
+): StatementPlan {
+  const plans = context.installmentPlans ?? null;
+  const dates = mapping.installmentDates ?? "charge";
+  const accepted: { transaction: NewTransaction; line: number }[] = [];
+  const installmentRows: StatementInstallmentRow[] = [];
   const skipped: ImportSkip[] = [];
   let duplicates = 0;
 
@@ -275,6 +318,10 @@ export function buildMappedImportPlan(
       date,
       categorySuggested: suggestion?.source === "ai",
     };
+    const installment = plans === null ? null : statementInstallment(transaction);
+    if (installment !== null) {
+      transaction.date = installmentRowDate(date, installment.number, dates);
+    }
 
     const key = duplicateKey(transaction);
     const held = alreadyHeld.get(key) ?? 0;
@@ -284,8 +331,34 @@ export function buildMappedImportPlan(
       continue;
     }
 
-    ready.push({ transaction, tags: [] });
+    accepted.push({ transaction, line });
+    if (installment !== null) {
+      installmentRows.push({ line, writtenDate: date, installment, transaction });
+    }
   }
 
-  return { ready, skipped, duplicates };
+  const installments =
+    plans === null ? [] : matchInstallments(installmentRows, plans, dates, separate);
+  const steps: CommitmentStep[] = [];
+  // Rows a plan registers or already has are not imported on their own.
+  const settled = new Set<number>();
+  for (const entry of installments) {
+    if (entry.kind === "registers") steps.push(entry.step);
+    if (entry.kind === "registered") duplicates++;
+    if (entry.kind === "registers" || entry.kind === "registered")
+      settled.add(entry.line);
+  }
+
+  return {
+    ready: accepted
+      .filter((entry) => !settled.has(entry.line))
+      .map(({ transaction }) => ({ transaction, tags: [] })),
+    skipped,
+    duplicates,
+    steps,
+    installments,
+    needsInstallmentDates:
+      mapping.installmentDates == null &&
+      installmentRows.some((row) => row.installment.number > 1),
+  };
 }

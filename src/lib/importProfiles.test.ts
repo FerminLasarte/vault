@@ -8,6 +8,7 @@ import {
 } from "./importProfiles";
 import { EMPTY_MAPPING } from "./importMapping";
 import type { ColumnMapping } from "./importMapping";
+import type { ImportProfiles } from "./importProfiles";
 import { CURRENCY_CODES } from "@/lib/currency";
 import type { PaymentMethod } from "@/db/schema";
 
@@ -130,20 +131,27 @@ describe("startingMapping", () => {
     { id: 2, name: "Banco ARS", type: "bank", currency: "ARS", initial_balance: 0 },
     { id: 3, name: "Banco USD", type: "bank", currency: "USD", initial_balance: 0 },
   ];
-  const STATEMENT = [["Título", "", "", ""], HEADER];
+  const STATEMENT = [
+    ["Título", "", "", ""],
+    HEADER,
+    ["05/08/2026", "COMPRA COTO", "12.345,67", ""],
+    ["06/08/2026", "SUELDO", "", "500.000,00"],
+  ];
 
   function remembered(mapping: Partial<ColumnMapping>) {
     return rememberProfile({}, statementSignature(HEADER), { ...MAPPING, ...mapping });
   }
 
+  function starting(profiles: ImportProfiles, aiEnabled = true) {
+    return startingMapping(profiles, STATEMENT, ACCOUNTS, aiEnabled);
+  }
+
   it("offers back a remembered mapping, from the row its header is on", () => {
     const profiles = remembered({ currency: "USD", paymentMethodId: 3 });
 
-    expect(startingMapping(profiles, STATEMENT, ACCOUNTS)).toEqual({
-      ...MAPPING,
-      currency: "USD",
-      paymentMethodId: 3,
-      headerRow: 1,
+    expect(starting(profiles)).toEqual({
+      mapping: { ...MAPPING, currency: "USD", paymentMethodId: 3, headerRow: 1 },
+      guess: null,
     });
   });
 
@@ -153,19 +161,50 @@ describe("startingMapping", () => {
   it("drops a remembered account that was deleted since", () => {
     const profiles = remembered({ currency: "ARS", paymentMethodId: 9 });
 
-    expect(startingMapping(profiles, STATEMENT, ACCOUNTS).paymentMethodId).toBeNull();
+    expect(starting(profiles).mapping.paymentMethodId).toBeNull();
   });
 
   it("drops a remembered account now in another currency", () => {
     const profiles = remembered({ currency: "ARS", paymentMethodId: 3 });
 
-    expect(startingMapping(profiles, STATEMENT, ACCOUNTS).paymentMethodId).toBeNull();
+    expect(starting(profiles).mapping.paymentMethodId).toBeNull();
   });
 
-  it("starts from nothing for a format never seen before", () => {
-    expect(startingMapping({}, STATEMENT, ACCOUNTS)).toEqual({
+  // Remembered before instalments were asked about, so without the answer.
+  it("reads a profile stored without the instalments' date as unanswered", () => {
+    const { installmentDates: _, ...older } = MAPPING;
+    const profiles = { [statementSignature(HEADER)]: older as ColumnMapping };
+
+    expect(starting(profiles).mapping.installmentDates).toBeNull();
+  });
+
+  it("guesses the columns of a format never seen before", () => {
+    const { mapping, guess } = starting({});
+
+    expect(guess).not.toBeNull();
+    expect(mapping).toEqual({
       ...EMPTY_MAPPING,
       currency: CURRENCY_CODES[0],
+      headerRow: 1,
+      date: 0,
+      description: 1,
+      amountLayout: "debit-credit",
+      debit: 2,
+      credit: 3,
+    });
+  });
+
+  it("starts from nothing with the AI off", () => {
+    expect(starting({}, false)).toEqual({
+      mapping: { ...EMPTY_MAPPING, currency: CURRENCY_CODES[0] },
+      guess: null,
+    });
+  });
+
+  it("starts from nothing when there is nothing to guess from", () => {
+    expect(startingMapping({}, [["Hola"]], ACCOUNTS, true)).toEqual({
+      mapping: { ...EMPTY_MAPPING, currency: CURRENCY_CODES[0] },
+      guess: null,
     });
   });
 });

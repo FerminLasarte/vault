@@ -1,4 +1,4 @@
-import type { RecurringTransaction, Transaction } from "@/db/schema";
+import type { InstallmentPlan, RecurringTransaction, Transaction } from "@/db/schema";
 import { learnMerchantHistory } from "@/lib/ai/merchantHistory";
 import { detectSeries, type Commitments } from "@/lib/ai/series";
 
@@ -83,6 +83,25 @@ export function recurringTemplate(
     start_date: "2026-01-10",
     last_confirmed_date: "2026-09-10",
     is_active: 1,
+    ...overrides,
+  };
+}
+
+export function installmentPlan(
+  overrides: Partial<InstallmentPlan> = {},
+): InstallmentPlan {
+  return {
+    id: 1,
+    description: "Heladera",
+    total_amount: 60000,
+    installment_count: 12,
+    currency: "ARS",
+    category_id: null,
+    payment_method_id: 1,
+    first_due_date: "2026-01-10",
+    confirmed_count: 9,
+    created_at: "2026-01-01",
+    cash_price: null,
     ...overrides,
   };
 }

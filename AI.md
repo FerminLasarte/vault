@@ -143,8 +143,8 @@ are one of its best sentences.
 | AI-15 | 5     | Unregistered recurring movements               | 6        | [x]  |
 | AI-16 | 5     | Subscriptions that went up                     | 7        | [x]  |
 | AI-17 | 5     | Expected income that has not arrived           | 11       | [x]  |
-| AI-18 | 6     | Column detection                               | 18       | [ ]  |
-| AI-19 | 6     | Instalments on statements                      | 8        | [ ]  |
+| AI-18 | 6     | Column detection                               | 18       | [x]  |
+| AI-19 | 6     | Instalments on statements                      | 8        | [x]  |
 | AI-20 | 7     | Split transfers                                | 9        | [ ]  |
 | AI-21 | 7     | Near-duplicates                                | 10       | [ ]  |
 | AI-22 | 8     | Unusual spending                               | 12       | [ ]  |
@@ -833,7 +833,41 @@ is clear, the sign convention. `startingMapping` becomes: remembered profile,
 then guess, then empty. Guessed selects carry `AiMark` until the user touches
 them.
 
-- [ ] Done
+As built:
+
+- `csvHeaders.json`: the names banks give each column (`date`, `description`,
+  `amount`, `debit`, `credit`) and the balance (`saldo`), which is read only to
+  keep it out of the amount and to check the sign. A name has to open the
+  cell ("Fecha de operación", "Importe en pesos") and the longest wins, so
+  "Importe débito" is a debit. Its test checks the shape, that every name is
+  written the way `words` reads a header, and that no name is in two columns.
+- `columnGuess.ts`, from `parseFlexibleDate` and `parseFlexibleAmount`, with
+  no reader of its own: the **header row** is the one naming the most columns,
+  at least `MIN_HEADER_MATCHES` (2), so a title starting with "Fecha" is not
+  it; else the row above the first one with a date and an amount. A column
+  fits a field when `MIN_CONTENT_SHARE` (80%) of its values read as it, and
+  the date, description and single amount must also be filled on 80% of the
+  rows. A named column whose contents agree wins, leftmost first; without a
+  name, the leftmost dates, the longest text, and the amount only when one
+  column alone holds numbers.
+- **Layout:** debit/credit when both are named and hold amounts, else one
+  column.
+- **Sign:** only with a balance column: rows in a row (oldest or newest first,
+  told by their dates) must move the balance the way one convention says, at
+  least `MIN_SIGN_PAIRS` (3) and none the other way.
+- Every guessed field carries its reason ("La columna se llama «Fecha» y 4 de
+  sus 5 valores son fechas.", "En 5 de 5 filas seguidas, el saldo sube con los
+  importes positivos."). The mark is **derived**: `guessReason` shows it while
+  the field still holds the guess, so nothing new is stored.
+- `startingMapping(profiles, rows, accounts, aiEnabled)` returns the mapping
+  and the guess; with the AI off, or nothing to go by, it is the empty mapping
+  as before. A remembered profile is laid over `EMPTY_MAPPING`, so one stored
+  before a field existed reads it as unset.
+- `MAX_HEADER_SEARCH` and `columnLabel` moved to `importMapping.ts`, shared by
+  the profiles, the guess and the dialog; the Argentine statement fixture moved
+  to `src/lib/ai/testing/statements.ts`, shared by both tests.
+
+- [x] Done
 
 ### AI-19 · Instalments on statements [8]
 
@@ -858,7 +892,70 @@ each other.
   date, and registered as already paid up to this instalment. Creating a plan
   with a starting count is a new db function.
 
-- [ ] Done
+As built:
+
+- `installmentText.ts` reads "C.03/12", "C 03/12", "CUOTA 03/12", "CUOTAS",
+  "CTA", "CTA. 3 DE 12", "CUO 12/12", only after a word saying it is an
+  instalment ("COTO 15/09" is a date), 2 to `MAX_INSTALLMENT_COUNT` (120,
+  now shared with the plan form) instalments. `merchantName` leaves it out of
+  a statement's name, so every instalment of a purchase is the same merchant
+  ("TIENDA LUNA C.04/12" shows as "Tienda Luna"), and `series.ts` recognises a
+  plan's instalments as the statement writes them.
+- `statementInstallments.ts`. **Which plan**, agreed with the user on
+  2026-10-06: same currency, same count and an amount within
+  `AMOUNT_TOLERANCE` (2%) of that instalment; then the plan of the same
+  merchant (`planMerchantId`, the rule `series.ts` already used, now exported
+  from it); and when no plan of that merchant fits, the only plan that does,
+  since a plan is often named after what was bought ("Heladera") rather than
+  the shop. Two that fit is no match.
+- **What happens to the row**, plan by plan in instalment order: the one the
+  plan is waiting for is registered in it ("Se registra en Fravega", with the
+  reason, and "No es de este plan" to import it on its own); one the plan
+  already has is left out and counted among those that already existed ("Ya
+  registrada en Fravega"), only on the merchant's word, since leaving out a
+  row on a guess loses a movement; one past a gap is imported on its own; one
+  with no plan offers "Crear plan de cuotas".
+- **The date an instalment carries**, agreed with the user the same day: banks
+  write either the charge's date or the purchase's on every instalment, and
+  neither is better in general, so the dialog asks "Qué fecha traen las
+  cuotas" the first time a statement has an instalment past the first, blocks
+  the import until answered, and keeps the answer in the format's profile
+  (`ColumnMapping.installmentDates`) for good. Under "purchase", a row is dated
+  in its instalment's month, and one registered in a plan takes the plan's own
+  date for it.
+- The write is the one "Registrar" uses: `recordSteps` now builds its
+  statements in `stepStatements`, and `insertTransactions(entries, steps)` adds
+  them to the import's batch, so the rows, the movements and the plans'
+  compare-and-set advance land together or not at all.
+- "Crear plan de cuotas" opens `InstallmentPlanDialog` with a `draft`: the
+  clean name, the instalment times the count, the count, the account and
+  category of the row, and the first due date that puts this instalment on
+  its date, with "Empieza con 2 cuotas pagadas; la 3 entra con este resumen."
+  It is saved by `insertInstallmentPlanPaidUpTo(plan, n - 1)` (the new db
+  function; `insertInstallmentPlan` is it with 0), so the row then registers
+  as instalment n through the import, and the plan is paid up to it.
+- With the AI off, the import context carries no plans and instalments are
+  text, as before.
+
+- [x] Done
+
+Checked for the whole batch: every check green, and on a throwaway Vite page
+(removed) mounting the real import dialog with a test statement and a stand-in
+Fravega plan, driven from the in-app browser; nothing was sent to the native
+window. The statement opened mapped (row 3, Fecha, Descripción, one signed
+column, Importe, negative is an expense from the balance), every field with
+its mark and the reason on hover; changing the sign took its mark away.
+"FRAVEGA C.03/12" read as already registered, "C.04/12" as registering in
+Fravega, and Tienda Luna's "C.03/06" as having no plan; the import stayed
+disabled until the date question was answered. "Crear plan de cuotas" opened
+"Nueva compra en cuotas" with Tienda Luna, 15000, 6, Banco ARS and 8 Jul 2026;
+saving it turned the row into "Se registra en Tienda Luna". "No es de este
+plan" moved Fravega's row into the plain list and "Registrar en Fravega"
+brought it back. Confirming handed over three rows, two steps (Fravega's
+fourth, Tienda Luna's third, on their charge dates) and one already there.
+The block read well in the dark theme. Not checked: the native app, a real
+bank's export, and anything written to a database from the dialog (the
+handlers were stand-ins; the writes are covered by the db tests).
 
 ---
 

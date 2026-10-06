@@ -69,8 +69,9 @@ import {
 import { backupStatus } from "@/lib/backupReminder";
 import { cn } from "@/lib/utils";
 import type { ThemePreference } from "@/context/ThemeContext";
-import type { ImportContext, ImportSkip, ImportPlan } from "@/lib/csv";
-import type { ColumnMapping } from "@/lib/importMapping";
+import type { ImportContext, ImportSkip } from "@/lib/csv";
+import type { ColumnMapping, StatementPlan } from "@/lib/importMapping";
+import type { ColumnGuess } from "@/lib/ai/columnGuess";
 import type { PickedStatement } from "@/lib/files";
 import type { ViewProps } from "@/lib/menu";
 
@@ -92,6 +93,8 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
     categories,
     categoryRules,
     categoryModel,
+    aiEnabled,
+    installmentPlans,
     paymentMethods,
     exchangeRateHistory,
     lastBackupAt,
@@ -101,6 +104,7 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
   const { isMutating, isRefreshingRate } = useAppStatus();
   const {
     importTransactions,
+    addInstallmentPlan,
     backfillExchangeRates,
     recordBackup,
     setRateType,
@@ -120,6 +124,7 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
   const [outcome, setOutcome] = useState<ImportOutcome | null>(null);
   const [statement, setStatement] = useState<PickedStatement | null>(null);
   const [mapping, setMapping] = useState<ColumnMapping>(EMPTY_MAPPING);
+  const [guess, setGuess] = useState<ColumnGuess | null>(null);
 
   // What both imports, the app's own file and a bank statement, place and
   // check their rows against.
@@ -128,11 +133,20 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
       categories,
       categoryRules,
       categoryModel,
+      installmentPlans: aiEnabled ? installmentPlans : null,
       accounts: paymentMethods,
       existing: transactions,
       supportedCurrencies: CURRENCY_CODES,
     }),
-    [categories, categoryRules, categoryModel, paymentMethods, transactions],
+    [
+      categories,
+      categoryRules,
+      categoryModel,
+      aiEnabled,
+      installmentPlans,
+      paymentMethods,
+      transactions,
+    ],
   );
 
   useEffect(() => {
@@ -217,11 +231,14 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
       if (picked === null) return;
 
       // A mapping already worked out for this bank's format is offered back, so
-      // the second import of the same export is one click. The header row is
-      // searched for rather than assumed: statements put a title and an account
-      // summary above the table.
+      // the second import of the same export is one click; a new one arrives
+      // with the columns the AI could tell. The header row is searched for
+      // rather than assumed: statements put a title and an account summary
+      // above the table.
       const profiles = parseProfiles(await getSetting(IMPORT_PROFILES));
-      setMapping(startingMapping(profiles, picked.rows, paymentMethods));
+      const start = startingMapping(profiles, picked.rows, paymentMethods, aiEnabled);
+      setMapping(start.mapping);
+      setGuess(start.guess);
       setStatement(picked);
     } catch (error) {
       console.error("Failed to read the statement:", error);
@@ -231,9 +248,9 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
     }
   }
 
-  async function handleConfirmStatement(plan: ImportPlan) {
-    if (plan.ready.length > 0) {
-      await importTransactions(plan.ready);
+  async function handleConfirmStatement(plan: StatementPlan) {
+    if (plan.ready.length > 0 || plan.steps.length > 0) {
+      await importTransactions(plan.ready, plan.steps);
     }
 
     if (statement !== null) {
@@ -251,7 +268,7 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
     }
 
     setOutcome({
-      imported: plan.ready.length,
+      imported: plan.ready.length + plan.steps.length,
       duplicates: plan.duplicates,
       skipped: plan.skipped,
     });
@@ -543,10 +560,12 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
           if (!open) setStatement(null);
         }}
         mapping={mapping}
+        guess={guess}
         onMappingChange={setMapping}
         paymentMethods={paymentMethods}
         context={importContext}
         onConfirm={handleConfirmStatement}
+        onCreatePlan={addInstallmentPlan}
       />
 
       <Card>

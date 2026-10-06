@@ -44,7 +44,7 @@ import {
   insertAttachment,
   insertBudget,
   insertCategory,
-  insertInstallmentPlan,
+  insertInstallmentPlanPaidUpTo,
   insertLoan,
   insertSavingsContribution,
   insertSavingsGoal,
@@ -267,8 +267,11 @@ export interface AppActions {
   // Puts movements nobody categorised in one category, all or none, as the
   // user's own choice, with a "Deshacer".
   categoriseTransactions: (ids: number[], categoryId: number) => Promise<void>;
+  // Imports the rows, and registers a statement's instalments in their plans,
+  // in one write.
   importTransactions: (
     entries: { transaction: NewTransaction; tags: string[] }[],
+    steps?: CommitmentStep[],
   ) => Promise<void>;
 
   addSavingsGoal: (goal: NewSavingsGoal) => Promise<void>;
@@ -294,7 +297,9 @@ export interface AppActions {
     amount: number,
   ) => Promise<void>;
 
-  addInstallmentPlan: (plan: NewInstallmentPlan) => Promise<void>;
+  // `paidCount`: instalments already paid before the plan was added, as when a
+  // statement brings one halfway through.
+  addInstallmentPlan: (plan: NewInstallmentPlan, paidCount?: number) => Promise<void>;
   editInstallmentPlan: (id: number, plan: NewInstallmentPlan) => Promise<void>;
   removeInstallmentPlan: (id: number) => Promise<void>;
   // Records one instalment as paid: writes the movement and advances the plan.
@@ -918,11 +923,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           "No se pudo aplicar la categoría",
           { offerUndo: true },
         ),
-      importTransactions: (imported) =>
+      importTransactions: (imported, steps = []) =>
         runMutation(
-          () => insertTransactions(imported),
-          ["transactions"],
-          transactionCount(imported.length, "importada"),
+          () => insertTransactions(imported, steps),
+          steps.length === 0
+            ? ["transactions"]
+            : ["installments", ...LEDGER_FROM_COMMITMENT],
+          transactionCount(imported.length + steps.length, "importada"),
           "No se pudieron importar las transacciones",
         ),
 
@@ -992,9 +999,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           { offerUndo: true },
         ),
 
-      addInstallmentPlan: (plan) =>
+      addInstallmentPlan: (plan, paidCount = 0) =>
         runMutation(
-          () => insertInstallmentPlan(plan),
+          () => insertInstallmentPlanPaidUpTo(plan, paidCount),
           ["installments"],
           "Compra en cuotas creada",
           "No se pudo crear la compra en cuotas",

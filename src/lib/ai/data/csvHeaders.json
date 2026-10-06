@@ -1,0 +1,50 @@
+{
+  "date": ["fecha", "fec", "dia", "date", "f operacion", "f mov"],
+  "description": [
+    "descripcion",
+    "concepto",
+    "detalle",
+    "movimiento",
+    "referencia",
+    "comercio",
+    "establecimiento",
+    "leyenda",
+    "glosa",
+    "observaciones",
+    "description"
+  ],
+  "amount": ["importe", "monto", "valor", "pesos", "dolares", "amount"],
+  "debit": [
+    "debito",
+    "debitos",
+    "debe",
+    "egreso",
+    "egresos",
+    "salida",
+    "salidas",
+    "retiro",
+    "retiros",
+    "cargo",
+    "cargos",
+    "importe debito",
+    "monto debito",
+    "debit"
+  ],
+  "credit": [
+    "credito",
+    "creditos",
+    "haber",
+    "ingreso",
+    "ingresos",
+    "entrada",
+    "entradas",
+    "deposito",
+    "depositos",
+    "abono",
+    "abonos",
+    "importe credito",
+    "monto credito",
+    "credit"
+  ],
+  "balance": ["saldo", "balance"]
+}
