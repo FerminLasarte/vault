@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { SignedAmount } from "@/components/SignedAmount";
 import {
   ArrowRight,
   ChevronLeft,
@@ -663,20 +664,15 @@ export function TransactionsView({ request, onRequestHandled }: ViewProps) {
                           <TableCell>
                             {TRANSACTION_TYPE_LABELS[transaction.type]}
                           </TableCell>
-                          <TableCell
-                            className={cn(
-                              "text-right font-medium whitespace-nowrap",
-                              transaction.type === "income" && "text-positive",
-                              transaction.type === "expense" && "text-negative",
-                            )}
-                          >
+                          <TableCell className="text-right font-medium whitespace-nowrap">
                             {transaction.type === "transfer" ? (
                               <TransferAmount transaction={transaction} />
                             ) : (
-                              <>
-                                {transaction.type === "income" ? "+" : "-"}
-                                {formatCurrency(transaction.amount, transaction.currency)}
-                              </>
+                              <SignedAmount
+                                amount={transaction.amount}
+                                currency={transaction.currency}
+                                type={transaction.type}
+                              />
                             )}
                           </TableCell>
                           {/* Its own buttons, not a click on the row: deleting

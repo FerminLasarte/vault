@@ -1,4 +1,5 @@
 import { ArrowRight } from "lucide-react";
+import { SignedAmount } from "@/components/SignedAmount";
 import {
   Card,
   CardContent,
@@ -9,8 +10,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Loading } from "@/components/Loading";
 import { useMerchantName } from "@/hooks/useMerchantName";
-import { cn } from "@/lib/utils";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import type { TransactionWithCategory } from "@/db/schema";
 
 // Enough to cover the last week or so of ordinary use without turning into a
@@ -91,19 +91,11 @@ export function RecentTransactions({
                           )}
                       </Badge>
                     )}
-                    <span
-                      className={cn(
-                        "text-sm font-medium tabular-nums whitespace-nowrap",
-                        transaction.type === "income" && "text-positive",
-                        transaction.type === "expense" && "text-negative",
-                      )}
-                    >
-                      {/* A transfer moves the user's own money and is neither a
-                        gain nor a loss, so it carries no sign. */}
-                      {transaction.type === "income" && "+"}
-                      {transaction.type === "expense" && "-"}
-                      {formatCurrency(transaction.amount, transaction.currency)}
-                    </span>
+                    <SignedAmount
+                      amount={transaction.amount}
+                      currency={transaction.currency}
+                      type={transaction.type}
+                    />
                   </div>
                 </li>
               ))}

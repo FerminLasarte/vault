@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { SignedAmount } from "@/components/SignedAmount";
 import { Check, Pause, Pencil, Play, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -148,17 +149,11 @@ export function RecurringSection() {
                   </div>
 
                   <div className="row-actions flex shrink-0 items-center gap-2">
-                    <span
-                      className={cn(
-                        "text-sm font-medium tabular-nums",
-                        entry.template.type === "income"
-                          ? "text-positive"
-                          : "text-negative",
-                      )}
-                    >
-                      {entry.template.type === "income" ? "+" : "-"}
-                      {formatCurrency(entry.template.amount, entry.template.currency)}
-                    </span>
+                    <SignedAmount
+                      amount={entry.template.amount}
+                      currency={entry.template.currency}
+                      type={entry.template.type}
+                    />
                     <ActionButton
                       type="button"
                       variant="outline"
