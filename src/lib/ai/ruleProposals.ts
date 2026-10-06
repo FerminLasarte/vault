@@ -1,5 +1,6 @@
 import { isUserCategorised, type CategoryModel } from "@/lib/ai/categoryModel";
 import { evidenceReason } from "@/lib/ai/categorySuggestion";
+import { merchantName } from "@/lib/ai/merchants";
 import { ruleMatcher } from "@/lib/categoryRules";
 import { normalizeForSearch } from "@/lib/text";
 import type { Category, CategoryRule, CategoryType, Transaction } from "@/db/schema";
@@ -60,6 +61,8 @@ export interface RuleAdvice {
 interface Movement {
   // The description as rules read it.
   text: string;
+  // The merchant's clean name, read the same way, or null when there is none.
+  name: string | null;
   type: CategoryType;
   // The category the user decided on, or null while nobody has.
   categoryId: number | null;
@@ -89,12 +92,18 @@ function readHistory(
     return [
       {
         text: normalizeForSearch(transaction.description),
+        name: nameOf(transaction.description),
         type: transaction.type,
         categoryId: isUserCategorised(transaction) ? transaction.category_id : null,
         rule: winner[transaction.type](transaction.description),
       },
     ];
   });
+}
+
+function nameOf(description: string): string | null {
+  const name = merchantName(description);
+  return name === null ? null : normalizeForSearch(name);
 }
 
 // The category most of these movements are in, other than `except`, and how
@@ -130,6 +139,8 @@ interface Candidate {
   // What the rule would change: movements of its category that no rule puts
   // there today.
   settles: Movement[];
+  // Whether the pattern is the clean name of every movement it settles.
+  namesMerchant: boolean;
 }
 
 // The words the model has seen land in one category often enough, as rules.
@@ -141,9 +152,11 @@ interface Candidate {
 // it to do.
 //
 // Overlapping candidates settle the same movements ("birra", "bar" and "birra
-// bar"): the one settling more goes first, then the longer, which is the more
-// specific and the less likely to catch something else later ("bar" is also in
-// "barbería"), and a candidate left with too little of its own is dropped.
+// bar"): the one settling more goes first, then the merchant's own name, which
+// reads as what the rule is about ("uber", not "trip help" from
+// `UBER *TRIP HELP.UBER.COM`), then the longer, which is the more specific and
+// the less likely to catch something else later ("bar" is also in "barbería"),
+// and a candidate left with too little of its own is dropped.
 // Dismissed proposals still take their movements, so saying no to "birra bar"
 // does not bring up "birra" in its place.
 function proposeRules(
@@ -186,6 +199,7 @@ function proposeRules(
         inCategory: top.count,
         total: wouldDecide.length,
         settles,
+        namesMerchant: settles.every((movement) => movement.name === word),
       });
     }
   }
@@ -193,6 +207,7 @@ function proposeRules(
   candidates.sort(
     (a, b) =>
       b.settles.length - a.settles.length ||
+      Number(b.namesMerchant) - Number(a.namesMerchant) ||
       b.pattern.length - a.pattern.length ||
       (a.pattern < b.pattern ? -1 : 1),
   );
