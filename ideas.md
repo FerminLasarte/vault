@@ -15,9 +15,10 @@ Loose ideas for future Vault work. Not a commitment or a plan — just a place t
       computed facts, so it never gets a figure wrong.
    3. CSV column mapping, from header names and what each column holds.
    4. Unusual spending and subscriptions that went up.
-   5. Receipt OCR, last: the text read locally (macOS's Vision framework, or
-      Tesseract) and the total, date and merchant picked out by rules. Only if
-      that falls short is an API worth reconsidering, and only for this.
+   5. Receipt OCR — left for a later version (2026-10-06), together with
+      importing a card statement PDF: the text read locally (macOS's Vision
+      framework, `Windows.Media.Ocr` on Windows) and the total, date and
+      merchant picked out by rules.
 
    Not a chat over the user's finances.
 

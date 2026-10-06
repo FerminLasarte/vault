@@ -20,7 +20,9 @@ called and nothing leaves the machine. It replaces the API-key AI, dropped in
 
 ## Decisions already taken
 
-- **Scope:** all 21 proposed items.
+- **Scope:** all 21 proposed items except receipt OCR [20], which also
+  carried the card statement PDF import; on 2026-10-06 it was left for a later
+  version and taken out of this plan.
 - **Where it shows up:** where the user already is (forms, the import dialog,
   the rules card, the transactions list) plus one-line notices in Atención. No
   new screen and no sidebar section.
@@ -114,8 +116,6 @@ knowledge, never user data.
 | 7     | Ledger hygiene                | Split transfers and near-duplicates, on import and in history      |
 | 8     | Statistics                    | Unusual spending, pace, budgets, end of month; needs series        |
 | 9     | Narrative                     | Writes from everything above, so it comes after it                 |
-| 10    | Receipt OCR                   | Native code on two platforms; isolated, riskiest so far            |
-| 11    | Card statement PDF            | Builds on OCR and import; the most uncertain item                  |
 
 This differs from the order recorded in `ideas.md` in two places, both for
 dependency reasons: the narrative moves after statistics because it narrates
@@ -153,9 +153,6 @@ are one of its best sentences.
 | AI-25 | 8     | End-of-month projection                        | 15       | [x]  |
 | AI-26 | 9     | Narrated monthly close                         | 16       | [x]  |
 | AI-27 | 9     | One line in Resumen                            | 17       | [x]  |
-| AI-28 | 10    | Native text recognition                        | 20       | [ ]  |
-| AI-29 | 10    | A movement from a receipt                      | 20       | [ ]  |
-| AI-30 | 11    | Card statement PDF import                      | 20       | [ ]  |
 
 ---
 
@@ -1354,59 +1351,3 @@ sentences, a quiet month saying no more than it has. The printed close showed
 AI off, no chevron and no line. Not checked: the native app, and an actual
 print to PDF (the print command is Tauri's; the PDF section is covered by
 `ClosesView.test.tsx`).
-
----
-
-## Batch 10 — Receipt OCR
-
-### AI-28 · Native text recognition [20]
-
-**Today:** attachments are stored (`attachments`, base64) and only displayed.
-
-**Should:** read the text of an image or PDF on the machine itself.
-
-**How:**
-
-- A Tauri command `recognize_text(attachment)` with one implementation per
-  shipped platform: Vision (`VNRecognizeTextRequest`, Spanish, accurate level)
-  on macOS and `Windows.Media.Ocr` on Windows. Both are part of the operating
-  system: no bundled engine and no download. PDFs: the text layer when there
-  is one, otherwise the first page rendered and recognised.
-- Windows OCR depends on the Spanish language being installed; when it is not,
-  the error says so in Spanish.
-- CI runs on Ubuntu, so neither path would be compiled before a release. This
-  batch adds `cargo check` jobs on macOS and Windows.
-- Start with a spike on both platforms before the full item: crates, output
-  quality on real receipts.
-
-- [ ] Done
-
-### AI-29 · A movement from a receipt [20]
-
-**Should:** drop a photo of a receipt and get the movement filled in.
-
-**How:** `receipt.ts` reads the recognised lines: total (near "TOTAL",
-"IMPORTE", "A PAGAR", the largest such amount), date, CUIT, merchant (the
-dictionary first, then the top lines). Dropping an image on the app or in quick
-entry opens `TransactionDialog` with a draft, each read field marked with
-`AiMark`, and the image attached on save. On an existing movement, "Leer
-comprobante" in the inspector offers to fill what is empty.
-
-- [ ] Done
-
----
-
-## Batch 11 — Card statement PDF
-
-### AI-30 · Card statement PDF import [20]
-
-**Should:** import a credit card's PDF statement the way a CSV is imported.
-
-**How:** text from AI-28, lines grouped into rows (date, description, amount,
-instalment), fed into the existing mapped-import pipeline so rules, the model,
-instalments and duplicates all apply. Every bank lays these out differently,
-so this starts with the user's own statements as fixtures. **It is the most
-uncertain item:** if the rows cannot be read reliably, it is dropped rather than
-shipped half-working.
-
-- [ ] Done
