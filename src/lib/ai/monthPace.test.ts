@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   MIN_PACE_CHANGE,
   budgetPaces,
+  categoryPaces,
   crossingDay,
   monthPace,
   paceChange,
@@ -164,7 +165,7 @@ describe("budgetPaces", () => {
   ];
 
   it("reads each monthly budget's own category and currency", () => {
-    const paces = budgetPaces([budget()], history, TODAY);
+    const paces = budgetPaces([budget()], categoryPaces(history, TODAY), TODAY);
     expect(paces.get(1)).toMatchObject({
       id: "pace:1:2026-10",
       crossingDay: 20,
@@ -173,6 +174,27 @@ describe("budgetPaces", () => {
   });
 
   it("leaves annual budgets out", () => {
-    expect(budgetPaces([budget({ period: "annual" })], history, TODAY).size).toBe(0);
+    expect(
+      budgetPaces([budget({ period: "annual" })], categoryPaces(history, TODAY), TODAY)
+        .size,
+    ).toBe(0);
+  });
+});
+
+describe("categoryPaces", () => {
+  it("keeps each category and currency apart, and leaves the uncategorised out", () => {
+    const usual = (overrides: Parameters<typeof chargesOf>[3]) =>
+      MONTHS.flatMap((month) => chargesOf("Gasto", [`${month}-01`], [1000], overrides));
+    const paces = categoryPaces(
+      [
+        ...usual({ category_id: 3 }),
+        ...usual({ category_id: 3, currency: "USD" }),
+        ...usual({ category_id: null }),
+      ],
+      TODAY,
+    );
+
+    expect([...paces.keys()].sort()).toEqual(["ARS:3", "USD:3"]);
+    expect(paces.get("USD:3")).toMatchObject({ categoryId: 3, currency: "USD" });
   });
 });

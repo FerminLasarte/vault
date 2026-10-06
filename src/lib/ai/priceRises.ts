@@ -26,6 +26,24 @@ export interface PriceRise {
   recurring: RecurringTransaction | null;
 }
 
+// Whether a series' latest charge went up, against the ones before it. Shared
+// by Atención and the monthly close, so both mean the same thing by "went up".
+export function riseOf(
+  series: Series,
+): { previous: number; latest: number; rise: number } | null {
+  if (series.frequency !== "monthly" || series.merchant.type !== "expense") return null;
+  const { movements } = series;
+  if (movements.length <= RISE_BASELINE) return null;
+
+  const latest = movements[movements.length - 1].amount;
+  const previous = median(
+    movements.slice(-RISE_BASELINE - 1, -1).map((movement) => movement.amount),
+  );
+  if (previous === null || previous <= 0) return null;
+  const rise = latest / previous - 1;
+  return rise < MIN_RISE ? null : { previous, latest, rise };
+}
+
 export function priceRises(
   series: readonly Series[],
   isDismissed: (id: string) => boolean,
@@ -33,17 +51,9 @@ export function priceRises(
   const rises: PriceRise[] = [];
 
   for (const entry of series) {
-    if (entry.frequency !== "monthly" || entry.merchant.type !== "expense") continue;
-    const { movements } = entry;
-    if (movements.length <= RISE_BASELINE) continue;
-
-    const latest = movements[movements.length - 1].amount;
-    const previous = median(
-      movements.slice(-RISE_BASELINE - 1, -1).map((movement) => movement.amount),
-    );
-    if (previous === null || previous <= 0) continue;
-    const rise = latest / previous - 1;
-    if (rise < MIN_RISE) continue;
+    const found = riseOf(entry);
+    if (found === null) continue;
+    const { previous, latest, rise } = found;
 
     // A recurring movement already at the new amount has been dealt with.
     if (entry.recurring !== null && entry.recurring.amount >= latest) continue;

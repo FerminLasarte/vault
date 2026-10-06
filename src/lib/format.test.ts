@@ -3,6 +3,7 @@ import {
   formatCompactAmount,
   formatCurrency,
   formatDate,
+  formatList,
   formatMonthLabel,
   formatPercent,
   monthsBefore,
@@ -90,5 +91,15 @@ describe("formatCompactAmount", () => {
 
   it("handles negatives", () => {
     expect(formatCompactAmount(-8000)).toBe(`-8${NBSP}mil`);
+  });
+});
+
+describe("formatList", () => {
+  it("joins items the way a sentence does", () => {
+    expect(formatList(["Netflix"])).toBe("Netflix");
+    expect(formatList(["Netflix", "Spotify"])).toBe("Netflix y Spotify");
+    expect(formatList(["Netflix", "Spotify", "Disney"])).toBe(
+      "Netflix, Spotify y Disney",
+    );
   });
 });

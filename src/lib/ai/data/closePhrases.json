@@ -1,0 +1,127 @@
+{
+  "balance": {
+    "priority": 0,
+    "variants": {
+      "saved": [
+        "Entraron {income} y salieron {expenses}: te quedaron {balance}.",
+        "Cerraste el mes con {balance} a favor: entraron {income} y gastaste {expenses}."
+      ],
+      "even": [
+        "Entraron {income} y salió exactamente lo mismo.",
+        "Gastaste exactamente lo que entró: {income}."
+      ],
+      "overspent": [
+        "Gastaste {expenses} y entraron {income}: salieron {shortfall} más de lo que entró.",
+        "Salió más de lo que entró: {expenses} contra {income}, {shortfall} de diferencia."
+      ],
+      "onlyIncome": [
+        "Entraron {income} y no hubo gastos.",
+        "Solo hubo ingresos: {income}."
+      ],
+      "onlyExpenses": [
+        "Gastaste {expenses} y no entró nada.",
+        "No hubo ingresos; los gastos sumaron {expenses}."
+      ]
+    }
+  },
+  "savingRate": {
+    "priority": 1,
+    "variants": {
+      "more": [
+        "Ahorraste el {rate} de lo que entró, más que el {previousRate} de {month}.",
+        "Guardaste una parte mayor que en {month}: el {rate} de lo que entró, contra el {previousRate}."
+      ],
+      "less": [
+        "Ahorraste el {rate} de lo que entró, menos que el {previousRate} de {month}.",
+        "Guardaste una parte menor que en {month}: el {rate} de lo que entró, contra el {previousRate}."
+      ],
+      "steady": [
+        "Ahorraste el {rate} de lo que entró, parecido al {previousRate} de {month}.",
+        "Guardaste el {rate} de lo que entró, casi lo mismo que en {month} ({previousRate})."
+      ],
+      "recovered": [
+        "Ahorraste el {rate} de lo que entró, después de un {month} en el que gastaste más de lo que entró.",
+        "Te quedó el {rate} de lo que entró; en {month} habías gastado más de lo que entró."
+      ]
+    }
+  },
+  "categoryRise": {
+    "priority": 2,
+    "variants": {
+      "up": [
+        "Lo que más subió fue {category}: {current}, un {change} más que en {month}.",
+        "{category} pasó de {previous} a {current}, un {change} más que en {month}."
+      ]
+    }
+  },
+  "rise": {
+    "priority": 3,
+    "variants": {
+      "one": [
+        "{merchant} pasó de {previous} a {latest} ({change}).",
+        "{merchant} subió a {latest}, desde {previous} ({change})."
+      ],
+      "several": ["Subieron {list}.", "Hubo cobros mensuales que subieron: {list}."],
+      "many": [
+        "Subieron {count} cobros mensuales; el que más, {merchant} ({change}).",
+        "De tus cobros mensuales subieron {count}, {merchant} el que más ({change})."
+      ]
+    }
+  },
+  "unusual": {
+    "priority": 4,
+    "variants": {
+      "one": [
+        "El gasto más fuera de lo común fue {amount} en {merchant}, el {date}; ahí solés gastar cerca de {typical}.",
+        "Gastaste {amount} en {merchant} el {date}, cuando lo habitual ahí es cerca de {typical}."
+      ],
+      "two": [
+        "El gasto más fuera de lo común fue {amount} en {merchant}, el {date}, cuando ahí solés gastar cerca de {typical}; hubo otro más.",
+        "Hubo dos gastos fuera de lo común; el mayor, {amount} en {merchant} el {date}, cuando lo habitual ahí es cerca de {typical}."
+      ],
+      "several": [
+        "Hubo {count} gastos fuera de lo común; el mayor, {amount} en {merchant} el {date}, cuando lo habitual ahí es cerca de {typical}.",
+        "El gasto más fuera de lo común fue {amount} en {merchant}, el {date}, cuando ahí solés gastar cerca de {typical}; hubo {others} más."
+      ]
+    }
+  },
+  "newCategory": {
+    "priority": 5,
+    "variants": {
+      "new": [
+        "Apareció {category}, con {current}: en {month} no habías gastado nada ahí.",
+        "Gastaste {current} en {category}, que en {month} no tuvo gastos."
+      ]
+    }
+  },
+  "categoryFall": {
+    "priority": 6,
+    "variants": {
+      "lower": [
+        "{category} bajó a {current}, un {change} menos que en {month}.",
+        "En {category} gastaste {current}, un {change} menos que en {month}."
+      ],
+      "stopped": [
+        "En {category} no gastaste nada; en {month} habían sido {previous}.",
+        "{category} quedó en cero, después de {previous} en {month}."
+      ]
+    }
+  },
+  "savingRateLastYear": {
+    "priority": 7,
+    "variants": {
+      "more": [
+        "El {rate} que ahorraste es más que hace un año, cuando en {month} fue el {previousRate}.",
+        "Hace un año, en {month}, ahorraste el {previousRate}: este mes guardaste más."
+      ],
+      "less": [
+        "El {rate} que ahorraste es menos que hace un año, cuando en {month} fue el {previousRate}.",
+        "Hace un año, en {month}, ahorraste más: el {previousRate}."
+      ],
+      "steady": [
+        "El {rate} que ahorraste es parecido a hace un año, cuando en {month} fue el {previousRate}.",
+        "Hace un año, en {month}, ahorraste algo parecido: el {previousRate}."
+      ]
+    }
+  }
+}

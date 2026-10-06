@@ -7,7 +7,7 @@ import { priceRises } from "@/lib/ai/priceRises";
 import { unregisteredSeries } from "@/lib/ai/unregisteredSeries";
 import { nearDuplicates } from "@/lib/ai/nearDuplicates";
 import { splitTransfers } from "@/lib/ai/splitTransfers";
-import { budgetPaces } from "@/lib/ai/monthPace";
+import { budgetPaces, categoryPaces } from "@/lib/ai/monthPace";
 import { learnMerchantHistory } from "@/lib/ai/merchantHistory";
 import { recentUnusualSpending, spendingBaselines } from "@/lib/ai/unusualSpending";
 import { LEDGER, TODAY as LEDGER_TODAY, WALLET, held } from "@/lib/ai/testing/ledger";
@@ -484,7 +484,13 @@ describe("the statistics' notices", () => {
   ];
 
   function paces(cap = salidas.amount) {
-    return [...budgetPaces([{ ...salidas, amount: cap }], outings, TODAY).values()];
+    return [
+      ...budgetPaces(
+        [{ ...salidas, amount: cap }],
+        categoryPaces(outings, TODAY),
+        TODAY,
+      ).values(),
+    ];
   }
 
   function unusual() {

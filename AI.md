@@ -151,8 +151,8 @@ are one of its best sentences.
 | AI-23 | 8     | Pace of the month                              | 13       | [x]  |
 | AI-24 | 8     | Suggested budgets                              | 14       | [x]  |
 | AI-25 | 8     | End-of-month projection                        | 15       | [x]  |
-| AI-26 | 9     | Narrated monthly close                         | 16       | [ ]  |
-| AI-27 | 9     | One line in Resumen                            | 17       | [ ]  |
+| AI-26 | 9     | Narrated monthly close                         | 16       | [x]  |
+| AI-27 | 9     | One line in Resumen                            | 17       | [x]  |
 | AI-28 | 10    | Native text recognition                        | 20       | [ ]  |
 | AI-29 | 10    | A movement from a receipt                      | 20       | [ ]  |
 | AI-30 | 11    | Card statement PDF import                      | 20       | [ ]  |
@@ -1268,7 +1268,40 @@ what happened.
   never from the template, so a sentence cannot get a figure wrong.
 - One block per currency, like the rest of the close.
 
-- [ ] Done
+As built:
+
+- `closeFacts.ts`: the balance (saved, even, overspent, only income, only
+  expenses); the saving rate against last month (more, less, about the same
+  within `MIN_RATE_CHANGE`, 5 points, or "after a month that spent more than it
+  got") and against the same month a year ago, only for a month that kept
+  something; against last month, the biggest rise, the biggest fall (or a
+  category that stopped) and the biggest new category, each at least
+  `MIN_CATEGORY_CHANGE` (20%) and `MIN_CATEGORY_SHARE` (5%) of its month,
+  named categories only; charges that went up (one, up to
+  `MAX_LISTED_RISES` (3) named, or more) and unusual spending (the top one and
+  how many others). Rates and ratios are compared as shown, to a tenth of a
+  point, so a boundary is not lost to floating point. Boundary tests pin each.
+- **Read as the month stood when it ended**: `closeSignals` learns the
+  merchant history from the movements up to the month's last day and detects
+  the series active then, so a close rebuilt months later reads the same
+  whatever came after it. Charges that went up use `riseOf`, now shared with
+  Atención's `priceRises`; unusual spending uses `unusualSpending` as is.
+- `closePhrases.json`: per kind a priority and two wordings of every variant,
+  in voseo. Its test holds it to the facts: every kind and variant worded, no
+  figure written in a template, every placeholder filled, every sentence
+  starting with a capital and ending with a stop.
+- `closeNarrative.ts`: the balance first and at most `MAX_SENTENCES` (5) in
+  all, by priority; the wording is picked by an FNV-1a hash of the month, the
+  currency, the kind and the variant. Amounts, percentages and dates go
+  through `format.ts`, which gained `formatList` ("Netflix (+18%) y Spotify
+  (+12%)").
+- **Where**, agreed with the user on 2026-10-06: on top of each currency's
+  block in the PDF ("En pocas palabras", with `AiMark`), from Cierres and from
+  the Atención notice; and in Cierres, each month opens with a chevron ("Ver
+  resumen") into its sentences, one month at a time, dropping in like a loan's
+  schedule and narrated only while open. With the AI off, neither.
+
+- [x] Done
 
 ### AI-27 · One line in Resumen [17]
 
@@ -1278,7 +1311,49 @@ what happened.
 dismissals; one line at the top of Resumen with `AiMark`. Not a repeat of
 Atención: if the top item is already a notice there, this shows nothing.
 
-- [ ] Done
+**Changed before building**, agreed with the user on 2026-10-06: as written it
+would never show anything. Atención already shows the first three of those
+same sources, so the top item is always there when there is one, and when
+there is none the ranking is empty too. The line says instead what no other
+place says: the category heading furthest above its usual month.
+
+As built:
+
+- `monthPace.ts` gained `categoryPaces`, the pace of every category in every
+  currency in one pass; `budgetPaces` now reads its category's pace from it
+  instead of grouping the history again. Both are built once in
+  `AppDataContext` (`categoryPaces`, null with the AI off).
+- `monthStandout.ts`: the category whose projection sits furthest above its
+  usual month, in money, at least `MIN_STANDOUT_CHANGE` (30%) above it and by at
+  least `MIN_STANDOUT_SHARE` (5%) of a usual month's whole spending in the
+  currency. Only above: below the usual early in a month is as often as not a
+  charge that has not come yet. Left to Atención: a category whose budget the
+  month passed or is heading past, and one with an unusual expense Atención is
+  raising — found while checking, when "Gastaste $ 45.000 en La Birra Bar"
+  and "Salidas viene un 250% arriba" said the same thing twice.
+- `StandoutLine`: "Este mes Salidas viene un 250% arriba de lo habitual" at
+  the top of Resumen, quiet like the Atención line, the reason on the mark
+  ("Si el resto del mes va como siempre, llegás a $ 105.000,00." and the pace's
+  own reason) and an X that dismisses it for the month
+  (`standout:<currency>:<category id>:<YYYY-MM>`).
+
+- [x] Done
+
+Checked for the whole batch: every check green, and on a throwaway Vite page
+(removed) served by the running `tauri dev`, mounting the real Resumen, the
+real Cierres and the real printable close with stand-in contexts and seven
+months of seeded movements, driven from the in-app browser; nothing was sent to
+the native window. Resumen: with two unusual expenses at La Birra Bar in
+Atención the line stayed quiet; dismissing both brought up "Este mes Salidas
+viene un 250% arriba de lo habitual", whose reason adds up, and its X took it
+away. Cierres: September opened into "En pesos." (balance, saving rate against
+August, Salud up 561,8%, Netflix +18%, Farmacity far above the usual) and "En
+dólares." (only expenses); opening August closed September and read two
+sentences, a quiet month saying no more than it has. The printed close showed
+"En pocas palabras" above "Resumen del mes". The dark theme read well; with the
+AI off, no chevron and no line. Not checked: the native app, and an actual
+print to PDF (the print command is Tauri's; the PDF section is covered by
+`ClosesView.test.tsx`).
 
 ---
 

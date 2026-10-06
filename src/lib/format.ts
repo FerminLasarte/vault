@@ -116,3 +116,13 @@ const compactFormatter = new Intl.NumberFormat(DATE_LOCALE, {
 export function formatCompactAmount(value: number): string {
   return compactFormatter.format(value);
 }
+
+const listFormatter = new Intl.ListFormat(AMOUNT_LOCALE, {
+  style: "long",
+  type: "conjunction",
+});
+
+// Items as a sentence writes them: "Netflix, Spotify y Disney".
+export function formatList(items: readonly string[]): string {
+  return listFormatter.format(items);
+}
