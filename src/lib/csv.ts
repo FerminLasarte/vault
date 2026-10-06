@@ -14,6 +14,7 @@ import type { CategoryModel } from "@/lib/ai/categoryModel";
 import type { LedgerContext } from "@/lib/ai/ledger";
 import { suggestCategory } from "@/lib/ai/categorySuggestion";
 import { parseFlexibleAmount, parseFlexibleDate } from "@/lib/importMapping";
+import { heldCopies } from "@/lib/importDuplicates";
 import { splitTagNames } from "@/lib/text";
 
 export const CSV_HEADERS = [
@@ -215,18 +216,6 @@ export interface ImportContext {
   supportedCurrencies: string[];
 }
 
-// Identifies a movement closely enough to catch a file being imported twice,
-// without needing an id that a hand-edited file would not carry.
-function duplicateKey(
-  date: string,
-  type: string,
-  amount: number,
-  currency: string,
-  description: string,
-): string {
-  return [date, type, amount, currency, normalize(description)].join("|");
-}
-
 export function buildImportPlan(rows: string[][], context: ImportContext): ImportPlan {
   const ready: ImportedTransaction[] = [];
   const skipped: ImportSkip[] = [];
@@ -263,21 +252,7 @@ export function buildImportPlan(rows: string[][], context: ImportContext): Impor
     context.accounts.map((account) => [normalize(account.name), account]),
   );
 
-  // How many of each movement the database already holds. A row is skipped
-  // only while the file has not brought more of it than that, so importing the
-  // same file twice adds nothing, while two identical fares on one day both
-  // make it in.
-  const alreadyHeld = new Map<string, number>();
-  for (const transaction of context.existing) {
-    const key = duplicateKey(
-      transaction.date,
-      transaction.type,
-      transaction.amount,
-      transaction.currency,
-      transaction.description ?? "",
-    );
-    alreadyHeld.set(key, (alreadyHeld.get(key) ?? 0) + 1);
-  }
+  const isHeld = heldCopies(context.existing);
 
   for (let index = 1; index < rows.length; index++) {
     const row = rows[index];
@@ -378,10 +353,7 @@ export function buildImportPlan(rows: string[][], context: ImportContext): Impor
       }
     }
 
-    const key = duplicateKey(date, type, amount, currency, description);
-    const held = alreadyHeld.get(key) ?? 0;
-    if (held > 0) {
-      alreadyHeld.set(key, held - 1);
+    if (isHeld({ date, type, amount, currency, description })) {
       duplicates += 1;
       continue;
     }
