@@ -22,7 +22,7 @@ describe("the bank header synonyms", () => {
 
   it("name exactly the columns a mapping points at, and the balance", () => {
     expect(Object.keys(headers).sort()).toEqual(
-      ["amount", "balance", "credit", "date", "debit", "description"].sort(),
+      ["amount", "balance", "credit", "date", "debit", "description", "type"].sort(),
     );
   });
 
@@ -98,6 +98,72 @@ describe("guessColumns", () => {
       amountLayout: "debit-credit",
       debit: 4,
       credit: 3,
+    });
+  });
+
+  describe("an amount and a type column", () => {
+    it("maps the layout of a sheet that writes «Gasto» or «Ingreso» on every row", () => {
+      const guess = guessColumns(
+        statement(
+          ["Fecha", "Concepto", "Categoría", "Monto", "Tipo"],
+          ["2026-10-01", "Sueldo", "Sueldo", "1250000", "Ingreso"],
+          ["2026-10-02", "Alquiler", "Vivienda", "420000", "Gasto"],
+          ["2026-10-03", "Supermercado", "Comida", "58340.5", "Gasto"],
+          ["2026-10-07", "Freelance", "Extra", "300000", "Ingreso"],
+          ["", "Total gastos", "", "478340.5", ""],
+        ),
+      );
+
+      expect(applyGuess(EMPTY_MAPPING, guess)).toMatchObject({
+        headerRow: 0,
+        date: 0,
+        description: 1,
+        amountLayout: "amount-type",
+        amount: 3,
+        type: 4,
+      });
+      expect(guess?.fields.amountLayout?.reason).toBe(
+        "«Tipo» dice si cada fila es gasto o ingreso.",
+      );
+      expect(guess?.fields.type?.reason).toBe(
+        "La columna se llama «Tipo» y 4 de sus 4 valores dicen gasto o ingreso.",
+      );
+    });
+
+    // Shorter than «Ingreso», the description would lose to it as the column
+    // with the most to say.
+    it("finds an unnamed one, and never takes it for the description", () => {
+      const guess = guessColumns(
+        statement(
+          ["A", "B", "C", "D"],
+          ["01/09/2026", "Coto", "1.000,00", "Gasto"],
+          ["02/09/2026", "Sube", "500,00", "Gasto"],
+          ["03/09/2026", "Pago", "50.000,00", "Ingreso"],
+        ),
+      );
+
+      expect(applyGuess(EMPTY_MAPPING, guess)).toMatchObject({
+        description: 1,
+        amountLayout: "amount-type",
+        amount: 2,
+        type: 3,
+      });
+      expect(guess?.fields.type?.reason).toBe(
+        "3 de los 3 valores de «D» dicen gasto o ingreso.",
+      );
+    });
+
+    it("is not a column called «Tipo» whose cells say something else", () => {
+      const guess = guessColumns(
+        statement(
+          ["Fecha", "Concepto", "Importe", "Tipo"],
+          ["01/09/2026", "COTO", "-1.000,00", "Débito automático"],
+          ["02/09/2026", "SUELDO", "50.000,00", "Transferencia"],
+        ),
+      );
+
+      expect(guess?.fields.amountLayout?.value).toBe("single");
+      expect(guess?.fields.type).toBeUndefined();
     });
   });
 

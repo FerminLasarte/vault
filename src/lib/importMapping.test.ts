@@ -4,6 +4,7 @@ import {
   buildMappedImportPlan,
   EMPTY_MAPPING,
   isMappingComplete,
+  movementType,
   parseFlexibleAmount,
   parseFlexibleDate,
   withFittingAccount,
@@ -15,6 +16,7 @@ import type { PaymentMethod, TransactionWithCategory } from "@/db/schema";
 import { ARGENTINE_STATEMENT } from "@/lib/ai/testing/statements";
 import { installmentPlan } from "@/lib/ai/testing/series";
 import { BANK, LEDGER, WALLET, held } from "@/lib/ai/testing/ledger";
+import headers from "@/lib/ai/data/csvHeaders.json";
 
 const CONTEXT: ImportContext = {
   categories: [],
@@ -95,6 +97,33 @@ describe("parseFlexibleAmount", () => {
   });
 });
 
+describe("movementType", () => {
+  // A personal sheet says «Gasto» where a bank's header says «Débito»: one
+  // vocabulary for both.
+  it("reads every word that names a debit column as an expense", () => {
+    for (const word of headers.debit) expect(movementType(word)).toBe("expense");
+  });
+
+  it("reads every word that names a credit column as income", () => {
+    for (const word of headers.credit) expect(movementType(word)).toBe("income");
+  });
+
+  it("does not mind accents, capitals or spaces", () => {
+    expect(movementType("  GASTO ")).toBe("expense");
+    expect(movementType("Débito")).toBe("expense");
+    expect(movementType("Crédito")).toBe("income");
+  });
+
+  // Equal, not starting with: a bank's «Débito automático» or a «Gasto fijo»
+  // is a description, not a direction.
+  it("reads nothing else", () => {
+    expect(movementType("Transferencia")).toBeNull();
+    expect(movementType("")).toBeNull();
+    expect(movementType("Gasto fijo")).toBeNull();
+    expect(movementType("Débito automático")).toBeNull();
+  });
+});
+
 describe("isMappingComplete", () => {
   it("needs a date and a description whatever the layout", () => {
     expect(isMappingComplete({ ...EMPTY_MAPPING, amount: 2 })).toBe(false);
@@ -117,6 +146,18 @@ describe("isMappingComplete", () => {
     expect(isMappingComplete(base)).toBe(false);
     expect(isMappingComplete({ ...base, debit: 2 })).toBe(true);
     expect(isMappingComplete({ ...base, credit: 3 })).toBe(true);
+  });
+
+  it("needs both the amount and the type column for an amount and its type", () => {
+    const base: ColumnMapping = {
+      ...EMPTY_MAPPING,
+      date: 0,
+      description: 1,
+      amountLayout: "amount-type",
+    };
+    expect(isMappingComplete({ ...base, amount: 2 })).toBe(false);
+    expect(isMappingComplete({ ...base, type: 3 })).toBe(false);
+    expect(isMappingComplete({ ...base, amount: 2, type: 3 })).toBe(true);
   });
 });
 
@@ -261,6 +302,69 @@ describe("buildMappedImportPlan", () => {
     );
 
     expect(plan.ready[0].transaction.type).toBe("income");
+  });
+
+  describe("an amount and its type", () => {
+    const AMOUNT_TYPE: ColumnMapping = {
+      ...EMPTY_MAPPING,
+      date: 0,
+      description: 1,
+      amountLayout: "amount-type",
+      amount: 2,
+      type: 3,
+    };
+
+    it("takes the direction from the type, whatever the sign", () => {
+      const plan = buildMappedImportPlan(
+        [
+          ["Fecha", "Concepto", "Monto", "Tipo"],
+          ["05/08/2026", "Supermercado", "12.345,67", "Gasto"],
+          ["06/08/2026", "Sueldo", "500.000,00", "Ingreso"],
+          ["07/08/2026", "Farmacia", "-1.000,00", "gasto"],
+        ],
+        AMOUNT_TYPE,
+        CONTEXT,
+      );
+
+      expect(
+        plan.ready.map(({ transaction }) => [transaction.type, transaction.amount]),
+      ).toEqual([
+        ["expense", 12345.67],
+        ["income", 500000],
+        ["expense", 1000],
+      ]);
+    });
+
+    it("says which rows have no type, or one it cannot read", () => {
+      const plan = buildMappedImportPlan(
+        [
+          ["Fecha", "Concepto", "Monto", "Tipo"],
+          ["05/08/2026", "Supermercado", "12.345,67", ""],
+          ["06/08/2026", "Banco", "500,00", "Transferencia"],
+        ],
+        AMOUNT_TYPE,
+        CONTEXT,
+      );
+
+      expect(plan.ready).toHaveLength(0);
+      expect(plan.skipped).toEqual([
+        { line: 2, reason: "Sin tipo" },
+        { line: 3, reason: "Tipo ilegible: «Transferencia»" },
+      ]);
+    });
+
+    it("still needs an amount", () => {
+      const plan = buildMappedImportPlan(
+        [
+          ["Fecha", "Concepto", "Monto", "Tipo"],
+          ["05/08/2026", "Supermercado", "", "Gasto"],
+        ],
+        AMOUNT_TYPE,
+        CONTEXT,
+      );
+
+      expect(plan.skipped).toEqual([{ line: 2, reason: "Sin importe" }]);
+    });
   });
 
   it("skips the preamble above the table", () => {

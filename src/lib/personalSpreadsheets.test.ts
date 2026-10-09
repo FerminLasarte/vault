@@ -77,4 +77,31 @@ describe("a personal spreadsheet", () => {
       ],
     });
   });
+
+  // Every amount positive; the Tipo column says which way it went, and the
+  // totals row at the bottom has no date.
+  it("with a positive amount and a type column", async () => {
+    expect(await importSpreadsheet("amount-and-type.xlsx")).toEqual({
+      skipped: [{ line: 9, reason: "Fecha ilegible: «»" }],
+      movements: [
+        { date: "2026-10-01", type: "income", amount: 1250000, description: "Sueldo" },
+        { date: "2026-10-02", type: "expense", amount: 420000, description: "Alquiler" },
+        {
+          date: "2026-10-03",
+          type: "expense",
+          amount: 58340.5,
+          description: "Supermercado Coto",
+        },
+        { date: "2026-10-05", type: "expense", amount: 9999, description: "Netflix" },
+        { date: "2026-10-06", type: "expense", amount: 15000, description: "SUBE" },
+        {
+          date: "2026-10-07",
+          type: "income",
+          amount: 300000,
+          description: "Freelance web",
+        },
+        { date: "2026-10-08", type: "expense", amount: 23450, description: "Farmacia" },
+      ],
+    });
+  });
 });
