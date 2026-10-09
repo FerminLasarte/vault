@@ -65,7 +65,7 @@ each; dates are real Excel dates and amounts real numbers, except in
 | E1  | 1     | «Gasto» and «Gastos» name a debit column | [x]  |
 | E2  | 2     | Amount and type layout                   | [x]  |
 | E3  | 3     | Sheet selector and «Todas las hojas»     | [x]  |
-| E4  | —     | Release 1.6.0                            | [ ]  |
+| E4  | —     | Release 1.6.0                            | [x]  |
 
 ---
 
@@ -209,7 +209,7 @@ with «Todas las hojas».
 
 ## E4. Release 1.6.0
 
-- [ ] Done
+- [x] Done
 
 After batch 3 is merged: bump to 1.6.0 and rewrite `RELEASE_NOTES.md`
 («Importá tu planilla de Excel»: the type column, the two-column layout, the

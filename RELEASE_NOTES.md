@@ -7,9 +7,22 @@ the release page afterwards never reach anyone who already has the app.
 
 ## Novedades
 
-- **Alias para donar actualizado.** El alias de Mercado Pago ahora es
-  `ferminlasarte`. Es el que ves y copiás en Ajustes y en la invitación a
-  donar; el anterior ya no está en uso.
+- **Importá tu planilla de Excel.** Además del resumen del banco, ahora podés
+  traer la planilla donde anotás tus gastos a mano: en Ajustes › Tus datos,
+  tocá «Importar resumen bancario» y elegí el archivo. Ves qué va a entrar
+  antes de confirmar.
+
+- **Columna de tipo.** Si tu planilla anota todos los montos en positivo y
+  dice en otra columna si cada fila es «Gasto» o «Ingreso», elegí «Importe y
+  tipo» y cada fila entra como corresponde. La IA lo reconoce sola.
+
+- **Columnas de ingresos y gastos.** Una planilla con una columna «Ingreso» y
+  otra «Gasto» ahora se reconoce sola, como ya pasaba con «Débito» y
+  «Crédito».
+
+- **Una hoja por mes.** Si tu archivo tiene varias hojas, elegís cuál importar.
+  Si todas tienen las mismas columnas, «Todas las hojas» trae el año entero de
+  una vez, y una fila que no se pudo leer te dice en qué hoja está.
 
 ## Instalación
 
