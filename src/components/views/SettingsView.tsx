@@ -50,13 +50,22 @@ import {
 import { fileErrorMessage } from "@/lib/fileErrors";
 import { duplicatesSkipped, transactionCount } from "@/lib/transactionCounts";
 import { ImportMappingDialog } from "@/components/ImportMappingDialog";
+import type { ImportStatement } from "@/components/ImportMappingDialog";
 import { EMPTY_MAPPING } from "@/lib/importMapping";
 import {
   parseProfiles,
   rememberProfile,
   startingMapping,
   statementSignature,
+  type ImportProfiles,
 } from "@/lib/importProfiles";
+import {
+  rowLabel,
+  sharedHeader,
+  sheetTable,
+  type RowOrigin,
+  type SheetChoice,
+} from "@/lib/statementSheets";
 import { getSetting, setSetting, IMPORT_PROFILES } from "@/db";
 import { formatDate, todayIsoDate } from "@/lib/format";
 import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification";
@@ -85,6 +94,17 @@ interface ImportOutcome {
   imported: number;
   duplicates: number;
   skipped: ImportSkip[];
+  // Where the skipped rows came from, when the file combined several sheets.
+  origins: RowOrigin[] | null;
+}
+
+// A statement file being imported: its sheets, the profiles it was opened
+// with, so a sheet chosen later starts the way the first did, and where each
+// sheet has the header when they all share one.
+interface OpenedStatement {
+  file: PickedStatement;
+  profiles: ImportProfiles;
+  shared: number[] | null;
 }
 
 export function SettingsView({ request, onRequestHandled }: ViewProps) {
@@ -124,7 +144,22 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
   const [isWorking, setIsWorking] = useState(false);
   const [outcome, setOutcome] = useState<ImportOutcome | null>(null);
-  const [statement, setStatement] = useState<PickedStatement | null>(null);
+  const [opened, setOpened] = useState<OpenedStatement | null>(null);
+  const [sheet, setSheet] = useState<SheetChoice>(0);
+  const statement = useMemo<ImportStatement | null>(
+    () =>
+      opened === null
+        ? null
+        : {
+            fileName: opened.file.fileName,
+            ...sheetTable(opened.file.sheets, sheet, opened.shared),
+          },
+    [opened, sheet],
+  );
+  const sheetNames = useMemo(
+    () => opened?.file.sheets.map(({ name }) => name) ?? [],
+    [opened],
+  );
   const [mapping, setMapping] = useState<ColumnMapping>(EMPTY_MAPPING);
   const [guess, setGuess] = useState<ColumnGuess | null>(null);
 
@@ -231,25 +266,43 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
     setIsWorking(true);
     setOutcome(null);
     try {
-      const picked = await openStatementFile();
-      if (picked === null) return;
+      const file = await openStatementFile();
+      if (file === null) return;
 
-      // A mapping already worked out for this bank's format is offered back, so
-      // the second import of the same export is one click; a new one arrives
-      // with the columns the AI could tell. The header row is searched for
-      // rather than assumed: statements put a title and an account summary
-      // above the table.
       const profiles = parseProfiles(await getSetting(IMPORT_PROFILES));
-      const start = startingMapping(profiles, picked.rows, paymentMethods, aiEnabled);
-      setMapping(start.mapping);
-      setGuess(start.guess);
-      setStatement(picked);
+      // Sheets that share the first one's header, as its mapping finds it, are
+      // offered together and open that way: a year kept a sheet per month.
+      const first = startingMapping(
+        profiles,
+        file.sheets[0].rows,
+        paymentMethods,
+        aiEnabled,
+      );
+      const next = {
+        file,
+        profiles,
+        shared: sharedHeader(file.sheets, first.mapping.headerRow),
+      };
+      setOpened(next);
+      startSheet(next, next.shared === null ? 0 : "all");
     } catch (error) {
       console.error("Failed to read the statement:", error);
       toast.error(fileErrorMessage(error, "No se pudo leer el archivo"));
     } finally {
       setIsWorking(false);
     }
+  }
+
+  // A mapping already worked out for this bank's format is offered back, so
+  // the second import of the same export is one click; a new one arrives with
+  // the columns the AI could tell. The header row is searched for rather than
+  // assumed: statements put a title and an account summary above the table.
+  function startSheet(statement: OpenedStatement, choice: SheetChoice) {
+    const { rows } = sheetTable(statement.file.sheets, choice, statement.shared);
+    const start = startingMapping(statement.profiles, rows, paymentMethods, aiEnabled);
+    setSheet(choice);
+    setMapping(start.mapping);
+    setGuess(start.guess);
   }
 
   async function handleConfirmStatement(plan: StatementPlan) {
@@ -278,6 +331,7 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
       imported: plan.ready.length + plan.steps.length + plan.joins.length,
       duplicates: plan.duplicates,
       skipped: plan.skipped,
+      origins: statement?.origins ?? null,
     });
   }
 
@@ -303,6 +357,7 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
         imported: plan.ready.length,
         duplicates: plan.duplicates,
         skipped: plan.skipped,
+        origins: null,
       });
 
       if (plan.ready.length === 0) {
@@ -492,7 +547,7 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
                   <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto">
                     {outcome.skipped.map((entry) => (
                       <li key={entry.line} className="text-xs text-muted-foreground">
-                        Línea {entry.line}: {entry.reason}
+                        {rowLabel(entry.line, outcome.origins)}: {entry.reason}
                       </li>
                     ))}
                   </ul>
@@ -563,8 +618,14 @@ export function SettingsView({ request, onRequestHandled }: ViewProps) {
 
       <ImportMappingDialog
         statement={statement}
+        sheetNames={sheetNames}
+        sheet={sheet}
+        combinable={opened?.shared != null}
+        onSheetChange={(choice) => {
+          if (opened !== null) startSheet(opened, choice);
+        }}
         onOpenChange={(open) => {
-          if (!open) setStatement(null);
+          if (!open) setOpened(null);
         }}
         mapping={mapping}
         guess={guess}
