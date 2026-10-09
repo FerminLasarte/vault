@@ -6,9 +6,10 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: Parameters<typeof invoke>) => invoke(...args),
 }));
 
-const readSheet = vi.fn<(input: Blob) => Promise<unknown[][]>>();
+const readSheets =
+  vi.fn<(input: Blob) => Promise<{ sheet: string; data: unknown[][] }[]>>();
 vi.mock("read-excel-file/browser", () => ({
-  readSheet: (input: Blob) => readSheet(input),
+  default: (input: Blob) => readSheets(input),
 }));
 
 const {
@@ -34,7 +35,7 @@ function sentArguments(): unknown[] {
 describe("file commands", () => {
   beforeEach(() => {
     invoke.mockReset();
-    readSheet.mockReset();
+    readSheets.mockReset();
   });
 
   // The title is what "Save as PDF" suggests as the file name. Without one,
@@ -121,20 +122,64 @@ describe("file commands", () => {
       kind: "spreadsheet",
       content: btoa("PK"),
     });
-    readSheet.mockResolvedValue([
-      ["Fecha", "Importe"],
-      [new Date("2026-09-01T00:00:00Z"), 1500],
+    readSheets.mockResolvedValue([
+      {
+        sheet: "Septiembre",
+        data: [
+          ["Fecha", "Importe"],
+          [new Date("2026-09-01T00:00:00Z"), 1500],
+        ],
+      },
     ]);
 
     await expect(openStatementFile()).resolves.toEqual({
       fileName: "resumen.xlsx",
-      rows: [
-        ["Fecha", "Importe"],
-        ["2026-09-01", "1500"],
+      sheets: [
+        {
+          name: "Septiembre",
+          rows: [
+            ["Fecha", "Importe"],
+            ["2026-09-01", "1500"],
+          ],
+        },
       ],
     });
-    const [blob] = readSheet.mock.calls[0];
+    const [blob] = readSheets.mock.calls[0];
     expect(await blob.text()).toBe("PK");
+  });
+
+  // A notes sheet left blank, or the two Excel used to add on its own, is
+  // nothing to choose between.
+  it("reads every sheet of a spreadsheet but the empty ones", async () => {
+    invoke.mockResolvedValue({
+      fileName: "gastos.xlsx",
+      kind: "spreadsheet",
+      content: btoa("PK"),
+    });
+    readSheets.mockResolvedValue([
+      { sheet: "Agosto", data: [["Fecha"], ["2026-08-01"]] },
+      { sheet: "Hoja2", data: [] },
+      { sheet: "Hoja3", data: [[null, ""]] },
+      { sheet: "Septiembre", data: [["Fecha"], ["2026-09-01"]] },
+    ]);
+
+    const picked = await openStatementFile();
+
+    expect(picked?.sheets.map((sheet) => sheet.name)).toEqual(["Agosto", "Septiembre"]);
+  });
+
+  it("keeps one empty sheet when there is nothing else, to say so", async () => {
+    invoke.mockResolvedValue({
+      fileName: "vacio.xlsx",
+      kind: "spreadsheet",
+      content: btoa("PK"),
+    });
+    readSheets.mockResolvedValue([{ sheet: "Hoja1", data: [] }]);
+
+    await expect(openStatementFile()).resolves.toEqual({
+      fileName: "vacio.xlsx",
+      sheets: [{ name: "Hoja1", rows: [] }],
+    });
   });
 
   it("reads a text statement with whatever delimiter it uses", async () => {
@@ -146,12 +191,17 @@ describe("file commands", () => {
 
     await expect(openStatementFile()).resolves.toEqual({
       fileName: "resumen.csv",
-      rows: [
-        ["Fecha", "Importe"],
-        ["01/09/2026", "1500,50"],
+      sheets: [
+        {
+          name: "resumen.csv",
+          rows: [
+            ["Fecha", "Importe"],
+            ["01/09/2026", "1500,50"],
+          ],
+        },
       ],
     });
-    expect(readSheet).not.toHaveBeenCalled();
+    expect(readSheets).not.toHaveBeenCalled();
   });
 
   it("never hands Rust a path to read or write", async () => {

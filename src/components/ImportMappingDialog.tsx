@@ -48,7 +48,12 @@ import type { ImportContext } from "@/lib/csv";
 import type { StatementChoices, StatementPlan } from "@/lib/importMapping";
 import type { InstallmentPlanDraft } from "@/lib/ai/statementInstallments";
 import type { NewInstallmentPlan, PaymentMethod } from "@/db";
-import type { PickedStatement } from "@/lib/files";
+import {
+  firstSheetRows,
+  rowLabel,
+  type SheetChoice,
+  type SheetTable,
+} from "@/lib/statementSheets";
 
 // Enough rows to recognise the shape of the file without turning the dialog
 // into a spreadsheet viewer.
@@ -59,8 +64,22 @@ const PREVIEW_RESULTS = 5;
 // no real column index can collide with it.
 const NONE = "__none__";
 
+// The sheet choice that reads every sheet together.
+const ALL_SHEETS = "all";
+
+// The table being mapped: one sheet of the file, or all of them together.
+export interface ImportStatement extends SheetTable {
+  fileName: string;
+}
+
 interface ImportMappingDialogProps {
-  statement: PickedStatement | null;
+  statement: ImportStatement | null;
+  // The file's sheets, by name; the choice is offered from two up.
+  sheetNames: string[];
+  sheet: SheetChoice;
+  // Whether the sheets share a header, so they can be read together.
+  combinable: boolean;
+  onSheetChange: (sheet: SheetChoice) => void;
   onOpenChange: (open: boolean) => void;
   mapping: ColumnMapping;
   // The columns the AI worked out for a format never seen before, marked while
@@ -77,6 +96,10 @@ interface ImportMappingDialogProps {
 
 export function ImportMappingDialog({
   statement,
+  sheetNames,
+  sheet,
+  combinable,
+  onSheetChange,
   onOpenChange,
   mapping,
   guess,
@@ -90,7 +113,7 @@ export function ImportMappingDialog({
   // What the user decided about particular rows, for the statement it was
   // decided about: a new file starts with nothing decided.
   const [chosen, setChosen] = useState<{
-    statement: PickedStatement | null;
+    statement: ImportStatement | null;
     choices: StatementChoices;
   }>({ statement: null, choices: NO_CHOICES });
   const choices = chosen.statement === statement ? chosen.choices : NO_CHOICES;
@@ -102,11 +125,25 @@ export function ImportMappingDialog({
   // would be a new array on every render, and nothing downstream would ever
   // actually memoise.
   const rows = useMemo(() => statement?.rows ?? [], [statement]);
+  // The first sheet's first rows, where the header is picked from: with every
+  // sheet together, the rows below would be another sheet's.
+  const leadingRows = useMemo(
+    () => (statement === null ? [] : firstSheetRows(statement).slice(0, PREVIEW_ROWS)),
+    [statement],
+  );
   const header = useMemo(() => rows[mapping.headerRow] ?? [], [rows, mapping.headerRow]);
 
   const columns = useMemo(
     () => header.map((name, index) => ({ index, label: columnLabel(name, index) })),
     [header],
+  );
+
+  const sheetItems = useMemo<Record<string, string>>(
+    () => ({
+      ...(combinable && { [ALL_SHEETS]: "Todas las hojas" }),
+      ...Object.fromEntries(sheetNames.map((name, index) => [String(index), name])),
+    }),
+    [sheetNames, combinable],
   );
 
   const columnItems = useMemo<Record<string, string>>(
@@ -225,12 +262,39 @@ export function ImportMappingDialog({
         </DialogHeader>
 
         <div className="flex max-h-[70vh] flex-col gap-5 overflow-y-auto">
+          {sheetNames.length > 1 && (
+            <section className="flex flex-col gap-1.5">
+              <Label htmlFor="import-sheet">Hoja</Label>
+              <Select
+                items={sheetItems}
+                value={String(sheet)}
+                onValueChange={(next) =>
+                  next && onSheetChange(next === ALL_SHEETS ? "all" : Number(next))
+                }
+              >
+                <SelectTrigger id="import-sheet" className="w-full sm:w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {combinable && (
+                    <SelectItem value={ALL_SHEETS}>Todas las hojas</SelectItem>
+                  )}
+                  {sheetNames.map((name, index) => (
+                    <SelectItem key={index} value={String(index)}>
+                      {name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </section>
+          )}
+
           <section className="flex flex-col gap-2">
             <Label>Primeras filas del archivo</Label>
             <div className="overflow-x-auto rounded-lg border border-border">
               <Table>
                 <TableBody>
-                  {rows.slice(0, PREVIEW_ROWS).map((row, rowIndex) => (
+                  {leadingRows.map((row, rowIndex) => (
                     <TableRow
                       key={rowIndex}
                       className={cn(
@@ -254,9 +318,7 @@ export function ImportMappingDialog({
               {fieldLabel("headerRow", "Fila de encabezados", "import-header-row")}
               <Select
                 items={Object.fromEntries(
-                  rows
-                    .slice(0, PREVIEW_ROWS)
-                    .map((_, index) => [String(index), `Fila ${index + 1}`]),
+                  leadingRows.map((_, index) => [String(index), `Fila ${index + 1}`]),
                 )}
                 value={String(mapping.headerRow)}
                 onValueChange={(next) => next && set("headerRow", Number(next))}
@@ -265,7 +327,7 @@ export function ImportMappingDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {rows.slice(0, PREVIEW_ROWS).map((_, index) => (
+                  {leadingRows.map((_, index) => (
                     <SelectItem key={index} value={String(index)}>
                       Fila {index + 1}
                     </SelectItem>
@@ -504,7 +566,7 @@ export function ImportMappingDialog({
                   <ul className="flex max-h-24 flex-col gap-1 overflow-y-auto">
                     {plan.skipped.slice(0, 10).map((entry) => (
                       <li key={entry.line} className="text-xs text-muted-foreground">
-                        Línea {entry.line}: {entry.reason}
+                        {rowLabel(entry.line, statement?.origins ?? null)}: {entry.reason}
                       </li>
                     ))}
                   </ul>

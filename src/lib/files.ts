@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { fileNameFromPath } from "@/lib/paths";
+import type { StatementSheet } from "@/lib/statementSheets";
 
 // Rust opens the native file dialogs and does the reading and writing (see
 // src-tauri/src/lib.rs and dialogs.rs). No path ever leaves the webview: a
@@ -96,9 +97,10 @@ export async function printWindow(title?: string): Promise<void> {
 
 export interface PickedStatement {
   fileName: string;
-  // The raw grid, before any interpretation: which column means what is the
-  // user's decision, not this function's.
-  rows: string[][];
+  // Each sheet's raw grid, before any interpretation: which column means what
+  // is the user's decision, not this function's. A CSV is one sheet named
+  // after the file.
+  sheets: StatementSheet[];
 }
 
 // What Rust sends: a spreadsheet as base64, for read-excel-file to parse
@@ -109,7 +111,7 @@ interface StatementFile {
   content: string;
 }
 
-// Opens a bank statement and returns its rows.
+// Opens a bank statement and returns its sheets.
 //
 // CSV and Excel both end up as a grid of strings. Excel cells arrive typed —
 // dates as Date objects, amounts as numbers — and are turned back into the text
@@ -123,21 +125,39 @@ export async function openStatementFile(): Promise<PickedStatement | null> {
 
   if (picked.kind === "spreadsheet") {
     const bytes = Uint8Array.from(atob(picked.content), (char) => char.charCodeAt(0));
-    // The browser entry point: this runs in a webview, not in Node. And
-    // `readSheet` rather than the default export, which returns every sheet
-    // wrapped in metadata — a statement is one table on the first sheet.
-    const { readSheet } = await import("read-excel-file/browser");
-    const rows = await readSheet(new Blob([bytes as unknown as BlobPart]));
-    return { fileName, rows: rows.map((row) => row.map(cellToText)) };
+    // The browser entry point: this runs in a webview, not in Node. The
+    // default export reads every sheet: a spreadsheet kept by hand often has
+    // one per month.
+    const { default: readXlsxFile } = await import("read-excel-file/browser");
+    const sheets = await readXlsxFile(new Blob([bytes as unknown as BlobPart]));
+    return { fileName, sheets: spreadsheetSheets(sheets) };
   }
 
   const { parseCsv, detectDelimiter } = await import("@/lib/csv");
-  return { fileName, rows: parseCsv(picked.content, detectDelimiter(picked.content)) };
+  const rows = parseCsv(picked.content, detectDelimiter(picked.content));
+  return { fileName, sheets: [{ name: fileName, rows }] };
+}
+
+// The sheets of a parsed spreadsheet as text, without the empty ones: a blank
+// notes sheet, or the two Excel used to add on its own, is nothing to choose
+// between. With nothing but empty sheets the first is kept, so the file still
+// opens and shows it has nothing to import.
+export function spreadsheetSheets(
+  parsed: readonly { sheet: string; data: readonly (readonly unknown[])[] }[],
+): StatementSheet[] {
+  const sheets = parsed.map(({ sheet, data }) => ({
+    name: sheet,
+    rows: data.map((row) => row.map(cellToText)),
+  }));
+  const filled = sheets.filter((sheet) =>
+    sheet.rows.some((row) => row.some((cell) => cell.trim() !== "")),
+  );
+  return filled.length > 0 ? filled : sheets.slice(0, 1);
 }
 
 // Excel hands back typed cells. A date has to become the ISO form the parser
 // recognises; everything else becomes the string it looked like on screen.
-export function cellToText(cell: unknown): string {
+function cellToText(cell: unknown): string {
   if (cell === null || cell === undefined) return "";
   if (cell instanceof Date) return cell.toISOString().slice(0, 10);
   if (typeof cell === "string") return cell;

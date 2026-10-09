@@ -64,7 +64,7 @@ each; dates are real Excel dates and amounts real numbers, except in
 | --- | ----- | ---------------------------------------- | ---- |
 | E1  | 1     | «Gasto» and «Gastos» name a debit column | [x]  |
 | E2  | 2     | Amount and type layout                   | [x]  |
-| E3  | 3     | Sheet selector and «Todas las hojas»     | [ ]  |
+| E3  | 3     | Sheet selector and «Todas las hojas»     | [x]  |
 | E4  | —     | Release 1.6.0                            | [ ]  |
 
 ---
@@ -159,7 +159,7 @@ the three tabs at narrow width.
 
 ### E3. Sheet selector and «Todas las hojas»
 
-- [ ] Done
+- [x] Done
 
 **Today:** `openStatementFile` (`src/lib/files.ts:118`) calls `readSheet`,
 which reads the first sheet only. Nothing tells the user the rest exist.
