@@ -81,6 +81,26 @@ describe("guessColumns", () => {
     });
   });
 
+  // The layout of a spreadsheet kept by hand, which names what leaves «Gasto».
+  it("maps an income column and an expense column", () => {
+    const guess = guessColumns(
+      statement(
+        ["Fecha", "Descripción", "Categoría", "Ingreso", "Gasto"],
+        ["2026-10-01", "Sueldo", "Sueldo", "1250000", ""],
+        ["2026-10-02", "Alquiler", "Vivienda", "", "420000"],
+      ),
+    );
+
+    expect(applyGuess(EMPTY_MAPPING, guess)).toMatchObject({
+      headerRow: 0,
+      date: 0,
+      description: 1,
+      amountLayout: "debit-credit",
+      debit: 4,
+      credit: 3,
+    });
+  });
+
   it("prefers the leftmost of two columns that both name a date", () => {
     const guess = guessColumns(
       statement(
