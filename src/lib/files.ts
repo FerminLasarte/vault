@@ -137,7 +137,7 @@ export async function openStatementFile(): Promise<PickedStatement | null> {
 
 // Excel hands back typed cells. A date has to become the ISO form the parser
 // recognises; everything else becomes the string it looked like on screen.
-function cellToText(cell: unknown): string {
+export function cellToText(cell: unknown): string {
   if (cell === null || cell === undefined) return "";
   if (cell instanceof Date) return cell.toISOString().slice(0, 10);
   if (typeof cell === "string") return cell;
