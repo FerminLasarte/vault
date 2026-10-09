@@ -178,6 +178,14 @@ describe("startingMapping", () => {
     expect(starting(profiles).mapping.installmentDates).toBeNull();
   });
 
+  // Remembered before a type column could be pointed at.
+  it("reads a profile stored without the type column as unset", () => {
+    const { type: _, ...older } = MAPPING;
+    const profiles = { [statementSignature(HEADER)]: older as ColumnMapping };
+
+    expect(starting(profiles).mapping.type).toBeNull();
+  });
+
   it("guesses the columns of a format never seen before", () => {
     const { mapping, guess } = starting({});
 

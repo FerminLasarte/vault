@@ -3,6 +3,7 @@ import { words } from "@/lib/ai/tokens";
 import {
   columnLabel,
   MAX_HEADER_SEARCH,
+  movementType,
   parseFlexibleAmount,
   parseFlexibleDate,
   type AmountLayout,
@@ -35,6 +36,7 @@ export type GuessedField =
   | "amount"
   | "debit"
   | "credit"
+  | "type"
   | "negativeIsExpense";
 
 export interface ColumnGuess {
@@ -265,6 +267,25 @@ export function guessColumns(rows: readonly (readonly string[])[]): ColumnGuess 
   const balance = columns.find((column) => column.named === "balance") ?? null;
   if (balance !== null) taken.add(balance.index);
 
+  // The column that says «Gasto» or «Ingreso» on every row: the one named for
+  // it, or else an unnamed one. Taken whatever the layout turns out to be, so
+  // it never passes for the description.
+  const typeColumns = columns
+    .filter(
+      (column) =>
+        !taken.has(column.index) &&
+        (column.named === "type" || column.named === null) &&
+        dense(column, data.length),
+    )
+    .map((column) => ({
+      column,
+      read: data.filter((row) => movementType(row[column.index] ?? "") !== null).length,
+    }))
+    .filter(({ column, read }) => read / column.filled >= MIN_CONTENT_SHARE);
+  const type =
+    typeColumns.find(({ column }) => column.named === "type") ?? typeColumns[0] ?? null;
+  if (type !== null) taken.add(type.column.index);
+
   const debit = pick("debit", "amount", false);
   const credit = pick("credit", "amount", false);
   const namedAmount =
@@ -288,10 +309,16 @@ export function guessColumns(rows: readonly (readonly string[])[]): ColumnGuess 
     const amount = namedAmount ?? (unnamed.length === 1 ? unnamed[0] : null);
     if (amount !== null) {
       taken.add(amount.index);
-      fields.amountLayout = {
-        value: "single" as AmountLayout,
-        reason: `Hay una sola columna de importes («${amount.label}»).`,
-      };
+      fields.amountLayout =
+        type === null
+          ? {
+              value: "single" as AmountLayout,
+              reason: `Hay una sola columna de importes («${amount.label}»).`,
+            }
+          : {
+              value: "amount-type" as AmountLayout,
+              reason: `«${type.column.label}» dice si cada fila es gasto o ingreso.`,
+            };
       fields.amount = {
         value: amount.index,
         reason:
@@ -299,7 +326,16 @@ export function guessColumns(rows: readonly (readonly string[])[]): ColumnGuess 
             ? namedReason(amount, "amount")
             : `«${amount.label}» es la única columna con importes: ${amount.kinds.amount} de sus ${amount.filled} valores.`,
       };
-      if (date !== null && balance !== null) {
+      if (type !== null) {
+        const { column, read } = type;
+        fields.type = {
+          value: column.index,
+          reason:
+            column.named === null
+              ? `${read} de los ${column.filled} valores de «${column.label}» dicen gasto o ingreso.`
+              : `La columna se llama «${column.label}» y ${read} de sus ${column.filled} valores dicen gasto o ingreso.`,
+        };
+      } else if (date !== null && balance !== null) {
         const sign = signFromBalance(data, date.index, amount.index, balance.index);
         if (sign !== null) fields.negativeIsExpense = sign;
       }

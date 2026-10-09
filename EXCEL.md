@@ -63,7 +63,7 @@ each; dates are real Excel dates and amounts real numbers, except in
 | #   | Batch | Item                                     | Done |
 | --- | ----- | ---------------------------------------- | ---- |
 | E1  | 1     | «Gasto» and «Gastos» name a debit column | [x]  |
-| E2  | 2     | Amount and type layout                   | [ ]  |
+| E2  | 2     | Amount and type layout                   | [x]  |
 | E3  | 3     | Sheet selector and «Todas las hojas»     | [ ]  |
 | E4  | —     | Release 1.6.0                            | [ ]  |
 
@@ -104,7 +104,7 @@ of the import dialog with `income-expense-columns.xlsx` open.
 
 ### E2. Amount and type layout
 
-- [ ] Done
+- [x] Done
 
 **Today:** `AmountLayout` is `"single" | "debit-credit"`
 (`src/lib/importMapping.ts:27`). With all amounts positive, `readAmount`
@@ -147,7 +147,7 @@ type cell decides. Guessed when the file has such a column.
    the type one marked through `fieldLabel("type", …)`. Check the three tabs
    fit at the dialog's narrowest width; if not, shorten the labels rather than
    wrapping.
-6. Add `amount-and-type.xlsx` to the end-to-end test: six expenses and two
+6. Add `amount-and-type.xlsx` to the end-to-end test: five expenses and two
    incomes, and the totals row skipped for its missing date.
 
 Screenshots: the dialog on `amount-and-type.xlsx` with the guess marks, and

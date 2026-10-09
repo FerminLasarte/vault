@@ -48,5 +48,6 @@
     "monto credito",
     "credit"
   ],
+  "type": ["tipo", "tipo de movimiento", "ingreso egreso", "clase"],
   "balance": ["saldo", "balance"]
 }

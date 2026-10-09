@@ -164,7 +164,7 @@ export function ImportMappingDialog({
   }
 
   function columnSelect(
-    field: "date" | "description" | "amount" | "debit" | "credit",
+    field: "date" | "description" | "amount" | "debit" | "credit" | "type",
     id: string,
     label: string,
     value: number | null,
@@ -203,6 +203,15 @@ export function ImportMappingDialog({
       setIsImporting(false);
     }
   }
+
+  // The same column in two layouts: the signed one, and the one with a type.
+  const amountSelect = columnSelect(
+    "amount",
+    "import-amount",
+    "Importe",
+    mapping.amount,
+    (index) => set("amount", index),
+  );
 
   return (
     <Dialog open={statement !== null} onOpenChange={onOpenChange}>
@@ -287,21 +296,16 @@ export function ImportMappingDialog({
                 }
               >
                 <TabsList>
-                  <TabsTrigger value="single">Una columna con signo</TabsTrigger>
+                  <TabsTrigger value="single">Con signo</TabsTrigger>
                   <TabsTrigger value="debit-credit">Débito y crédito</TabsTrigger>
+                  <TabsTrigger value="amount-type">Importe y tipo</TabsTrigger>
                 </TabsList>
               </Tabs>
             </div>
 
             {mapping.amountLayout === "single" ? (
               <>
-                {columnSelect(
-                  "amount",
-                  "import-amount",
-                  "Importe",
-                  mapping.amount,
-                  (index) => set("amount", index),
-                )}
+                {amountSelect}
                 <div className="flex flex-col gap-1.5">
                   {fieldLabel("negativeIsExpense", "Qué significa un número negativo")}
                   <Tabs
@@ -316,6 +320,17 @@ export function ImportMappingDialog({
                     </TabsList>
                   </Tabs>
                 </div>
+              </>
+            ) : mapping.amountLayout === "amount-type" ? (
+              <>
+                {amountSelect}
+                {columnSelect(
+                  "type",
+                  "import-type",
+                  "Tipo (gasto o ingreso)",
+                  mapping.type,
+                  (index) => set("type", index),
+                )}
               </>
             ) : (
               <>

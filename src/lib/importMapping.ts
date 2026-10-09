@@ -14,6 +14,8 @@ import {
   type StatementRow,
   type StatementTransfer,
 } from "@/lib/ai/statementLedger";
+import headers from "@/lib/ai/data/csvHeaders.json";
+import { words } from "@/lib/ai/tokens";
 import { heldCopies } from "@/lib/importDuplicates";
 import type { ImportContext, ImportPlan, ImportSkip } from "@/lib/csv";
 import type { CommitmentStep, TransferJoin } from "@/db";
@@ -23,8 +25,10 @@ import type { NewTransaction, PaymentMethod } from "@/db/schema";
 //
 // Bank statements do it both ways, and neither is a variation of the other: one
 // column with a sign, or two columns where the one that is filled in decides
-// whether money came in or went out.
-export type AmountLayout = "single" | "debit-credit";
+// whether money came in or went out. A spreadsheet kept by hand often does it a
+// third way: the amount always positive, and a column that says «Gasto» or
+// «Ingreso».
+export type AmountLayout = "single" | "debit-credit" | "amount-type";
 
 export interface ColumnMapping {
   // Index of the header row, and where the data starts. Statements often carry
@@ -33,11 +37,14 @@ export interface ColumnMapping {
   date: number;
   description: number;
   amountLayout: AmountLayout;
-  // Used when the layout is "single".
+  // Used when the layout is "single" or "amount-type".
   amount: number | null;
   // Used when the layout is "debit-credit".
   debit: number | null;
   credit: number | null;
+  // Used when the layout is "amount-type": the column that says which way the
+  // money went.
+  type: number | null;
   // Statements are almost always in one currency, so it is chosen rather than
   // read from a column.
   currency: string;
@@ -59,6 +66,7 @@ export const EMPTY_MAPPING: ColumnMapping = {
   amount: null,
   debit: null,
   credit: null,
+  type: null,
   currency: "ARS",
   paymentMethodId: null,
   negativeIsExpense: true,
@@ -160,12 +168,25 @@ export function parseFlexibleAmount(raw: string): number | null {
   return negative ? -parsed : parsed;
 }
 
+type Direction = "income" | "expense";
+
+// What a type cell says: «Gasto» or «Ingreso», or any other word that names a
+// debit or credit column, since a sheet writes in its cells what a bank writes
+// in its header. The whole cell has to be that word: «Débito automático» is a
+// description, not a direction.
+export function movementType(cell: string): Direction | null {
+  const text = words(cell).join(" ");
+  if (headers.debit.includes(text)) return "expense";
+  if (headers.credit.includes(text)) return "income";
+  return null;
+}
+
 // Reads the amount out of a row, honouring the layout, and reports which
-// direction the money moved.
+// direction the money moved, or why the row has no amount to import.
 function readAmount(
   row: string[],
   mapping: ColumnMapping,
-): { amount: number; type: "income" | "expense" } | null {
+): { amount: number; type: Direction } | string {
   if (mapping.amountLayout === "debit-credit") {
     const debit =
       mapping.debit === null ? null : parseFlexibleAmount(row[mapping.debit] ?? "");
@@ -180,12 +201,20 @@ function readAmount(
     if (debit !== null && debit !== 0) {
       return { amount: Math.abs(debit), type: "expense" };
     }
-    return null;
+    return "Sin importe";
   }
 
-  if (mapping.amount === null) return null;
+  if (mapping.amount === null) return "Sin importe";
   const value = parseFlexibleAmount(row[mapping.amount] ?? "");
-  if (value === null || value === 0) return null;
+  if (value === null || value === 0) return "Sin importe";
+
+  if (mapping.amountLayout === "amount-type") {
+    const cell = (mapping.type === null ? "" : (row[mapping.type] ?? "")).trim();
+    if (cell === "") return "Sin tipo";
+    const type = movementType(cell);
+    if (type === null) return `Tipo ilegible: «${cell}»`;
+    return { amount: Math.abs(value), type };
+  }
 
   const isExpense = mapping.negativeIsExpense ? value < 0 : value > 0;
   return { amount: Math.abs(value), type: isExpense ? "expense" : "income" };
@@ -213,6 +242,8 @@ export function withFittingAccount(
 export function isMappingComplete(mapping: ColumnMapping): boolean {
   if (mapping.date < 0 || mapping.description < 0) return false;
   if (mapping.amountLayout === "single") return mapping.amount !== null;
+  if (mapping.amountLayout === "amount-type")
+    return mapping.amount !== null && mapping.type !== null;
   return mapping.debit !== null || mapping.credit !== null;
 }
 
@@ -308,8 +339,8 @@ export function buildMappedImportPlan(
     }
 
     const money = readAmount(row, mapping);
-    if (money === null) {
-      skipped.push({ line, reason: "Sin importe" });
+    if (typeof money === "string") {
+      skipped.push({ line, reason: money });
       continue;
     }
 
