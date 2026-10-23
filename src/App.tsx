@@ -127,22 +127,23 @@ function App() {
               <ViewStateProvider>
                 <div className="flex h-screen bg-background text-foreground">
                   <SidebarWithBadges currentView={view} onNavigate={setView} />
-                  <main ref={column} className="min-w-0 flex-1 overflow-auto p-4 sm:p-8">
-                    {/* Fills this column's top padding, which is the strip along
-                    the window's top edge that the sidebar header and the page
-                    header between them leave uncovered — and the first place a
-                    hand reaches to move a window. The negative margin cancels
-                    its own height, so it takes up the space that was already
-                    empty and pushes nothing down.
+                  {/* No top padding: the strip below stands in for it. Padding
+                      there would also be where a page header that stays at the
+                      top stops, and engines disagree on that. */}
+                  <main
+                    ref={column}
+                    className="min-w-0 flex-1 overflow-auto px-4 pb-4 sm:px-8 sm:pb-8"
+                  >
+                    {/* The column's top margin, and a strip along the window's
+                    top edge — the first place a hand reaches to move a window.
+                    A page header covers it and drags in its place, staying at
+                    the top as the page scrolls; the strip is for a screen
+                    without one, such as a view's error fallback.
 
                     It scrolls away with the content instead of floating above
                     it, which is the point: a fixed strip would keep taking
                     clicks meant for whatever had scrolled underneath it. */}
-                    <div
-                      aria-hidden
-                      data-tauri-drag-region
-                      className="-mt-4 h-4 sm:-mt-8 sm:h-8"
-                    />
+                    <div aria-hidden data-tauri-drag-region className="h-4 sm:h-8" />
                     <ErrorBoundary
                       resetKey={view}
                       fallback={(error, retry) => (

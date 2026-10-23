@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { AttentionNotice } from "./AttentionNotice";
+import { AttentionNotice, NoticeRow } from "./AttentionNotice";
 import type { AttentionItem } from "@/lib/attention";
 
 const BACKUP: AttentionItem = {
@@ -30,6 +30,8 @@ const RISE: AttentionItem = {
   dismissalId: "rise:expense:ARS:netflix:monthly:5900",
 };
 
+const STANDOUT = "Este mes Deporte viene un 41,9% arriba de lo habitual";
+
 describe("AttentionNotice", () => {
   it("draws nothing when there is nothing to raise", () => {
     const { container } = render(<AttentionNotice items={[]} />);
@@ -37,13 +39,37 @@ describe("AttentionNotice", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("puts every notice on the same line, headline first", () => {
+  it("gives every notice a row of its own, in order", () => {
     render(<AttentionNotice items={[BACKUP, CLOSE]} />);
 
     const notices = screen.getAllByRole("listitem");
     expect(notices).toHaveLength(2);
     expect(notices[0].textContent).toContain(BACKUP.title);
     expect(notices[1].textContent).toContain(CLOSE.title);
+  });
+
+  // The AI's standout comes from elsewhere but reads as one more notice.
+  it("puts the rows the screen hands it above its own", () => {
+    render(
+      <AttentionNotice items={[BACKUP]}>
+        <NoticeRow lead={null}>{STANDOUT}</NoticeRow>
+      </AttentionNotice>,
+    );
+
+    const notices = screen.getAllByRole("listitem");
+    expect(notices).toHaveLength(2);
+    expect(notices[0].textContent).toBe(STANDOUT);
+    expect(notices[1].textContent).toContain(BACKUP.title);
+  });
+
+  it("draws a list for a handed row alone", () => {
+    render(
+      <AttentionNotice items={[]}>
+        <NoticeRow lead={null}>{STANDOUT}</NoticeRow>
+      </AttentionNotice>,
+    );
+
+    expect(screen.getByRole("listitem").textContent).toBe(STANDOUT);
   });
 
   // The detail moved into a hint to fit one line, and a hint needs a pointer.
