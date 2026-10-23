@@ -183,7 +183,7 @@ export function QuickEntry({ defaultCurrency, onSave, onExpand }: QuickEntryProp
                   {part.text}
                 </span>
                 {part.aiReason !== undefined && (
-                  <AiMark reason={part.aiReason} className="ml-1.5 align-middle" />
+                  <AiMark reason={part.aiReason} className="ml-1.5" />
                 )}
                 {index < parts.length - 1 && <span aria-hidden> ·</span>}
               </span>

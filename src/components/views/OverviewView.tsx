@@ -650,7 +650,11 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
   }, [monthlyTrend, projection, dateRange, today]);
 
   return (
-    <div className="flex flex-col gap-6 sm:gap-8">
+    <Tabs
+      value={currentTab}
+      onValueChange={(next) => setCurrentTab(String(next) as OverviewTab)}
+      className="gap-6 sm:gap-8"
+    >
       <PageHeader
         title="Resumen"
         description="Cuánto tenés, cómo venís este mes y qué pasó a lo largo del tiempo."
@@ -670,6 +674,12 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
             </Button>
           </>
         }
+        tabs={
+          <TabsList>
+            <TabsTrigger value="general">General</TabsTrigger>
+            <TabsTrigger value="analysis">Análisis</TabsTrigger>
+          </TabsList>
+        }
       />
 
       {/* Built from the same figures the user is looking at rather than from a
@@ -686,19 +696,19 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
         )}
       </PrintableSheet>
 
-      <Tabs
-        value={currentTab}
-        onValueChange={(next) => setCurrentTab(String(next) as OverviewTab)}
-      >
-        <TabsList>
-          <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="analysis">Análisis</TabsTrigger>
-        </TabsList>
-
-        {/* Where the user stands right now: what they are worth, how the
-            month is going, and what they last did. No period to choose, because every
-            figure here already answers to one. */}
-        <TabsContent value="general" className="flex flex-col gap-6 pt-6">
+      {/* Where the user stands right now: what they are worth, how the
+          month is going, and what they last did. No period to choose, because every
+          figure here already answers to one. */}
+      <TabsContent value="general" className="flex flex-col gap-6">
+        <AttentionNotice
+          items={attention}
+          onAction={(item) => void handleAttentionAction(item)}
+          onDismiss={(item) => {
+            if (item.dismissalId !== undefined) {
+              void dismissAiSuggestions([item.dismissalId]);
+            }
+          }}
+        >
           {standout !== null && (
             <StandoutLine
               title={standout.title}
@@ -706,147 +716,137 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
               onDismiss={() => void dismissAiSuggestions([standout.id])}
             />
           )}
+        </AttentionNotice>
 
-          <AttentionNotice
-            items={attention}
-            onAction={(item) => void handleAttentionAction(item)}
-            onDismiss={(item) => {
-              if (item.dismissalId !== undefined) {
-                void dismissAiSuggestions([item.dismissalId]);
-              }
+        <NetWorthBar
+          holdings={netWorth.holdings}
+          worth={netWorth.worth}
+          convertedNet={netWorth.convertedNet}
+          currency={currency}
+          convertedCurrency={otherCurrency}
+          endOfMonth={endOfMonth}
+          isLoading={isLoading}
+        />
+
+        <MonthOverviewCards
+          overview={monthOverview}
+          pace={pace}
+          currency={currency}
+          isLoading={isLoading}
+        />
+
+        <UpcomingMonths
+          committed={projection}
+          expected={expectedProjection}
+          currency={currency}
+          isLoading={isLoading}
+        />
+
+        <RecentTransactions
+          transactions={recentInCurrency}
+          currency={currency}
+          isLoading={isLoading}
+        />
+      </TabsContent>
+
+      {/* What happened over a stretch of time. Everything here is a flow, so
+          everything here is bounded by the period above it. */}
+      <TabsContent value="analysis" className="flex flex-col gap-6">
+        <div className="flex flex-wrap items-center gap-3">
+          <Label htmlFor="analysis-category" className="sr-only">
+            Categoría
+          </Label>
+          <CategorySelect
+            id="analysis-category"
+            categories={categories}
+            value={categoryId}
+            onChange={setCategoryId}
+            className="min-w-52"
+          />
+
+          <Label htmlFor="analysis-period" className="sr-only">
+            Período
+          </Label>
+          <Select
+            items={{
+              [RECENT_PERIOD]: RECENT_PERIOD_LABEL,
+              ...(isCustomPeriod ? { [CUSTOM_PERIOD]: CUSTOM_PERIOD_LABEL } : {}),
+              ...Object.fromEntries(years.map((year) => [String(year), String(year)])),
             }}
+            value={
+              isRecentPeriod
+                ? RECENT_PERIOD
+                : isCustomPeriod
+                  ? CUSTOM_PERIOD
+                  : String(selectedYear)
+            }
+            onValueChange={(value) =>
+              setPeriod(
+                String(value) === RECENT_PERIOD
+                  ? { kind: "recent" }
+                  : { kind: "range", range: yearRange(Number(value)) },
+              )
+            }
+          >
+            <SelectTrigger id="analysis-period" className="min-w-44">
+              <SelectValue placeholder={RECENT_PERIOD_LABEL} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={RECENT_PERIOD}>{RECENT_PERIOD_LABEL}</SelectItem>
+              {/* Only listed while it is what the range actually is: picking
+                  "Personalizado" from a list would mean nothing. */}
+              {isCustomPeriod && (
+                <SelectItem value={CUSTOM_PERIOD}>{CUSTOM_PERIOD_LABEL}</SelectItem>
+              )}
+              {years.map((year) => (
+                <SelectItem key={year} value={String(year)}>
+                  {year}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Label htmlFor="analysis-dates" className="sr-only">
+            Rango de fechas
+          </Label>
+          <DateRangePicker
+            id="analysis-dates"
+            value={dateRange}
+            onChange={(range) =>
+              // Clearing the dates means "back to the default window", not
+              // "no period at all": the figures below are flows and an
+              // unbounded one says nothing.
+              setPeriod(
+                range.from === null && range.to === null
+                  ? { kind: "recent" }
+                  : { kind: "range", range },
+              )
+            }
           />
+        </div>
 
-          <NetWorthBar
-            holdings={netWorth.holdings}
-            worth={netWorth.worth}
-            convertedNet={netWorth.convertedNet}
-            currency={currency}
-            convertedCurrency={otherCurrency}
-            endOfMonth={endOfMonth}
-            isLoading={isLoading}
-          />
+        <SummaryBar
+          summary={summary}
+          convertedSummary={convertedSummary}
+          convertedCurrency={otherCurrency}
+          currency={currency}
+          isLoading={isLoading}
+          usesHistoricalRates={exchangeRateHistory.length > 0}
+        />
 
-          <MonthOverviewCards
-            overview={monthOverview}
-            pace={pace}
-            currency={currency}
-            isLoading={isLoading}
-          />
-
-          <UpcomingMonths
-            committed={projection}
-            expected={expectedProjection}
-            currency={currency}
-            isLoading={isLoading}
-          />
-
-          <RecentTransactions
-            transactions={recentInCurrency}
-            currency={currency}
-            isLoading={isLoading}
-          />
-        </TabsContent>
-
-        {/* What happened over a stretch of time. Everything here is a flow, so
-            everything here is bounded by the period above it. */}
-        <TabsContent value="analysis" className="flex flex-col gap-6 pt-6">
-          <div className="flex flex-wrap items-center gap-3">
-            <Label htmlFor="analysis-category" className="sr-only">
-              Categoría
-            </Label>
-            <CategorySelect
-              id="analysis-category"
-              categories={categories}
-              value={categoryId}
-              onChange={setCategoryId}
-              className="min-w-52"
-            />
-
-            <Label htmlFor="analysis-period" className="sr-only">
-              Período
-            </Label>
-            <Select
-              items={{
-                [RECENT_PERIOD]: RECENT_PERIOD_LABEL,
-                ...(isCustomPeriod ? { [CUSTOM_PERIOD]: CUSTOM_PERIOD_LABEL } : {}),
-                ...Object.fromEntries(years.map((year) => [String(year), String(year)])),
-              }}
-              value={
-                isRecentPeriod
-                  ? RECENT_PERIOD
-                  : isCustomPeriod
-                    ? CUSTOM_PERIOD
-                    : String(selectedYear)
-              }
-              onValueChange={(value) =>
-                setPeriod(
-                  String(value) === RECENT_PERIOD
-                    ? { kind: "recent" }
-                    : { kind: "range", range: yearRange(Number(value)) },
-                )
-              }
-            >
-              <SelectTrigger id="analysis-period" className="min-w-44">
-                <SelectValue placeholder={RECENT_PERIOD_LABEL} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={RECENT_PERIOD}>{RECENT_PERIOD_LABEL}</SelectItem>
-                {/* Only listed while it is what the range actually is: picking
-                    "Personalizado" from a list would mean nothing. */}
-                {isCustomPeriod && (
-                  <SelectItem value={CUSTOM_PERIOD}>{CUSTOM_PERIOD_LABEL}</SelectItem>
-                )}
-                {years.map((year) => (
-                  <SelectItem key={year} value={String(year)}>
-                    {year}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Label htmlFor="analysis-dates" className="sr-only">
-              Rango de fechas
-            </Label>
-            <DateRangePicker
-              id="analysis-dates"
-              value={dateRange}
-              onChange={(range) =>
-                // Clearing the dates means "back to the default window", not
-                // "no period at all": the figures below are flows and an
-                // unbounded one says nothing.
-                setPeriod(
-                  range.from === null && range.to === null
-                    ? { kind: "recent" }
-                    : { kind: "range", range },
-                )
-              }
-            />
-          </div>
-
-          <SummaryBar
-            summary={summary}
-            convertedSummary={convertedSummary}
-            convertedCurrency={otherCurrency}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <CategoryBreakdownChart
+            data={categoryBreakdown}
             currency={currency}
             isLoading={isLoading}
-            usesHistoricalRates={exchangeRateHistory.length > 0}
           />
-
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <CategoryBreakdownChart
-              data={categoryBreakdown}
-              currency={currency}
-              isLoading={isLoading}
-            />
-            <IncomeVsExpenseChart
-              data={trendWithProjection}
-              currency={currency}
-              isLoading={isLoading}
-            />
-          </div>
-        </TabsContent>
-      </Tabs>
+          <IncomeVsExpenseChart
+            data={trendWithProjection}
+            currency={currency}
+            isLoading={isLoading}
+          />
+        </div>
+      </TabsContent>
 
       <UncategorisedDialog
         key={reviewedGroup?.id}
@@ -869,6 +869,6 @@ export function OverviewView({ request, tab, onRequestHandled }: ViewProps) {
             : addRecurring(values)
         }
       />
-    </div>
+    </Tabs>
   );
 }

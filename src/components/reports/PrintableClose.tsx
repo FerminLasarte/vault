@@ -139,7 +139,7 @@ function CurrencyBlock({
       {sentences !== undefined && sentences.length > 0 && (
         <Section title="En pocas palabras">
           <p className="text-xs leading-relaxed">
-            <AiMark className="mr-1.5 align-[-2px]" />
+            <AiMark className="mr-1.5" />
             {sentences.join(" ")}
           </p>
         </Section>
