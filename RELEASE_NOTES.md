@@ -7,22 +7,17 @@ the release page afterwards never reach anyone who already has the app.
 
 ## Novedades
 
-- **Importá tu planilla de Excel.** Además del resumen del banco, ahora podés
-  traer la planilla donde anotás tus gastos a mano: en Ajustes › Tus datos,
-  tocá «Importar resumen bancario» y elegí el archivo. Ves qué va a entrar
-  antes de confirmar.
+- **Avisos más ordenados.** En Resumen, cada aviso va en su propio renglón:
+  los íconos quedan en una columna y los textos empiezan a la misma altura, con
+  la acción justo al lado. Lo que señala la IA aparece primero, en la misma
+  lista.
 
-- **Columna de tipo.** Si tu planilla anota todos los montos en positivo y
-  dice en otra columna si cada fila es «Gasto» o «Ingreso», elegí «Importe y
-  tipo» y cada fila entra como corresponde. La IA lo reconoce sola.
+- **El título queda arriba.** Al deslizar una sección, su título y sus botones
+  se quedan a la vista. En Resumen, Compromisos y Categorías también quedan
+  las pestañas, así cambiás de una a otra sin volver arriba.
 
-- **Columnas de ingresos y gastos.** Una planilla con una columna «Ingreso» y
-  otra «Gasto» ahora se reconoce sola, como ya pasaba con «Débito» y
-  «Crédito».
-
-- **Una hoja por mes.** Si tu archivo tiene varias hojas, elegís cuál importar.
-  Si todas tienen las mismas columnas, «Todas las hojas» trae el año entero de
-  una vez, y una fila que no se pudo leer te dice en qué hoja está.
+- **La marca de IA, alineada.** «IA» ahora queda en el mismo renglón que el
+  texto que acompaña, en toda la app, en vez de verse un poco más arriba.
 
 ## Instalación
 
