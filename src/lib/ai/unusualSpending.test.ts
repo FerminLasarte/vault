@@ -90,7 +90,10 @@ describe("unusualSpending", () => {
       movement("Cuota gimnasio", "2026-10-05", { amount, category_id: 3 });
 
     expect(judge(history, fee(95000))).toBeNull();
-    expect(judge(history, fee(180000))).toMatchObject({ name: "Farmacia", typical: 6000 });
+    expect(judge(history, fee(180000))).toMatchObject({
+      name: "Farmacia",
+      typical: 6000,
+    });
   });
 
   it("holds a typed fee against the earlier ones with its tags", () => {

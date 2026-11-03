@@ -128,7 +128,10 @@ const PERIOD_IN_BRACKETS = new RegExp(
   `\\(\\s*(?:(?:${MONTHS}|${SHORT_MONTHS}|\\d{4})\\b\\.?[\\s,/y-]*)+\\)`,
   "gi",
 );
-const PERIOD_AT_END = new RegExp(`(?:\\s+(?:${MONTHS})(?:\\s+(?:de\\s+)?\\d{4})?)+\\s*$`, "i");
+const PERIOD_AT_END = new RegExp(
+  `(?:\\s+(?:${MONTHS})(?:\\s+(?:de\\s+)?\\d{4})?)+\\s*$`,
+  "i",
+);
 
 function withoutPeriod(description: string): string {
   const kept = description.replace(PERIOD_IN_BRACKETS, " ").replace(PERIOD_AT_END, "");
@@ -167,7 +170,10 @@ function readingOf(description: string): Reading {
 // unless it already says them: "Mensual" tagged Tenis is "Mensual Tenis", apart
 // from "Mensual Gimnasio". A merchant's name already says where, and its tags
 // only how it went ("Comida", "Noche").
-export function merchantLabel(description: string, tagNames: string | null = null): string {
+export function merchantLabel(
+  description: string,
+  tagNames: string | null = null,
+): string {
   const reading = readingOf(description);
   if (!reading.typedOnly) return reading.name;
   const said = new Set(words(reading.name));

@@ -156,7 +156,9 @@ describe("merchantKey", () => {
     expect(merchantKey("Mensual (julio)", "Tenis")).not.toBe(
       merchantKey("Mensual (julio)", "Gimnasio"),
     );
-    expect(merchantKey("Mensual (noviembre)", "Tenis")).toBe(merchantKey("Mensual Tenis"));
+    expect(merchantKey("Mensual (noviembre)", "Tenis")).toBe(
+      merchantKey("Mensual Tenis"),
+    );
     expect(merchantKey("Tenis mensual", "Tenis")).toBe(merchantKey("Tenis mensual"));
   });
 
