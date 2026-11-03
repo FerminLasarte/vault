@@ -1,8 +1,8 @@
-import { merchantKey, merchantName } from "@/lib/ai/merchants";
+import { merchantKey, merchantLabel } from "@/lib/ai/merchants";
 import { median } from "@/lib/ai/stats";
 import { words } from "@/lib/ai/tokens";
 import { monthsBefore } from "@/lib/format";
-import type { CategoryType, Transaction } from "@/db/schema";
+import type { CategoryType, Transaction, TransactionWithCategory } from "@/db/schema";
 
 // What the user's own history says about each place they spend at or get paid
 // from: what it is called, how often it comes up, what it usually costs and
@@ -57,6 +57,12 @@ export interface MerchantEntry {
 
 export type MerchantHistory = Map<string, MerchantEntry>;
 
+// A movement as the lists hold it, with its tags, which tell apart typed
+// movements that read alike (see merchantKey). Without them it reads as
+// untagged.
+export type TaggedTransaction = Transaction &
+  Partial<Pick<TransactionWithCategory, "tag_names">>;
+
 // How an entry is told apart, from its parts. Exported for what has to find
 // the entry behind something that is not a movement, like a recurring template.
 export function merchantEntryId(
@@ -72,7 +78,7 @@ interface Tally {
   type: CategoryType;
   currency: string;
   movements: Transaction[];
-  latest: { date: string; id: number; description: string };
+  latest: TaggedTransaction;
   recentAmounts: number[];
   recentAccounts: Map<number, number>;
 }
@@ -92,7 +98,7 @@ function usualAccount(accounts: Map<number, number>): UsualAccount | null {
 }
 
 export function learnMerchantHistory(
-  transactions: readonly Transaction[],
+  transactions: readonly TaggedTransaction[],
   today: string,
 ): MerchantHistory {
   const since = monthsBefore(today, RECENT_MONTHS);
@@ -101,7 +107,7 @@ export function learnMerchantHistory(
   for (const transaction of transactions) {
     // A transfer is between the user's own accounts: no merchant behind it.
     if (transaction.type !== "income" && transaction.type !== "expense") continue;
-    const key = merchantKey(transaction.description);
+    const key = merchantKey(transaction.description, transaction.tag_names ?? null);
     if (key === "") continue;
 
     const id = merchantEntryId(key, transaction.type, transaction.currency);
@@ -142,7 +148,7 @@ export function learnMerchantHistory(
     history.set(id, {
       id,
       key: tally.key,
-      label: merchantName(tally.latest.description) ?? tally.latest.description.trim(),
+      label: merchantLabel(tally.latest.description, tally.latest.tag_names ?? null),
       type: tally.type,
       currency: tally.currency,
       count: tally.movements.length,
@@ -165,25 +171,30 @@ export function merchantIdOf(movement: {
   description: string;
   type: CategoryType;
   currency: string;
+  tag_names?: string | null;
 }): string | null {
-  const key = merchantKey(movement.description);
+  const key = merchantKey(movement.description, movement.tag_names ?? null);
   return key === "" ? null : merchantEntryId(key, movement.type, movement.currency);
 }
 
 // Whether a movement comes from one of these merchants, given as entry ids.
-export function isFrom(movement: Transaction, merchants: ReadonlySet<string>): boolean {
+export function isFrom(
+  movement: TaggedTransaction,
+  merchants: ReadonlySet<string>,
+): boolean {
   if (merchants.size === 0 || movement.type === "transfer") return false;
   const id = merchantIdOf({
     description: movement.description,
     type: movement.type,
     currency: movement.currency,
+    tag_names: movement.tag_names,
   });
   return id !== null && merchants.has(id);
 }
 
 export function findMerchant(
   history: MerchantHistory,
-  movement: { description: string; type: CategoryType; currency: string },
+  movement: Parameters<typeof merchantIdOf>[0],
 ): MerchantEntry | null {
   const id = merchantIdOf(movement);
   return id === null ? null : (history.get(id) ?? null);

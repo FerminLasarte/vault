@@ -1,5 +1,5 @@
-import type { InstallmentPlan, RecurringTransaction, Transaction } from "@/db/schema";
-import { learnMerchantHistory } from "@/lib/ai/merchantHistory";
+import type { InstallmentPlan, RecurringTransaction } from "@/db/schema";
+import { learnMerchantHistory, type TaggedTransaction } from "@/lib/ai/merchantHistory";
 import { detectSeries, type Commitments } from "@/lib/ai/series";
 
 // Movements and series for the tests of everything that reads series: the
@@ -21,8 +21,8 @@ let nextId = 1;
 export function movement(
   description: string,
   date: string,
-  overrides: Partial<Transaction> = {},
-): Transaction {
+  overrides: Partial<TaggedTransaction> = {},
+): TaggedTransaction {
   return {
     id: nextId++,
     amount: 5000,
@@ -43,8 +43,8 @@ export function movement(
 export function charges(
   description: string,
   dates: string[],
-  overrides: Partial<Transaction> = {},
-): Transaction[] {
+  overrides: Partial<TaggedTransaction> = {},
+): TaggedTransaction[] {
   return dates.map((date) => movement(description, date, overrides));
 }
 
@@ -53,8 +53,8 @@ export function chargesOf(
   description: string,
   dates: string[],
   amounts: number[],
-  overrides: Partial<Transaction> = {},
-): Transaction[] {
+  overrides: Partial<TaggedTransaction> = {},
+): TaggedTransaction[] {
   return dates.map((date, index) =>
     movement(description, date, { ...overrides, amount: amounts[index] }),
   );
@@ -107,7 +107,7 @@ export function installmentPlan(
 }
 
 export function detect(
-  transactions: Transaction[],
+  transactions: TaggedTransaction[],
   commitments: Commitments = NOTHING_DECLARED,
   today: string = TODAY,
 ) {

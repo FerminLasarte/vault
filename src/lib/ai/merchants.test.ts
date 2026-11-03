@@ -143,4 +143,27 @@ describe("merchantKey", () => {
   it("keeps typed text apart from the merchant it mentions", () => {
     expect(merchantKey("nafta ypf")).not.toBe(merchantKey("YPF 1234 CABA"));
   });
+
+  it("leaves out the month a typed movement was for", () => {
+    expect(merchantKey("Mensual (julio)")).toBe("mensual");
+    expect(merchantKey("Mensual (abril - mayo)")).toBe("mensual");
+    expect(merchantKey("Mensual (Noviembre - Dic)")).toBe("mensual");
+    expect(merchantKey("Alquiler octubre 2026")).toBe("alquiler");
+    expect(merchantKey("Octubre")).toBe("octubre");
+  });
+
+  it("tells typed text apart by its tags, as if they were written after it", () => {
+    expect(merchantKey("Mensual (julio)", "Tenis")).not.toBe(
+      merchantKey("Mensual (julio)", "Gimnasio"),
+    );
+    expect(merchantKey("Mensual (noviembre)", "Tenis")).toBe(
+      merchantKey("Mensual Tenis"),
+    );
+    expect(merchantKey("Tenis mensual", "Tenis")).toBe(merchantKey("Tenis mensual"));
+  });
+
+  it("leaves the tags out of a merchant the description names", () => {
+    expect(merchantKey("rappi", "Comida")).toBe("rappi");
+    expect(merchantKey("MERPAGO*RAPPI 4471", "Noche")).toBe("rappi");
+  });
 });

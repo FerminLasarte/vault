@@ -11,6 +11,7 @@ import {
   learnMerchantHistory,
   usualAccountReason,
   type MerchantEntry,
+  type TaggedTransaction,
 } from "./merchantHistory";
 
 const TODAY = "2026-10-06";
@@ -18,8 +19,8 @@ const TODAY = "2026-10-06";
 let nextId = 1;
 function movement(
   description: string,
-  overrides: Partial<Transaction> = {},
-): Transaction {
+  overrides: Partial<TaggedTransaction> = {},
+): TaggedTransaction {
   return {
     id: nextId++,
     amount: 1000,
@@ -68,6 +69,19 @@ describe("learnMerchantHistory", () => {
       ]).label,
     ).toBe("Rappi");
     expect(only([movement("Café con Juan")]).label).toBe("Café con Juan");
+  });
+
+  it("keeps a typed fee at one place apart from another's by their tags", () => {
+    const entries = learn([
+      movement("Mensual (octubre)", { tag_names: "Tenis" }),
+      movement("Mensual (noviembre)", { tag_names: "Tenis" }),
+      movement("Mensual (noviembre)", { tag_names: "Gimnasio" }),
+    ]);
+
+    expect([...entries.values()].map((entry) => [entry.label, entry.count])).toEqual([
+      ["Mensual Tenis", 2],
+      ["Mensual Gimnasio", 1],
+    ]);
   });
 
   it("keeps each kind of movement and each currency apart", () => {

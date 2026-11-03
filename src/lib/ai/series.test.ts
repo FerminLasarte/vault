@@ -130,6 +130,31 @@ describe("detectSeries", () => {
     ).toEqual([]);
   });
 
+  it("tells apart two fees typed alike by their tags", () => {
+    const months = ["julio", "agosto", "septiembre"];
+    const fee = (dates: string[], tag: string, amount: number) =>
+      dates.map((date, index) =>
+        movement(`Mensual (${months[index]})`, date, { tag_names: tag, amount }),
+      );
+    const movements = [
+      ...fee(MONTHLY, "Tenis", 110000),
+      ...fee(["2026-07-04", "2026-08-04", "2026-09-04"], "Gimnasio", 90000),
+    ];
+
+    expect(
+      detect(movements).map((series) => [series.merchant.label, series.typicalAmount]),
+    ).toEqual([
+      ["Mensual Tenis", 110000],
+      ["Mensual Gimnasio", 90000],
+    ]);
+
+    const declared = detect(movements, {
+      ...NOTHING_DECLARED,
+      recurring: [recurringTemplate({ description: "Mensual Tenis", amount: 110000 })],
+    });
+    expect(declared.map((series) => series.recurring?.id ?? null)).toEqual([7, null]);
+  });
+
   it("keeps currencies and kinds of movement apart", () => {
     const found = detect([
       ...charges("Spotify", MONTHLY),
