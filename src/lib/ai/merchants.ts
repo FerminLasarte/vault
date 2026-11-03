@@ -1,7 +1,7 @@
 import dictionary from "@/lib/ai/data/merchants.json";
 import { readInstallment } from "@/lib/ai/installmentText";
 import { words } from "@/lib/ai/tokens";
-import { normalizeForSearch } from "@/lib/text";
+import { normalizeForSearch, splitTagNames } from "@/lib/text";
 
 // The name of the merchant behind a bank's description, or null when there is
 // nothing better to show than the description itself.
@@ -117,10 +117,71 @@ export function merchantName(description: string): string | null {
   return name;
 }
 
+// The month a typed movement was for says when, not where: "Mensual (julio)"
+// and "Mensual (agosto)" are one fee. Left out in brackets, or at the end with
+// its year, where people write it — never when the month is all there is.
+// Shortened only in brackets: at the end, "mar" or "set" may be the name.
+const MONTHS =
+  "enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre";
+const SHORT_MONTHS = "ene|feb|mar|abr|may|jun|jul|ago|sept|sep|set|oct|nov|dic";
+const PERIOD_IN_BRACKETS = new RegExp(
+  `\\(\\s*(?:(?:${MONTHS}|${SHORT_MONTHS}|\\d{4})\\b\\.?[\\s,/y-]*)+\\)`,
+  "gi",
+);
+const PERIOD_AT_END = new RegExp(`(?:\\s+(?:${MONTHS})(?:\\s+(?:de\\s+)?\\d{4})?)+\\s*$`, "i");
+
+function withoutPeriod(description: string): string {
+  const kept = description.replace(PERIOD_IN_BRACKETS, " ").replace(PERIOD_AT_END, "");
+  return words(kept).length > 0 ? kept.replace(/\s+/g, " ").trim() : description.trim();
+}
+
+// What a description says about where, before any tags: the name to show for
+// it, and whether that name is only what was typed — no bank wrote it and no
+// merchant the dictionary knows is in it. Worked out once per description.
+interface Reading {
+  name: string;
+  typedOnly: boolean;
+}
+
+const readings = new Map<string, Reading>();
+
+function readingOf(description: string): Reading {
+  let reading = readings.get(description);
+  if (reading === undefined) {
+    const named = merchantName(description);
+    reading =
+      named !== null
+        ? { name: named, typedOnly: false }
+        : {
+            name: withoutPeriod(description),
+            typedOnly: knownMerchant(description) === null,
+          };
+    readings.set(description, reading);
+  }
+  return reading;
+}
+
+// What a merchant is called on screen: its name, or what was typed without the
+// month it was for. Typed text that names no merchant — "Mensual", "Turno" —
+// says what was paid for, and its tags say where, so they are part of its name
+// unless it already says them: "Mensual" tagged Tenis is "Mensual Tenis", apart
+// from "Mensual Gimnasio". A merchant's name already says where, and its tags
+// only how it went ("Comida", "Noche").
+export function merchantLabel(description: string, tagNames: string | null = null): string {
+  const reading = readingOf(description);
+  if (!reading.typedOnly) return reading.name;
+  const said = new Set(words(reading.name));
+  const missing = splitTagNames(tagNames).filter(
+    (tag) => !words(tag).every((word) => said.has(word)),
+  );
+  return [reading.name, ...missing].join(" ");
+}
+
 // What two movements share when they are "the same place": the name the lists
 // show, read as words, so `MERPAGO*RAPPI 4471` and a typed "rappi" meet, and
 // "Café" and "cafe" are one. Typed text is its own name (see above), so "nafta
-// ypf" and a statement's `YPF 1234` stay apart.
-export function merchantKey(description: string): string {
-  return words(merchantName(description) ?? description).join(" ");
+// ypf" and a statement's `YPF 1234` stay apart. A recurring movement typed the
+// way a series is named — "Mensual Tenis" — is that series.
+export function merchantKey(description: string, tagNames: string | null = null): string {
+  return words(merchantLabel(description, tagNames)).join(" ");
 }

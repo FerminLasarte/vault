@@ -11,11 +11,11 @@ import {
 } from "./unusualSpending";
 import { learnMerchantHistory } from "./merchantHistory";
 import { TODAY, chargesOf, datesEvery, detect, movement } from "./testing/series";
-import type { Transaction } from "@/db/schema";
+import type { TaggedTransaction } from "./merchantHistory";
 
 const CATEGORIES = [{ id: 3, name: "Farmacia" }];
 
-function baselinesOf(transactions: Transaction[]) {
+function baselinesOf(transactions: TaggedTransaction[]) {
   return spendingBaselines(
     transactions,
     CATEGORIES,
@@ -26,13 +26,19 @@ function baselinesOf(transactions: Transaction[]) {
 
 // Earlier expenses 11 days apart — no week or month, so no series — the last
 // on `last`.
-function earlier(description: string, amounts: number[], last = "2026-10-01") {
+function earlier(
+  description: string,
+  amounts: number[],
+  last = "2026-10-01",
+  overrides: Partial<TaggedTransaction> = {},
+) {
   return chargesOf(description, datesEvery(11, amounts.length, last), amounts, {
     category_id: 3,
+    ...overrides,
   });
 }
 
-function judge(history: Transaction[], latest: Transaction) {
+function judge(history: TaggedTransaction[], latest: TaggedTransaction) {
   return unusualSpending(latest, baselinesOf([...history, latest]));
 }
 
@@ -70,6 +76,44 @@ describe("unusualSpending", () => {
       ...earlier("DR AHORRO", [8000, 8000, 8000, 8000], "2026-09-26"),
     ];
     expect(judge(more, latest)).toMatchObject({ name: "Farmacia", count: 8 });
+  });
+
+  it(`in a category, also needs ${MIN_RATIO} times its upper quartile`, () => {
+    // A monthly fee among court bookings: far above the median of the
+    // category, which the bookings set, but not above what its dearer quarter
+    // costs.
+    const history = [
+      ...earlier("Turno", [6000, 6000, 6000, 6000, 6000, 6000]),
+      ...earlier("Cuota club", [90000, 90000, 90000], "2026-09-28"),
+    ];
+    const fee = (amount: number) =>
+      movement("Cuota gimnasio", "2026-10-05", { amount, category_id: 3 });
+
+    expect(judge(history, fee(95000))).toBeNull();
+    expect(judge(history, fee(180000))).toMatchObject({ name: "Farmacia", typical: 6000 });
+  });
+
+  it("holds a typed fee against the earlier ones with its tags", () => {
+    const history = [
+      ...earlier("Mensual", [110000, 110000, 110000, 110000, 110000], "2026-10-01", {
+        tag_names: "Tenis",
+      }),
+      ...earlier("Mensual", Array<number>(8).fill(10000), "2026-09-30", {
+        tag_names: "Gimnasio",
+      }),
+    ];
+    const fee = (amount: number, tag: string) =>
+      movement("Mensual (octubre)", "2026-10-05", {
+        amount,
+        category_id: 3,
+        tag_names: tag,
+      });
+
+    expect(judge(history, fee(130000, "Tenis"))).toBeNull();
+    expect(judge(history, fee(30000, "Gimnasio"))).toMatchObject({
+      name: "Mensual Gimnasio",
+      typical: 10000,
+    });
   });
 
   it(`takes ${MIN_RATIO} times the usual and not less`, () => {

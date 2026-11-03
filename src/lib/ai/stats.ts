@@ -20,3 +20,14 @@ export function mad(values: readonly number[]): number | null {
   if (middle === null) return null;
   return median(values.map((value) => Math.abs(value - middle)));
 }
+
+// The value that `share` of the others sit below, read between the two around
+// it. Null for no values, like the median.
+export function quantile(values: readonly number[], share: number): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const position = (sorted.length - 1) * share;
+  const below = Math.floor(position);
+  const above = Math.min(below + 1, sorted.length - 1);
+  return sorted[below] + (sorted[above] - sorted[below]) * (position - below);
+}

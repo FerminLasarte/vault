@@ -2,9 +2,10 @@ import {
   findMerchant,
   RECENT_MONTHS,
   type MerchantHistory,
+  type TaggedTransaction,
 } from "@/lib/ai/merchantHistory";
 import type { Series } from "@/lib/ai/series";
-import { mad, median } from "@/lib/ai/stats";
+import { mad, median, quantile } from "@/lib/ai/stats";
 import { roundToCents } from "@/lib/finance";
 import { daysBetween, formatCurrency, monthsBefore } from "@/lib/format";
 import type { Category, Transaction } from "@/db/schema";
@@ -23,6 +24,11 @@ export const MIN_CATEGORY_MOVEMENTS = 8;
 // is the same has no distance to speak of, and twice as much is news anywhere.
 export const MAD_FACTOR = 3;
 export const MIN_RATIO = 2;
+
+// A category mixes kinds of purchase — a monthly fee among court bookings — so
+// its median is set by the frequent cheap ones. There an expense also has to be
+// MIN_RATIO times what the dearest quarter of them start at.
+export const CATEGORY_QUANTILE = 0.75;
 
 // How recent an expense has to be for Atención to bring it up. Older ones are
 // still told apart in the inspector.
@@ -69,7 +75,7 @@ export function spendingBaselines(
   };
 }
 
-export interface UnusualSpending<T extends Transaction = Transaction> {
+export interface UnusualSpending<T extends TaggedTransaction = TaggedTransaction> {
   // `unusual:<movement id>`.
   id: string;
   movement: T;
@@ -92,18 +98,19 @@ function before(group: readonly Transaction[], movement: Transaction): number[] 
 // What an expense is held against: its merchant's earlier expenses when there
 // are enough of them, else its category's. Only ever asked about an expense.
 function baseline(
-  movement: Transaction,
+  movement: TaggedTransaction,
   baselines: SpendingBaselines,
-): { name: string; amounts: number[] } | null {
+): { name: string; amounts: number[]; inCategory: boolean } | null {
   const merchant = findMerchant(baselines.history, {
     description: movement.description,
     type: "expense",
     currency: movement.currency,
+    tag_names: movement.tag_names,
   });
   if (merchant !== null) {
     const amounts = before(merchant.movements, movement);
     if (amounts.length >= MIN_MERCHANT_MOVEMENTS)
-      return { name: merchant.label, amounts };
+      return { name: merchant.label, amounts, inCategory: false };
   }
 
   if (movement.category_id === null) return null;
@@ -113,12 +120,14 @@ function baseline(
   );
   if (name === undefined || group === undefined) return null;
   const amounts = before(group, movement);
-  return amounts.length >= MIN_CATEGORY_MOVEMENTS ? { name, amounts } : null;
+  return amounts.length >= MIN_CATEGORY_MOVEMENTS
+    ? { name, amounts, inCategory: true }
+    : null;
 }
 
 // Whether an expense is well above the usual, and against what. Null for
 // anything else, including what there is too little history to judge.
-export function unusualSpending<T extends Transaction>(
+export function unusualSpending<T extends TaggedTransaction>(
   movement: T,
   baselines: SpendingBaselines,
 ): UnusualSpending<T> | null {
@@ -131,6 +140,10 @@ export function unusualSpending<T extends Transaction>(
   if (typical === null || spread === null || typical <= 0) return null;
   if (movement.amount <= typical + MAD_FACTOR * spread) return null;
   if (movement.amount < MIN_RATIO * typical) return null;
+  if (held.inCategory) {
+    const dearer = quantile(held.amounts, CATEGORY_QUANTILE);
+    if (dearer !== null && movement.amount < MIN_RATIO * dearer) return null;
+  }
 
   const count = held.amounts.length;
   return {
@@ -144,7 +157,7 @@ export function unusualSpending<T extends Transaction>(
 }
 
 // The unusual expenses of the last RECENT_DAYS, furthest above the usual first.
-export function recentUnusualSpending<T extends Transaction>(
+export function recentUnusualSpending<T extends TaggedTransaction>(
   transactions: readonly T[],
   baselines: SpendingBaselines,
   today: string,
